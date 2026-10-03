@@ -12,11 +12,13 @@ const GraphEvent = z.object({
   location: z.object({ displayName: z.string().nullish() }).nullish(),
 });
 
+export type EventKind = "event" | "holiday";
+
 export type EventRow = {
   ts: Date;
   domain: "calendar";
   key: "calendar.event";
-  payload: { title: string; end: string; allDay: boolean; location?: string };
+  payload: { title: string; end: string; allDay: boolean; kind: EventKind; location?: string };
   source: "outlook";
   sourceId: string;
 };
@@ -26,7 +28,7 @@ const utc = (s: string) => new Date(`${s.replace(/\.\d+$/, "")}Z`);
 
 export type Mapped = { kind: "row"; row: EventRow } | { kind: "cancelled" } | { kind: "invalid"; id?: string };
 
-export function toRow(raw: unknown, startOfDay: (day: string) => Date): Mapped {
+export function toRow(raw: unknown, startOfDay: (day: string) => Date, kind: EventKind = "event"): Mapped {
   const parsed = GraphEvent.safeParse(raw);
   const rawId = (raw as { id?: unknown } | null)?.id;
   const invalid: Mapped = { kind: "invalid", id: typeof rawId === "string" ? rawId : undefined };
@@ -45,7 +47,7 @@ export function toRow(raw: unknown, startOfDay: (day: string) => Date): Mapped {
       ts: start,
       domain: "calendar",
       key: "calendar.event",
-      payload: { title: e.subject?.trim() || "(No title)", end: end.toISOString(), allDay, ...(location ? { location } : {}) },
+      payload: { title: e.subject?.trim() || "(No title)", end: end.toISOString(), allDay, kind, ...(location ? { location } : {}) },
       source: "outlook",
       sourceId: e.id,
     },

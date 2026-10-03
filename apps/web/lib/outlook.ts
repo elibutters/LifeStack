@@ -6,7 +6,7 @@ import { decrypt, encrypt } from "./crypto";
 import { db } from "./db";
 import { addDays, startOfDay, ymd } from "./dates";
 import { GRAPH, graphGet, refreshTokens, TokenError } from "./microsoft";
-import { toRow, type EventRow } from "./outlook-map";
+import { toRow, type EventKind, type EventRow } from "./outlook-map";
 
 export const OUTLOOK = "outlook";
 
@@ -47,6 +47,21 @@ const Me = z.object({ mail: z.string().nullish(), userPrincipalName: z.string().
 export async function fetchAccount(accessToken: string): Promise<string | null> {
   const me = Me.safeParse(await graphGet(`${GRAPH}/me?$select=mail,userPrincipalName`, accessToken));
   return me.success ? (me.data.mail ?? me.data.userPrincipalName ?? null) : null;
+}
+
+const Calendars = z.object({ value: z.array(z.object({ id: z.string(), name: z.string().nullish() })) });
+
+// Every calendar on the account is synced. One whose name contains "holiday" is tagged as a
+// holiday calendar. Returns null if the list cannot be read (Microsoft has had intermittent
+// errors on this call for personal accounts).
+async function listCalendars(accessToken: string): Promise<{ id: string; kind: EventKind }[] | null> {
+  try {
+    const body = Calendars.parse(await graphGet(`${GRAPH}/me/calendars?$select=id,name&$top=50`, accessToken));
+    return body.value.map((c) => ({ id: c.id, kind: /holiday/i.test(c.name ?? "") ? "holiday" : "event" }));
+  } catch {
+    console.error("outlook: could not list calendars; syncing the main calendar only");
+    return null;
+  }
 }
 
 const Page = z.object({ value: z.array(z.unknown()), "@odata.nextLink": z.string().optional() });
@@ -111,23 +126,32 @@ export async function syncOutlook(): Promise<SyncResult> {
       $top: "100",
     });
 
+    const calendars = await listCalendars(tokens.access_token);
+    // Without the calendar list only the main calendar is read, so nothing may be deleted.
+    const partial = !calendars;
+    const targets = calendars ?? [{ id: null, kind: "event" as EventKind }];
+
     const rows = new Map<string, EventRow>();
     const unreadable = new Set<string>();
     let unreadableCount = 0;
-    let next: string | undefined = `${GRAPH}/me/calendarView?${qs}`;
-    for (let page = 0; next && page < MAX_PAGES; page++) {
-      const body = Page.parse(await graphGet(next, tokens.access_token));
-      for (const raw of body.value) {
-        const mapped = toRow(raw, startOfDay);
-        if (mapped.kind === "row") rows.set(mapped.row.sourceId, mapped.row);
-        else if (mapped.kind === "invalid") {
-          unreadableCount++;
-          if (mapped.id) unreadable.add(mapped.id);
+    let pages = 0;
+    for (const target of targets) {
+      const base = target.id ? `${GRAPH}/me/calendars/${encodeURIComponent(target.id)}/calendarView` : `${GRAPH}/me/calendarView`;
+      let next: string | undefined = `${base}?${qs}`;
+      while (next) {
+        if (++pages > MAX_PAGES) throw new Error("calendar too large to sync");
+        const body = Page.parse(await graphGet(next, tokens.access_token));
+        for (const raw of body.value) {
+          const mapped = toRow(raw, startOfDay, target.kind);
+          if (mapped.kind === "row") rows.set(mapped.row.sourceId, mapped.row);
+          else if (mapped.kind === "invalid") {
+            unreadableCount++;
+            if (mapped.id) unreadable.add(mapped.id);
+          }
         }
+        next = body["@odata.nextLink"];
       }
-      next = body["@odata.nextLink"];
     }
-    if (next) throw new Error("calendar too large to sync");
     if (unreadableCount) console.error(`outlook: ${unreadableCount} event(s) could not be read and were left as they were`);
 
     const list = [...rows.values()];
@@ -157,6 +181,7 @@ export async function syncOutlook(): Promise<SyncResult> {
       const inWindow = and(eq(events.source, OUTLOOK), gte(events.ts, from), lt(events.ts, to));
       // An empty answer for a calendar that had events is more likely a bad response than a
       // cleared calendar, so keep the stored copy and say so.
+      if (partial) return true;
       if (keep.length === 0) {
         const [stored] = await tx.select({ n: count() }).from(events).where(inWindow);
         if ((stored?.n ?? 0) > 3) {
