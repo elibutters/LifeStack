@@ -48,4 +48,5 @@ cp .privacy-denylist.example .privacy-denylist
 
 Then add your own name, email, employer and similar terms to `.privacy-denylist`.
 
-The guard is a backstop, not a substitute for reading your diff.
+The denylist is local to each clone, so CI only runs the generic checks. The guard is a
+backstop, not a substitute for reading your diff.

@@ -49,7 +49,9 @@ scripts/        privacy check
    | `APP_TZ` | your IANA timezone, e.g. `UTC` |
 
 5. Deploy. Production builds apply database migrations, then build the app. Preview
-   builds never migrate.
+   builds never migrate, so connect the database to the Production environment only;
+   sign-in is unavailable on previews. The very first deployment of a new Vercel
+   project is a production deployment whichever branch it comes from.
 6. On your phone, open the deployment URL, sign in, then Share -> Add to Home Screen.
 
 ### Security model
@@ -57,7 +59,9 @@ scripts/        privacy check
 The app is reachable from the public internet, so the password is what stands between
 the world and your data. Keep it in a password manager.
 
-- Sign-in is rate limited: 5 failed attempts per address and 30 overall per 15 minutes.
+- Sign-in is rate limited: 5 failed attempts per address and 300 overall per 15
+  minutes. If you are ever locked out, wait 15 minutes or run
+  `delete from auth_attempts` in your database console.
 - Changing `APP_PASSWORD` or `SESSION_SECRET` signs out every device immediately.
 - Nothing from signed-in pages is cached on the device; offline shows a blank shell.
 - Pages are served with `noindex` and cannot be framed.
