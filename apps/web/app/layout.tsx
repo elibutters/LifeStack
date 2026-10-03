@@ -4,12 +4,13 @@ import { RegisterServiceWorker } from "./register-sw";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Life Stack",
+  title: { default: "Life Stack", template: "%s · Life Stack" },
   appleWebApp: { capable: true, title: "Life Stack", statusBarStyle: "black-translucent" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#0a0a0b",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
