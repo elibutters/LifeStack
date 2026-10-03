@@ -7,7 +7,8 @@ import { addDays, startOfDay } from "./dates";
 
 // Calendar events live in the shared `events` table:
 //   domain = "calendar", key = "calendar.event", ts = start instant,
-//   payload = { title, end?, allDay?, location? }  (end is an ISO timestamp with offset)
+//   payload = { title, end?, allDay?, location?, kind? }  (end is an ISO timestamp with offset;
+//   kind is "holiday" for items from a holidays calendar, otherwise "event")
 // All-day events start at midnight of their first day in APP_TZ and end at midnight
 // after their last day. A sync worker only has to write rows in this shape.
 const Payload = z.object({
@@ -15,6 +16,7 @@ const Payload = z.object({
   end: z.iso.datetime({ offset: true }).nullish(),
   allDay: z.boolean().nullish(),
   location: z.string().nullish(),
+  kind: z.enum(["event", "holiday"]).nullish(),
 });
 
 export type CalendarItem = {
@@ -23,6 +25,7 @@ export type CalendarItem = {
   start: Date;
   end: Date;
   allDay: boolean;
+  kind: "event" | "holiday";
   location?: string;
 };
 
@@ -40,7 +43,7 @@ export async function calendarItems(from: Date, to: Date): Promise<CalendarItem[
   for (const row of rows) {
     const parsed = Payload.safeParse(row.payload);
     if (!parsed.success) continue;
-    const { title, end, allDay, location } = parsed.data;
+    const { title, end, allDay, location, kind } = parsed.data;
     const start = row.ts;
     const stop = end ? new Date(end) : start;
     const item: CalendarItem = {
@@ -49,6 +52,7 @@ export async function calendarItems(from: Date, to: Date): Promise<CalendarItem[
       start,
       end: stop < start ? start : stop,
       allDay: !!allDay,
+      kind: kind ?? "event",
       location: location ?? undefined,
     };
     if (overlaps(item, from, to)) items.push(item);
@@ -62,12 +66,15 @@ function overlaps(item: CalendarItem, from: Date, to: Date): boolean {
   return item.end.getTime() === item.start.getTime() && item.start >= from;
 }
 
+// Holidays label the day, so they lead; then all-day items; then timed events.
+const rank = (i: CalendarItem) => (i.kind === "holiday" ? 0 : i.allDay ? 1 : 2);
+
 export function itemsOnDay(items: CalendarItem[], day: string): CalendarItem[] {
   const from = startOfDay(day);
   const to = startOfDay(addDays(day, 1));
   return items
     .filter((i) => overlaps(i, from, to))
-    .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.getTime() - b.start.getTime() || a.id - b.id);
+    .sort((a, b) => rank(a) - rank(b) || a.start.getTime() - b.start.getTime() || a.id - b.id);
 }
 
 // Like calendarItems, but a failure is reported instead of looking like an empty calendar.

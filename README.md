@@ -75,6 +75,9 @@ through Microsoft's calendar API, read-only. One-time setup, free:
 5. Set `MICROSOFT_CLIENT_ID` (the Application ID) and `MICROSOFT_CLIENT_SECRET` in Vercel,
    redeploy, then open **Settings** in the app and choose **Connect Outlook**.
 
+Every calendar on the account is synced. Anything from a calendar whose name contains
+"holiday" (such as "United States holidays") is shown in amber; everything else is blue.
+
 The calendar syncs once a day, and again whenever you open the app if the last sync is
 more than 15 minutes old. Vercel's free plan only allows daily scheduled jobs.
 

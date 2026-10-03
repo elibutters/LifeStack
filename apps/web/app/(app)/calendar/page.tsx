@@ -106,7 +106,12 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                   </span>
                   <span className="hidden flex-col gap-1 md:flex">
                     {list.slice(0, 3).map((i) => (
-                      <span key={i.id} className="truncate rounded bg-accent/15 px-1.5 py-0.5 text-xs text-accent">
+                      <span
+                        key={i.id}
+                        className={`truncate rounded px-1.5 py-0.5 text-xs ${
+                          i.kind === "holiday" ? "bg-holiday/15 text-holiday" : "bg-accent/15 text-accent"
+                        }`}
+                      >
                         {i.title}
                       </span>
                     ))}
@@ -114,7 +119,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                   </span>
                   <span className="flex gap-0.5 md:hidden">
                     {list.slice(0, 3).map((i) => (
-                      <span key={i.id} className="h-1.5 w-1.5 rounded-full bg-accent" />
+                      <span key={i.id} className={`h-1.5 w-1.5 rounded-full ${i.kind === "holiday" ? "bg-holiday" : "bg-accent"}`} />
                     ))}
                   </span>
                 </Link>
