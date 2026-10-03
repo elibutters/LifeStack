@@ -15,6 +15,13 @@
       "when": 1791046166354,
       "tag": "0001_minor_black_widow",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791048568957,
+      "tag": "0002_sad_valkyrie",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
       <TopBar />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-10">
+      <main className="mx-auto w-full max-w-6xl flex-1 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] pt-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-10">
         {children}
       </main>
       <MobileNav />

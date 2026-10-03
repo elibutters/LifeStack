@@ -23,6 +23,11 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   enough on its own: every page, server action and route handler that touches data must
   also call `requireSession()` from `apps/web/lib/auth.ts` (or verify a bearer token).
   Fail closed. Public paths are the exact list in `proxy.ts`; never put data behind one.
+  The one exception is `/api/cron/*`, which skips the session gate because Vercel Cron cannot
+  hold one; every handler there must check `CRON_SECRET` itself and fail closed.
+- Third-party tokens are stored only encrypted (`lib/crypto.ts`, key in `ENCRYPTION_KEY`).
+  Outlook is linked through Microsoft Graph for personal accounts only, with read-only scope.
+  Work or employer calendars are never connected.
 - Never cache authenticated responses in the service worker.
 - Scheduled work: Vercel's free plan allows daily cron only. Sources sync on a daily
   cron and on demand when the app is opened or an agent asks; do not assume a

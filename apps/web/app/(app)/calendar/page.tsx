@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { after } from "next/server";
 import { Card } from "@/components/card";
 import { EventRow } from "@/components/event-row";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
-import { calendarItems, itemsOnDay, systemStatus } from "@/lib/calendar";
+import { itemsOnDay, loadCalendar, systemStatus } from "@/lib/calendar";
+import { syncOutlookIfStale } from "@/lib/outlook";
 import { requireSession } from "@/lib/auth";
 import {
   addDays,
@@ -26,25 +28,26 @@ const href = (month: string, day?: string) => `/calendar?m=${month}${day ? `&d=$
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ m?: string; d?: string }> }) {
   await requireSession();
+  after(syncOutlookIfStale);
   const sp = await searchParams;
   const today = ymd(new Date());
   const month = isValidMonth(sp.m) ? sp.m : today.slice(0, 7);
   const cells = monthGrid(month);
-  const [items, status] = await Promise.all([
-    calendarItems(startOfDay(cells[0]!), startOfDay(addDays(cells.at(-1)!, 1))).catch(() => []),
+  const [{ items, failed }, status] = await Promise.all([
+    loadCalendar(startOfDay(cells[0]!), startOfDay(addDays(cells.at(-1)!, 1))),
     systemStatus(),
   ]);
-  const selected = isValidDay(sp.d) ? sp.d : today.startsWith(month) ? today : `${month}-01`;
+  const selected = isValidDay(sp.d) && cells.includes(sp.d) ? sp.d : today.startsWith(month) ? today : `${month}-01`;
   const dayItems = itemsOnDay(items, selected);
   const notConnected = status.ok && !status.calendarConnected;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <h1 className="mr-auto text-2xl font-semibold tracking-tight">{fmtMonth(month)}</h1>
+        <h1 className="mr-auto text-xl font-semibold tracking-tight sm:text-2xl">{fmtMonth(month)}</h1>
         <Link
           href={href(today.slice(0, 7), today)}
-          className="flex h-10 items-center rounded-lg border border-line px-3 text-sm hover:bg-raised"
+          className="flex h-11 items-center rounded-lg border border-line px-3 text-sm hover:bg-raised"
         >
           Today
         </Link>
@@ -52,14 +55,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <Link
             href={href(shiftMonth(month, -1))}
             aria-label="Previous month"
-            className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-raised hover:text-fg"
+            className="grid h-11 w-11 place-items-center rounded-lg text-muted hover:bg-raised hover:text-fg"
           >
             <ChevronLeftIcon />
           </Link>
           <Link
             href={href(shiftMonth(month, 1))}
             aria-label="Next month"
-            className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-raised hover:text-fg"
+            className="grid h-11 w-11 place-items-center rounded-lg text-muted hover:bg-raised hover:text-fg"
           >
             <ChevronRightIcon />
           </Link>
@@ -86,15 +89,15 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                 <Link
                   key={day}
                   href={href(day.slice(0, 7), day)}
-                  aria-label={fmtDayLong(day)}
-                  aria-current={isSelected ? "date" : undefined}
+                  aria-label={`${fmtDayLong(day)}${list.length ? `, ${list.length} ${list.length === 1 ? "event" : "events"}` : ""}${isSelected ? ", selected" : ""}`}
+                  aria-current={isToday ? "date" : undefined}
                   className={`flex min-h-14 flex-col gap-1 border-line p-1.5 md:min-h-28 md:p-2 ${
                     idx % 7 !== 6 ? "border-r" : ""
                   } ${idx < cells.length - 7 ? "border-b" : ""} ${isSelected ? "bg-raised" : "hover:bg-raised/60"}`}
                 >
                   <span
                     className={`grid h-6 w-6 place-items-center rounded-full text-sm tabular-nums ${
-                      isToday ? "bg-accent font-semibold text-bg" : inMonth ? "" : "text-muted/50"
+                      isToday ? "bg-accent font-semibold text-bg" : inMonth ? "" : "text-muted/70"
                     }`}
                   >
                     {Number(day.slice(8))}
@@ -122,11 +125,24 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           {dayItems.length > 0 ? (
             <ul className="divide-y divide-line">
               {dayItems.map((i) => (
-                <EventRow key={i.id} item={i} />
+                <EventRow key={i.id} item={i} day={selected} />
               ))}
             </ul>
+          ) : failed ? (
+            <p className="py-2 text-red-400">Couldn't load events. Try again shortly.</p>
           ) : (
-            <p className="py-2 text-muted">{notConnected ? "Your calendar isn't connected yet." : "Nothing scheduled."}</p>
+            <p className="py-2 text-muted">
+              {notConnected ? (
+                <>
+                  Your calendar isn't connected yet.{" "}
+                  <Link href="/settings" className="text-accent">
+                    Connect Outlook
+                  </Link>
+                </>
+              ) : (
+                "Nothing scheduled."
+              )}
+            </p>
           )}
         </Card>
       </div>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
-import { CalendarIcon, OverviewIcon } from "./icons";
+import { CalendarIcon, OverviewIcon, SettingsIcon } from "./icons";
 
 type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
 
@@ -11,6 +11,7 @@ type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGEl
 const NAV: Item[] = [
   { href: "/", label: "Overview", Icon: OverviewIcon },
   { href: "/calendar", label: "Calendar", Icon: CalendarIcon },
+  { href: "/settings", label: "Settings", Icon: SettingsIcon },
 ];
 
 function useActive() {
@@ -44,7 +45,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/90 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur md:hidden"
     >
       <ul className="flex">
         {NAV.map(({ href, label, Icon }) => (

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { after } from "next/server";
 import { Card } from "@/components/card";
 import { EventRow } from "@/components/event-row";
-import { calendarItems, systemStatus } from "@/lib/calendar";
+import { loadCalendar, systemStatus } from "@/lib/calendar";
+import { syncOutlookIfStale } from "@/lib/outlook";
 import { requireSession } from "@/lib/auth";
 import { addDays, fmtDayLong, hourOf, startOfDay, ymd } from "@/lib/dates";
 
@@ -15,14 +17,20 @@ function greeting(hour: number) {
 
 export default async function Overview() {
   await requireSession();
+  after(syncOutlookIfStale);
   const now = new Date();
   const today = ymd(now);
-  const [todayItems, soon, status] = await Promise.all([
-    calendarItems(startOfDay(today), startOfDay(addDays(today, 1))).catch(() => []),
-    calendarItems(startOfDay(addDays(today, 1)), startOfDay(addDays(today, 8))).catch(() => []),
+  const tomorrow = startOfDay(addDays(today, 1));
+  const [todayRes, soonRes, status] = await Promise.all([
+    loadCalendar(startOfDay(today), tomorrow),
+    loadCalendar(tomorrow, startOfDay(addDays(today, 8))),
     systemStatus(),
   ]);
+  const todayItems = todayRes.items;
+  // Things already under way belong to Today; Coming up lists what starts later.
+  const soon = soonRes.items.filter((i) => i.start >= tomorrow);
   const notConnected = status.ok && !status.calendarConnected;
+  const failed = todayRes.failed || soonRes.failed;
 
   return (
     <div className="space-y-6">
@@ -44,12 +52,23 @@ export default async function Overview() {
           {todayItems.length > 0 ? (
             <ul className="divide-y divide-line">
               {todayItems.map((i) => (
-                <EventRow key={i.id} item={i} />
+                <EventRow key={i.id} item={i} day={today} />
               ))}
             </ul>
+          ) : failed ? (
+            <p className="py-2 text-red-400">Couldn't load events. Try again shortly.</p>
           ) : (
             <p className="py-2 text-muted">
-              {notConnected ? "Your calendar isn't connected yet." : "Nothing scheduled today."}
+              {notConnected ? (
+                <>
+                  Your calendar isn't connected yet.{" "}
+                  <Link href="/settings" className="text-accent">
+                    Connect Outlook
+                  </Link>
+                </>
+              ) : (
+                "Nothing scheduled today."
+              )}
             </p>
           )}
         </Card>
@@ -70,6 +89,8 @@ export default async function Overview() {
                 <EventRow key={i.id} item={i} showDate />
               ))}
             </ul>
+          ) : failed ? (
+            <p className="py-2 text-red-400">Couldn't load events. Try again shortly.</p>
           ) : (
             <p className="py-2 text-muted">Nothing in the next seven days.</p>
           )}
