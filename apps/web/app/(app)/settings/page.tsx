@@ -62,6 +62,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 </button>
               </form>
             </div>
+            <p className="text-sm text-muted">
+              Disconnecting stops syncing and deletes the copied events. To also withdraw Life Stack's access at Microsoft,
+              remove it at account.live.com/consent/Manage.
+            </p>
           </div>
         ) : (
           <div className="space-y-4">

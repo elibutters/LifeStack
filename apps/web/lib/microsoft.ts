@@ -10,7 +10,11 @@ const SCOPES = "offline_access Calendars.Read User.Read";
 export const OAUTH_COOKIE = "ls_oauth";
 export const OAUTH_COOKIE_PATH = "/api/connections/outlook";
 
-export const microsoftConfigured = () => !!process.env.MICROSOFT_CLIENT_ID && !!process.env.MICROSOFT_CLIENT_SECRET;
+// In production APP_URL is required, so the redirect address never depends on request headers.
+export const microsoftConfigured = () =>
+  !!process.env.MICROSOFT_CLIENT_ID &&
+  !!process.env.MICROSOFT_CLIENT_SECRET &&
+  (process.env.NODE_ENV !== "production" || !!process.env.APP_URL);
 
 // APP_URL pins the address Microsoft redirects back to; it must match the registered one exactly.
 export const appOrigin = (fallback: string) => (process.env.APP_URL || fallback).replace(/\/$/, "");
@@ -72,7 +76,7 @@ export const refreshTokens = (refreshToken: string) =>
 export async function graphGet(url: string, accessToken: string): Promise<unknown> {
   if (new URL(url).origin !== "https://graph.microsoft.com") throw new Error("refusing non-Graph URL");
   const res = await fetch(url, {
-    headers: { authorization: `Bearer ${accessToken}`, prefer: 'outlook.timezone="UTC"' },
+    headers: { authorization: `Bearer ${accessToken}`, prefer: 'outlook.timezone="UTC", IdType="ImmutableId"' },
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`graph request failed: ${res.status}`);

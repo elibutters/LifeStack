@@ -112,6 +112,8 @@ export const syncState = pgTable("sync_state", {
   cursor: text("cursor"),
   lastOkAt: timestamp("last_ok_at", { withTimezone: true }),
   lastError: text("last_error"),
+  // A sync holds this until it finishes (or it expires), so two syncs never overlap.
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
 });
 
 // Failed sign-in attempts, kept only long enough to rate limit.

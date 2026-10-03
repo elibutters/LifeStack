@@ -21,6 +21,8 @@ import {
 
 export const metadata: Metadata = { title: "Calendar" };
 export const dynamic = "force-dynamic";
+// The post-render calendar refresh runs inside this limit.
+export const maxDuration = 60;
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

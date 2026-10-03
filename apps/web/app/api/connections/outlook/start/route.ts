@@ -7,6 +7,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Only a click on this site or a typed address may start a sign-in, not another website.
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const origin = appOrigin(req.nextUrl.origin);
   if (!microsoftConfigured()) return NextResponse.redirect(new URL("/settings?error=not_configured", origin));
 
