@@ -1,6 +1,8 @@
 import { count } from "drizzle-orm";
 import { events, syncState } from "@lifestack/db";
+import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { logout } from "./login/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,7 @@ async function status() {
 }
 
 export default async function Today() {
+  await requireSession();
   const s = await status();
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -34,6 +37,11 @@ export default async function Today() {
         <Row label="Events" value={s.ok ? String(s.events) : "-"} />
         <Row label="Sources" value={s.ok ? String(s.sources) : "-"} />
       </dl>
+      <form action={logout} className="mt-8">
+        <button type="submit" className="text-sm text-neutral-500 underline">
+          Sign out
+        </button>
+      </form>
     </main>
   );
 }

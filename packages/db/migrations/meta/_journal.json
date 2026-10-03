@@ -8,6 +8,13 @@
       "when": 1791045196778,
       "tag": "0000_daily_living_tribunal",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791046166354,
+      "tag": "0001_minor_black_widow",
+      "breakpoints": true
     }
   ]
 }

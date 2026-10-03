@@ -16,3 +16,5 @@ local/
 *.csv
 backups/
 pgdata/
+next-env.d.ts
+.vercel
