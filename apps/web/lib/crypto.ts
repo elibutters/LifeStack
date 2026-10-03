@@ -19,7 +19,9 @@ export function encrypt(plain: string): string {
 export function decrypt(blob: string): string {
   const [v, iv, tag, body] = blob.split(".");
   if (v !== "v1" || !iv || !tag || !body) throw new Error("unrecognized ciphertext");
-  const d = createDecipheriv("aes-256-gcm", key(), Buffer.from(iv, "base64"));
-  d.setAuthTag(Buffer.from(tag, "base64"));
+  const authTag = Buffer.from(tag, "base64");
+  if (authTag.length !== 16) throw new Error("bad auth tag");
+  const d = createDecipheriv("aes-256-gcm", key(), Buffer.from(iv, "base64"), { authTagLength: 16 });
+  d.setAuthTag(authTag);
   return Buffer.concat([d.update(Buffer.from(body, "base64")), d.final()]).toString("utf8");
 }

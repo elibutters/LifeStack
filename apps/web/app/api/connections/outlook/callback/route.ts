@@ -1,12 +1,13 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { appOrigin, exchangeCode, OAUTH_COOKIE, OAUTH_COOKIE_PATH } from "@/lib/microsoft";
+import { appOrigin, exchangeCode, microsoftConfigured, OAUTH_COOKIE, OAUTH_COOKIE_PATH } from "@/lib/microsoft";
 import { fetchAccount, saveConnection, syncOutlook } from "@/lib/outlook";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!microsoftConfigured()) return NextResponse.json({ error: "not found" }, { status: 404 });
   const origin = appOrigin(req.nextUrl.origin);
   const done = (query: string) => {
     const res = NextResponse.redirect(new URL(`/settings?${query}`, origin));

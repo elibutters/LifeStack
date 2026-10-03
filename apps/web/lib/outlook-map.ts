@@ -24,22 +24,30 @@ export type EventRow = {
 // Graph returns UTC times as "2026-10-05T13:00:00.0000000" (no zone suffix).
 const utc = (s: string) => new Date(`${s.replace(/\.\d+$/, "")}Z`);
 
-export function toRow(raw: unknown, startOfDay: (day: string) => Date): EventRow | null {
+export type Mapped = { kind: "row"; row: EventRow } | { kind: "cancelled" } | { kind: "invalid"; id?: string };
+
+export function toRow(raw: unknown, startOfDay: (day: string) => Date): Mapped {
   const parsed = GraphEvent.safeParse(raw);
-  if (!parsed.success || parsed.data.isCancelled) return null;
+  const rawId = (raw as { id?: unknown } | null)?.id;
+  const invalid: Mapped = { kind: "invalid", id: typeof rawId === "string" ? rawId : undefined };
+  if (!parsed.success) return invalid;
+  if (parsed.data.isCancelled) return { kind: "cancelled" };
   const e = parsed.data;
   const allDay = !!e.isAllDay;
   // All-day events are dates, not instants: anchor them to midnight in the owner's timezone.
   const start = allDay ? startOfDay(e.start.dateTime.slice(0, 10)) : utc(e.start.dateTime);
   const end = allDay ? startOfDay(e.end.dateTime.slice(0, 10)) : utc(e.end.dateTime);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return invalid;
   const location = e.location?.displayName?.trim();
   return {
-    ts: start,
-    domain: "calendar",
-    key: "calendar.event",
-    payload: { title: e.subject?.trim() || "(No title)", end: end.toISOString(), allDay, ...(location ? { location } : {}) },
-    source: "outlook",
-    sourceId: e.id,
+    kind: "row",
+    row: {
+      ts: start,
+      domain: "calendar",
+      key: "calendar.event",
+      payload: { title: e.subject?.trim() || "(No title)", end: end.toISOString(), allDay, ...(location ? { location } : {}) },
+      source: "outlook",
+      sourceId: e.id,
+    },
   };
 }

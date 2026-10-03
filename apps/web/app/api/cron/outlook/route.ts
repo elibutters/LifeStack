@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { syncOutlook } from "@/lib/outlook";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 // Called by Vercel Cron, which sends `Authorization: Bearer $CRON_SECRET`. This path is exempt
 // from the session gate in proxy.ts, so it must authenticate the caller itself and fail closed.
@@ -18,7 +19,12 @@ export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const result = await syncOutlook();
-    return NextResponse.json({ ok: true, connected: !!result, events: result?.events ?? 0 });
+    return NextResponse.json({
+      ok: true,
+      connected: !!result,
+      skipped: !!result && "skipped" in result,
+      events: result && "events" in result ? result.events : 0,
+    });
   } catch {
     return NextResponse.json({ ok: false }, { status: 502 });
   }

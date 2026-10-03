@@ -10,6 +10,8 @@ import { addDays, fmtDayLong, hourOf, startOfDay, ymd } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Overview" };
 export const dynamic = "force-dynamic";
+// The post-render calendar refresh runs inside this limit.
+export const maxDuration = 60;
 
 function greeting(hour: number) {
   return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
