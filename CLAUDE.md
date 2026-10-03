@@ -37,3 +37,18 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   `ON CONFLICT DO UPDATE`.
 - Store no account numbers, credentials or email bodies.
 - After schema changes: `pnpm db:generate`, commit the migration.
+
+## Native iOS app (the end goal)
+
+The owner wants a full native iOS app with home-screen widgets, built once the web app has
+real data. A PWA or a web wrapper cannot do widgets, App Intents, HealthKit or Live
+Activities, so the app will be SwiftUI + WidgetKit, talking to this deployment over HTTPS
+with bearer tokens. The web app stays for desktop and as a fallback. What that means now:
+
+- Every feature gets a versioned JSON API under `/api/v1/*` (bearer-token auth,
+  zod-validated, stable shapes). Server components may call the same functions in
+  `apps/web/lib/`, but the API is the contract for clients.
+- Never make something only reachable through the cookie session if a native client needs it.
+- Design for widgets: small, cheap endpoints that return pre-digested summaries
+  (for example `/api/v1/overview`), since widgets refresh on a tight system budget.
+- Dates cross the API as ISO 8601 with offset; all-day items carry a plain `YYYY-MM-DD`.

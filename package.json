@@ -13,6 +13,7 @@
     "db:migrate": "pnpm --filter @lifestack/db migrate",
     "check:privacy": "bash scripts/check-privacy.sh --all",
     "db:up": "docker compose -f infra/docker-compose.yml up -d --build --wait",
-    "db:down": "docker compose -f infra/docker-compose.yml down"
+    "db:down": "docker compose -f infra/docker-compose.yml down",
+    "db:seed": "pnpm --filter @lifestack/db seed"
   }
 }

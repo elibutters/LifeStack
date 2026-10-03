@@ -1,12 +1,28 @@
 @import "tailwindcss";
 
-:root {
+@theme {
+  --color-bg: #0a0a0b;
+  --color-surface: #111113;
+  --color-raised: #18181b;
+  --color-line: #26262b;
+  --color-muted: #8b8b94;
+  --color-fg: #ededf0;
+  --color-accent: #7aa2ff;
+}
+
+html {
   color-scheme: dark;
+  background: var(--color-bg);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: #0a0a0a;
-  color: #ededed;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-    env(safe-area-inset-left);
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+a,
+button {
+  touch-action: manipulation;
 }
