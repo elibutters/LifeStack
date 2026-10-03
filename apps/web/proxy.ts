@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, sessionKey, verifySession } from "@/lib/session";
 
-// The app is on the public internet, so everything is behind the owner session
-// except the login page, the health check and the assets a browser needs to install the PWA.
+// The app is on the public internet, so everything is behind the owner session except the
+// login page, the health check, the assets a browser needs to install the PWA, and /api/cron/,
+// whose handlers check a shared secret themselves (Vercel Cron cannot hold a session).
 const PUBLIC = new Set([
   "/login",
   "/api/health",
@@ -15,7 +16,7 @@ const PUBLIC = new Set([
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC.has(pathname)) return NextResponse.next();
+  if (PUBLIC.has(pathname) || pathname.startsWith("/api/cron/")) return NextResponse.next();
 
   const key = sessionKey();
   if (key && (await verifySession(req.cookies.get(SESSION_COOKIE)?.value, key))) {

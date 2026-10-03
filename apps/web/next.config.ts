@@ -9,6 +9,8 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 const config: NextConfig = {
   transpilePackages: ["@lifestack/db"],
   poweredByHeader: false,
+  // Next 16.3 dev otherwise writes AGENTS.md and CLAUDE.md into the app folder.
+  agentRules: false,
   async headers() {
     return [
       {

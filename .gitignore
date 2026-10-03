@@ -18,3 +18,4 @@ backups/
 pgdata/
 next-env.d.ts
 .vercel
+.next-*/

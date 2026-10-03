@@ -1,6 +1,16 @@
 // Date helpers that work in the owner's timezone (APP_TZ) without a date library.
 // Days are plain "YYYY-MM-DD" strings; months are "YYYY-MM".
-export const TZ = process.env.APP_TZ || "UTC";
+function validTz(tz: string): string {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return tz;
+  } catch {
+    console.error(`APP_TZ "${tz}" is not a valid IANA timezone; using UTC`);
+    return "UTC";
+  }
+}
+
+export const TZ = validTz(process.env.APP_TZ || "UTC");
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -9,17 +19,24 @@ function parseYmd(s: string): [number, number, number] {
   return [y!, m!, d!];
 }
 
+const partsFormat = new Map<string, Intl.DateTimeFormat>();
+
 function tzParts(d: Date, tz: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(d);
+  let fmt = partsFormat.get(tz);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    partsFormat.set(tz, fmt);
+  }
+  const parts = fmt.formatToParts(d);
   const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
   return { y: get("year"), m: get("month"), d: get("day"), h: get("hour"), min: get("minute"), s: get("second") };
 }
@@ -44,6 +61,8 @@ export function startOfDay(day: string, tz = TZ): Date {
   const guess = Date.UTC(y, m - 1, d);
   let t = guess - offsetMs(new Date(guess), tz);
   t = guess - offsetMs(new Date(t), tz);
+  // Some zones skip local midnight on a DST day; the day then starts at the first real hour.
+  for (let i = 0; i < 4 && ymd(new Date(t), tz) < day; i++) t += 60 * 60 * 1000;
   return new Date(t);
 }
 
@@ -54,10 +73,10 @@ export function addDays(day: string, n: number): string {
 }
 
 export const isValidDay = (s: string | undefined): s is string =>
-  !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && addDays(s, 0) === s;
+  !!s && /^(19[7-9]\d|[2-9]\d{3})-\d{2}-\d{2}$/.test(s) && addDays(s, 0) === s;
 
 export const isValidMonth = (s: string | undefined): s is string =>
-  !!s && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+  !!s && /^(19[7-9]\d|[2-9]\d{3})-(0[1-9]|1[0-2])$/.test(s);
 
 export function shiftMonth(month: string, delta: number): string {
   const [y, m] = parseYmd(`${month}-01`);
@@ -88,3 +107,6 @@ export const fmtDayLong = (day: string) =>
 
 export const fmtDayShort = (day: string) =>
   new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(utcDate(day));
+
+export const fmtDateTime = (d: Date) =>
+  new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(d);

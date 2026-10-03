@@ -12,9 +12,9 @@ import { addDays, startOfDay } from "./dates";
 // after their last day. A sync worker only has to write rows in this shape.
 const Payload = z.object({
   title: z.string().min(1),
-  end: z.iso.datetime({ offset: true }).optional(),
-  allDay: z.boolean().default(false),
-  location: z.string().optional(),
+  end: z.iso.datetime({ offset: true }).nullish(),
+  allDay: z.boolean().nullish(),
+  location: z.string().nullish(),
 });
 
 export type CalendarItem = {
@@ -28,12 +28,13 @@ export type CalendarItem = {
 
 export async function calendarItems(from: Date, to: Date): Promise<CalendarItem[]> {
   // Events can span days; look back far enough to catch ones that started earlier.
-  const lookback = new Date(from.getTime() - 31 * 24 * 60 * 60 * 1000);
+  // Anything longer than a year is not shown.
+  const lookback = new Date(from.getTime() - 366 * 24 * 60 * 60 * 1000);
   const rows = await db()
     .select()
     .from(events)
     .where(and(eq(events.domain, "calendar"), eq(events.key, "calendar.event"), gte(events.ts, lookback), lt(events.ts, to)))
-    .orderBy(events.ts);
+    .orderBy(events.ts, events.id);
 
   const items: CalendarItem[] = [];
   for (const row of rows) {
@@ -42,7 +43,14 @@ export async function calendarItems(from: Date, to: Date): Promise<CalendarItem[
     const { title, end, allDay, location } = parsed.data;
     const start = row.ts;
     const stop = end ? new Date(end) : start;
-    const item: CalendarItem = { id: row.id, title, start, end: stop < start ? start : stop, allDay, location };
+    const item: CalendarItem = {
+      id: row.id,
+      title,
+      start,
+      end: stop < start ? start : stop,
+      allDay: !!allDay,
+      location: location ?? undefined,
+    };
     if (overlaps(item, from, to)) items.push(item);
   }
   return items;
@@ -57,7 +65,19 @@ function overlaps(item: CalendarItem, from: Date, to: Date): boolean {
 export function itemsOnDay(items: CalendarItem[], day: string): CalendarItem[] {
   const from = startOfDay(day);
   const to = startOfDay(addDays(day, 1));
-  return items.filter((i) => overlaps(i, from, to));
+  return items
+    .filter((i) => overlaps(i, from, to))
+    .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.getTime() - b.start.getTime() || a.id - b.id);
+}
+
+// Like calendarItems, but a failure is reported instead of looking like an empty calendar.
+export async function loadCalendar(from: Date, to: Date): Promise<{ items: CalendarItem[]; failed: boolean }> {
+  try {
+    return { items: await calendarItems(from, to), failed: false };
+  } catch (e) {
+    console.error("calendar: failed to load events", e);
+    return { items: [], failed: true };
+  }
 }
 
 export async function systemStatus() {
@@ -66,13 +86,13 @@ export async function systemStatus() {
       db().select({ n: count() }).from(events),
       db().select().from(syncState),
     ]);
-    const gcal = sources.find((s) => s.source === "gcal");
+    const outlook = sources.find((s) => s.source === "outlook");
     return {
       ok: true as const,
       events: e?.n ?? 0,
       sources: sources.length,
-      calendarConnected: !!gcal?.lastOkAt,
-      calendarSyncedAt: gcal?.lastOkAt ?? null,
+      calendarConnected: !!outlook?.lastOkAt,
+      calendarSyncedAt: outlook?.lastOkAt ?? null,
     };
   } catch {
     return { ok: false as const };

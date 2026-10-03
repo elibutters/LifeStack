@@ -124,3 +124,12 @@ export const authAttempts = pgTable(
   },
   (t) => [index("auth_attempts_ts_idx").on(t.ts)],
 );
+
+// Linked third-party accounts. Tokens are encrypted before they are stored.
+export const connections = pgTable("connections", {
+  provider: text("provider").primaryKey(), // outlook
+  account: text("account"), // display address for the UI
+  refreshTokenEnc: text("refresh_token_enc").notNull(),
+  createdAt,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

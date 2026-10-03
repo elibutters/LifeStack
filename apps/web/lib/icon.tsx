@@ -11,7 +11,7 @@ export function renderIcon(px: number) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#0a0a0a",
+          background: "#0a0a0b",
           color: "#ededed",
           fontSize: px / 2,
           fontWeight: 700,

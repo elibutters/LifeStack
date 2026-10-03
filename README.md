@@ -47,12 +47,36 @@ scripts/        privacy check
    | `APP_PASSWORD` | your login; at least 16 characters, long and random |
    | `SESSION_SECRET` | output of `openssl rand -hex 32` |
    | `APP_TZ` | your IANA timezone, e.g. `UTC` |
+   | `APP_URL` | the deployment's public address, e.g. `https://your-app.vercel.app` |
+   | `ENCRYPTION_KEY` | output of `openssl rand -hex 32`; encrypts stored account tokens |
+   | `CRON_SECRET` | output of `openssl rand -hex 32`; lets Vercel Cron call the sync |
 
 5. Deploy. Production builds apply database migrations, then build the app. Preview
    builds never migrate, so connect the database to the Production environment only;
    sign-in is unavailable on previews. The very first deployment of a new Vercel
    project is a production deployment whichever branch it comes from.
 6. On your phone, open the deployment URL, sign in, then Share -> Add to Home Screen.
+
+### Connect Outlook
+
+The Calendar tab reads a personal Outlook account (outlook.com, hotmail.com, live.com)
+through Microsoft's calendar API, read-only. One-time setup, free:
+
+1. Sign in at <https://entra.microsoft.com> with your Microsoft account and open
+   **App registrations** -> **New registration**.
+2. Name it anything. Under **Supported account types** choose **Personal Microsoft
+   accounts only**. Under **Redirect URI** choose **Web** and enter
+   `<APP_URL>/api/connections/outlook/callback`. Register. Add a second redirect URI for
+   `http://localhost:3000/api/connections/outlook/callback` if you develop locally.
+3. **API permissions** -> **Add a permission** -> **Microsoft Graph** -> **Delegated**:
+   `Calendars.Read`, `offline_access`, `User.Read`.
+4. **Certificates & secrets** -> **New client secret**. Copy the secret **Value** now; it is
+   shown once. Secrets expire (at most 24 months), after which you create a new one.
+5. Set `MICROSOFT_CLIENT_ID` (the Application ID) and `MICROSOFT_CLIENT_SECRET` in Vercel,
+   redeploy, then open **Settings** in the app and choose **Connect Outlook**.
+
+The calendar syncs once a day, and again whenever you open the app if the last sync is
+more than 15 minutes old. Vercel's free plan only allows daily scheduled jobs.
 
 ### Security model
 
