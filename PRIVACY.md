@@ -11,7 +11,7 @@ their own Postgres database and their own untracked local files.
 - Real data of any kind: events, tasks, contacts, supplement stacks, account labels,
   places, coordinates, calendar or email content, database dumps, CSV exports, backups.
 - Secrets: `.env` files, API keys, OAuth client secrets or tokens, bearer tokens,
-  encryption keys, tailnet names or `*.ts.net` hostnames.
+  encryption keys, database connection strings, your deployment URL.
 - Screenshots or fixtures made from a real instance.
 
 ## Where personal things go instead
@@ -19,7 +19,7 @@ their own Postgres database and their own untracked local files.
 | Thing | Where it lives |
 | --- | --- |
 | Life data (events, tasks, people, places, ...) | Postgres |
-| Credentials and host settings | `.env` (gitignored; template in `.env.example`) |
+| Credentials and settings | Vercel environment variables; `.env` locally (gitignored; template in `.env.example`) |
 | Personal seed scripts, notes, exports | `local/` (gitignored) |
 | Your own identifying terms for the commit guard | `.privacy-denylist` (gitignored) |
 
@@ -32,12 +32,13 @@ the database or values in `.env`, never constants in code.
   messages or docs.
 - Tests and examples use obviously synthetic data (`Example Person`, `example.com`,
   coordinates `0,0`).
-- Defaults must be generic (`UTC`, `127.0.0.1`), not one person's setup.
+- Defaults must be generic (`UTC`), not one person's setup.
 
 ## Enforcement
 
 `scripts/check-privacy.sh` runs as a pre-commit hook and in CI. It rejects data and
-secret file types, common secret formats, tailnet hostnames, and anything matching
+secret file types, common secret formats, connection strings with real hosts, and
+anything matching
 your `.privacy-denylist`. Enable the hook once per clone:
 
 ```bash

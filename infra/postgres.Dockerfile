@@ -1,4 +1,4 @@
-# Postgres 16 with PostGIS from the PGDG apt repo. Built locally because the
+# Local dev database: Postgres 16 with PostGIS from the PGDG apt repo. Built here because the
 # upstream postgis image is not published for arm64.
 FROM postgres:16-bookworm
 RUN apt-get update \

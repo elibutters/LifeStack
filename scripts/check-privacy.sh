@@ -26,7 +26,9 @@ secrets='-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,}|sk-[A-Za-
 hits=$(content "$secrets")
 [[ -n "$hits" ]] && report "possible secret:"$'\n'"$hits"
 
-# 3. Tailnet hostnames identify the owner.
+# 3. Database URLs pointing anywhere but a local dev database, and private hostnames.
+hits=$(content 'postgres(ql)?://[^[:space:]"]+@[^[:space:]"/:]+' | grep -vE '@(127\.0\.0\.1|localhost|postgres|HOST|host)([:/"]|$)' || true)
+[[ -n "$hits" ]] && report "database connection string:"$'\n'"$hits"
 hits=$(content '[a-z0-9-]+\.[a-z0-9-]+\.ts\.net')
 [[ -n "$hits" ]] && report "tailnet hostname:"$'\n'"$hits"
 
