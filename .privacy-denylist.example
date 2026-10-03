@@ -1,0 +1,4 @@
+# Copy to .privacy-denylist (gitignored) and add one case-insensitive regex per line:
+# your name, email addresses, employer, home city, tailnet name, account nicknames, etc.
+# The pre-commit hook refuses any commit whose staged changes match a line here.
+# Lines starting with # are ignored.

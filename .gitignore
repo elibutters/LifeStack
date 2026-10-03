@@ -1,0 +1,18 @@
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# Secrets and personal data never enter the repo. See PRIVACY.md.
+.env
+.env.*
+!.env.example
+local/
+.privacy-denylist
+*.dump
+*.sql.gz
+*.age
+*.csv
+backups/
+pgdata/
