@@ -1,16 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import { SESSION_COOKIE, sessionKey, verifySession } from "@/lib/session";
 
 // The app is on the public internet, so everything is behind the owner session
 // except the login page, the health check and the assets a browser needs to install the PWA.
-const PUBLIC = new Set(["/login", "/api/health", "/manifest.webmanifest", "/icon", "/apple-icon", "/sw.js"]);
+const PUBLIC = new Set([
+  "/login",
+  "/api/health",
+  "/manifest.webmanifest",
+  "/icon",
+  "/apple-icon",
+  "/sw.js",
+  "/offline.html",
+]);
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC.has(pathname)) return NextResponse.next();
 
-  const secret = process.env.SESSION_SECRET;
-  if (secret && (await verifySession(req.cookies.get(SESSION_COOKIE)?.value, secret))) {
+  const key = sessionKey();
+  if (key && (await verifySession(req.cookies.get(SESSION_COOKIE)?.value, key))) {
     return NextResponse.next();
   }
 

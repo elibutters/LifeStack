@@ -19,8 +19,16 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 
 - pnpm monorepo: `apps/web` (UI, API, cron routes, MCP route), `packages/db`, `infra/`
   (local dev database only).
-- The app is on the public internet. Every new route must be covered by the session
-  check in `apps/web/proxy.ts` or verify a bearer token itself. Fail closed.
+- The app is on the public internet. `apps/web/proxy.ts` gates requests, but it is not
+  enough on its own: every page, server action and route handler that touches data must
+  also call `requireSession()` from `apps/web/lib/auth.ts` (or verify a bearer token).
+  Fail closed. Public paths are the exact list in `proxy.ts`; never put data behind one.
+- Never cache authenticated responses in the service worker.
+- Scheduled work: Vercel's free plan allows daily cron only. Sources sync on a daily
+  cron and on demand when the app is opened or an agent asks; do not assume a
+  sub-daily schedule.
+- Migrations run only on production builds (`apps/web/vercel.json`), over
+  `DATABASE_URL_UNPOOLED` when set.
 - Serverless: no long-lived processes, no in-memory state between requests, keep
   database connections pooled (`prepare: false`).
 - TypeScript strict. Drizzle for schema and migrations. zod at every API boundary.

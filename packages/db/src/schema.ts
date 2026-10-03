@@ -113,3 +113,14 @@ export const syncState = pgTable("sync_state", {
   lastOkAt: timestamp("last_ok_at", { withTimezone: true }),
   lastError: text("last_error"),
 });
+
+// Failed sign-in attempts, kept only long enough to rate limit.
+export const authAttempts = pgTable(
+  "auth_attempts",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
+    ip: text("ip").notNull(),
+  },
+  (t) => [index("auth_attempts_ts_idx").on(t.ts)],
+);

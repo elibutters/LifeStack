@@ -1,9 +1,10 @@
-// Minimal offline support: cache the app shell, fall back to it when the network is down.
-// Never caches /api responses.
-const CACHE = "lifestack-shell-v1";
+// Offline fallback only. Nothing from an authenticated page or the API is ever cached,
+// so no personal data is left on the device after the session ends.
+const CACHE = "lifestack-shell-v2";
+const OFFLINE = "/offline.html";
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.add("/")));
+  e.waitUntil(caches.open(CACHE).then((c) => c.add(OFFLINE)));
   self.skipWaiting();
 });
 
@@ -17,16 +18,6 @@ self.addEventListener("activate", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
-  const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.pathname.startsWith("/api/")) return;
   if (e.request.mode !== "navigate") return;
-  e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put("/", copy));
-        return res;
-      })
-      .catch(() => caches.match("/")),
-  );
+  e.respondWith(fetch(e.request).catch(() => caches.match(OFFLINE)));
 });

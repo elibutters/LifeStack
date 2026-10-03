@@ -33,24 +33,34 @@ scripts/        privacy check
 ## Deploy your own
 
 1. Fork this repo.
-2. Create a Postgres database with any provider and copy its **pooled** connection
-   string. If you want location features later, pick one that offers PostGIS.
+2. Create a Postgres database. [Neon](https://neon.com) is the recommended provider:
+   it has a free tier, supports PostGIS for the location features, and its Vercel
+   integration sets `DATABASE_URL` and `DATABASE_URL_UNPOOLED` for you. Any Postgres 16
+   works; use the **pooled** connection string for `DATABASE_URL`.
 3. Import the fork into Vercel and set **Root Directory** to `apps/web`.
 4. Add environment variables in the Vercel project:
 
    | Name | Value |
    | --- | --- |
-   | `DATABASE_URL` | the pooled connection string |
-   | `APP_PASSWORD` | a long random passphrase; this is your login |
+   | `DATABASE_URL` | pooled connection string |
+   | `DATABASE_URL_UNPOOLED` | direct connection string, used for migrations (optional) |
+   | `APP_PASSWORD` | your login; at least 16 characters, long and random |
    | `SESSION_SECRET` | output of `openssl rand -hex 32` |
    | `APP_TZ` | your IANA timezone, e.g. `UTC` |
 
-5. Deploy. The build applies database migrations, then builds the app.
+5. Deploy. Production builds apply database migrations, then build the app. Preview
+   builds never migrate.
 6. On your phone, open the deployment URL, sign in, then Share -> Add to Home Screen.
 
-The app is reachable from the public internet, so the password is the only thing
-between the world and your data. Make it long and random, and keep it in a password
-manager.
+### Security model
+
+The app is reachable from the public internet, so the password is what stands between
+the world and your data. Keep it in a password manager.
+
+- Sign-in is rate limited: 5 failed attempts per address and 30 overall per 15 minutes.
+- Changing `APP_PASSWORD` or `SESSION_SECRET` signs out every device immediately.
+- Nothing from signed-in pages is cached on the device; offline shows a blank shell.
+- Pages are served with `noindex` and cannot be framed.
 
 ## Develop locally
 
