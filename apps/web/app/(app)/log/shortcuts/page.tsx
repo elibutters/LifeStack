@@ -34,7 +34,7 @@ export default async function Shortcuts() {
                 <div className="min-w-0">
                   <p className="truncate">{t.name}</p>
                   <p className="text-sm text-muted">
-                    {KIND[t.kind] ?? t.kind} &middot; {t.scopes.includes("log:read") ? "add and read today" : "only adds logs"} &middot; {t.prefix}&hellip; &middot;{" "}
+                    {KIND[t.kind] ?? t.kind} &middot; {t.scopes.includes("finance:read") ? "agent: reads everything" : t.scopes.includes("log:read") ? "add and read today" : "only adds logs"} &middot; {t.prefix}&hellip; &middot;{" "}
                     {t.lastUsedAt ? `last used ${fmtDateTime(t.lastUsedAt)}` : "never used"}
                   </p>
                 </div>

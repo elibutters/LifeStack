@@ -134,6 +134,28 @@ Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep ac
 
 Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep** tab and Overview. The unofficial API can change without notice.
 
+### MCP server (agents)
+
+`POST /api/v1/mcp` is a stateless MCP endpoint over HTTP, authenticated with the same revocable keys as
+quick capture. In the **Log > Shortcuts** page create a key with access **Agent: read everything and add
+logs**. Each tool is only offered to a key that holds its scope (`log:read`, `log:write`, `calendar:read`,
+`sleep:read`, `finance:read`).
+
+| Tool | Scope | What it does |
+| --- | --- | --- |
+| `get_today` | log:read | Today's mood, caffeine and supplements |
+| `log_event` | log:write | Log a mood, caffeine or supplement (retry-safe with an `id`) |
+| `get_calendar` | calendar:read | Events and holidays between two dates (90 days at most) |
+| `get_sleep` | sleep:read | Recent nights: score, stages, HRV |
+| `get_finance_summary` | finance:read | Net worth, monthly cash flow, top categories, insights |
+| `get_transactions` | finance:read | Search transactions by text, date or category |
+| `get_holdings` | finance:read | Investment positions |
+
+```
+claude mcp add --transport http life-stack https://<your-deployment>/api/v1/mcp \
+  --header "Authorization: Bearer ls_..."
+```
+
 ### Backups
 
 A daily cron (`/api/cron/backup`) copies every table (except login attempts) into one file, gzips it,

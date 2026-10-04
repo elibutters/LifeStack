@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { addSupplement, archiveSupplement, deleteLog, insertLog } from "@/lib/capture";
-import { describeEntry, EventInput, SCOPES, type Scope } from "@/lib/capture-core";
+import { AGENT_SCOPES, describeEntry, EventInput, SCOPES, type Scope } from "@/lib/capture-core";
 import { createToken, revokeToken, TOKEN_KINDS, type TokenKind } from "@/lib/tokens";
 
 // Server actions are POSTs to their page, so each one checks the session itself.
@@ -67,14 +67,14 @@ export type TokenState = { error?: string; token?: string; name?: string };
 const TokenForm = z.object({
   name: z.string().trim().min(1, "Give it a name.").max(60),
   kind: z.enum(TOKEN_KINDS as [TokenKind, ...TokenKind[]]),
-  access: z.enum(["write", "readwrite"]),
+  access: z.enum(["write", "readwrite", "agent"]),
 });
 
 export async function createTokenAction(_prev: TokenState, form: FormData): Promise<TokenState> {
   await requireSession();
   const parsed = TokenForm.safeParse({ name: form.get("name"), kind: form.get("kind"), access: form.get("access") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
-  const scopes: Scope[] = parsed.data.access === "write" ? ["log:write"] : ["log:write", "log:read"];
+  const scopes: Scope[] = parsed.data.access === "write" ? ["log:write"] : parsed.data.access === "agent" ? AGENT_SCOPES : ["log:write", "log:read"];
   try {
     const { token } = await createToken(parsed.data.name, parsed.data.kind, scopes.filter((s) => SCOPES.includes(s)));
     revalidatePath("/log", "layout");
