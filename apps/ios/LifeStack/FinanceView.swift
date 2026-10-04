@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct FinanceView: View {
@@ -7,42 +8,63 @@ struct FinanceView: View {
     @State private var holdings = Loader<[Holding]>()
 
     var body: some View {
-        NavigationStack {
-            List {
-                ErrorRow(text: summary.error)
-                if let s = summary.value {
-                    Section("Net worth") {
-                        Text(Format.money(s.netWorth.net)).font(.largeTitle.weight(.semibold))
-                        HStack { Stat(label: "Assets", value: Format.money(s.netWorth.assets)); Stat(label: "Owed", value: Format.money(s.netWorth.liabilities)) }
-                    }
-                    Section(s.thisMonth.month) {
-                        HStack { Stat(label: "In", value: Format.money(s.thisMonth.income)); Stat(label: "Out", value: Format.money(s.thisMonth.spending)); Stat(label: "Net", value: Format.money(s.thisMonth.net)) }
-                        ForEach((s.thisMonth.byCategory ?? []).prefix(5)) { c in LabeledContent(c.label, value: Format.money(c.amount)) }
-                    }
-                    if !s.insights.isEmpty { Section("Insights") { ForEach(s.insights) { InsightRow(insight: $0) } } }
-                    ForEach(s.groups) { g in
-                        Section(g.label) {
-                            ForEach(g.accounts) { a in LabeledContent(a.name, value: a.balance.map { Format.money($0, cents: true) } ?? "-") }
-                            LabeledContent("Total", value: Format.money(g.total)).bold()
+        Screen(title: "Finance", refresh: { await load() }) {
+            ErrorBanner(text: summary.error)
+            if let s = summary.value {
+                Card(title: "Net worth") {
+                    Big(text: Format.money(s.netWorth.net), size: 46)
+                    HStack { Stat(label: "Assets", value: Format.money(s.netWorth.assets), tint: Theme.good); Stat(label: "Owed", value: Format.money(s.netWorth.liabilities)) }
+                }
+                Card(title: "Cash flow", trailing: "last 6 months") {
+                    Chart {
+                        ForEach(s.cashflow) { f in
+                            BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.income)).position(by: .value("Type", "In")).foregroundStyle(Theme.good).cornerRadius(4)
+                            BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.spending)).position(by: .value("Type", "Out")).foregroundStyle(Theme.violet).cornerRadius(4)
                         }
                     }
-                } else if summary.loading { Section { ProgressView() } }
-                if let h = holdings.value, !h.isEmpty {
-                    Section("Holdings") { ForEach(h) { x in LabeledContent(x.symbol ?? x.name ?? "Position", value: Format.money(x.value)) } }
+                    .chartYAxis { AxisMarks { v in AxisGridLine().foregroundStyle(Theme.line); AxisValueLabel { if let d = v.as(Double.self) { Text(Format.money(d)).foregroundStyle(Theme.muted) } } } }
+                    .chartXAxis { AxisMarks { _ in AxisValueLabel().foregroundStyle(Theme.muted) } }
+                    .frame(height: 170)
+                    HStack(spacing: 16) { legend(Theme.good, "Money in"); legend(Theme.violet, "Money out") }
                 }
-                if let t = txns.value, !t.isEmpty {
-                    Section("Recent transactions") {
+                Card(title: "Spending this month", trailing: Format.money(s.thisMonth.spending)) {
+                    let rows = (s.thisMonth.byCategory ?? []).prefix(6).map { (label: $0.label, value: $0.amount) }
+                    if rows.isEmpty { Empty(text: "Nothing spent yet this month.") } else { BarList(rows: Array(rows)) }
+                }
+                if !s.insights.isEmpty { Card(title: "Insights") { ForEach(s.insights) { InsightRow(insight: $0) } } }
+                ForEach(s.groups) { g in
+                    Card(title: g.label, trailing: Format.money(g.total)) {
+                        ForEach(g.accounts) { a in
+                            HStack { VStack(alignment: .leading, spacing: 1) { Text(a.name).font(.subheadline); if let i = a.institution { Text(i).font(.caption).foregroundStyle(Theme.muted) } }; Spacer(); Text(a.balance.map { Format.money($0, cents: true) } ?? "-").font(.subheadline.weight(.medium)).monospacedDigit() }
+                        }
+                    }
+                }
+            } else if summary.loading { ProgressView().padding(.top, 60) }
+            if let h = holdings.value, !h.isEmpty {
+                Card(title: "Holdings") {
+                    ForEach(h) { x in HStack { Text(x.symbol ?? x.name ?? "Position").font(.subheadline.weight(.medium)); Spacer(); Text(Format.money(x.value)).font(.subheadline).monospacedDigit() } }
+                }
+            }
+            if let t = txns.value, !t.isEmpty {
+                Card(title: "Recent transactions") {
+                    VStack(spacing: 0) {
                         ForEach(t) { x in
-                            HStack { VStack(alignment: .leading) { Text(x.merchant); Text(Format.shortDay(x.date)).font(.caption).foregroundStyle(.secondary) }; Spacer(); Text(Format.money(-x.amount, cents: true)).foregroundStyle(x.amount < 0 ? .green : .primary) }
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) { Text(x.merchant).font(.subheadline).lineLimit(1); Text(Format.shortDay(x.date)).font(.caption).foregroundStyle(Theme.muted) }
+                                Spacer()
+                                Text(Format.money(-x.amount, cents: true)).font(.subheadline.weight(.medium)).monospacedDigit().foregroundStyle(x.amount < 0 ? Theme.good : .white)
+                            }
+                            .padding(.vertical, 8)
+                            if x.id != t.last?.id { Divider().overlay(Theme.line) }
                         }
                     }
                 }
             }
-            .screenHeader("Finance")
-            .refreshable { await load() }
-            .task { await load() }
         }
+        .task { await load() }
     }
+
+    private func legend(_ c: Color, _ t: String) -> some View { HStack(spacing: 6) { Circle().fill(c).frame(width: 8, height: 8); Text(t).font(.caption).foregroundStyle(Theme.muted) } }
 
     private func load() async {
         async let a: Void = summary.load(model) { try await $0.finance() }

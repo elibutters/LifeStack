@@ -139,7 +139,7 @@ Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep
 ### JSON API for the app
 
 Besides quick capture and MCP, these read endpoints back the iPhone app. All take `Authorization: Bearer ls_...`
-and each is limited to a scope: `GET /api/v1/overview` (sections follow the key's scopes), `calendar`
+and each is limited to a scope: `GET /api/v1/log/history` (recent entries with ids) and `DELETE /api/v1/events/{id}` (remove one mood, caffeine or supplement entry), alongside `GET /api/v1/overview` (sections follow the key's scopes), `calendar`
 (`from`, `to`, 90 days at most), `sleep` (`nights`), `finance`, `finance/transactions`, `finance/holdings`,
 `profile`, and `connections` (`account:read`).
 

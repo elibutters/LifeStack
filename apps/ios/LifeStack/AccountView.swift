@@ -29,6 +29,9 @@ struct AccountView: View {
                     Button("Sign out", role: .destructive) { model.signOut() }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.bg)
+            .listRowBackground(Theme.card)
             .navigationTitle("Account")
             .toolbar { if let dismiss { ToolbarItem(placement: .topBarTrailing) { Button("Done", action: dismiss) } } }
             .refreshable { await load() }

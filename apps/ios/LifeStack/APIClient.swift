@@ -129,9 +129,19 @@ struct APIClient {
     }
 
     // A fresh id on every tap makes a retried request safe: the server never logs the same id twice.
-    func log(_ event: [String: Any]) async throws {
+    func log(_ event: [String: Any]) async throws -> Int {
         var body = event
         body["id"] = UUID().uuidString.replacingOccurrences(of: "-", with: "")
-        _ = try await request("api/v1/events", method: "POST", body: try JSONSerialization.data(withJSONObject: body))
+        let data = try await request("api/v1/events", method: "POST", body: try JSONSerialization.data(withJSONObject: body))
+        struct R: Decodable { let id: Int }
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.server }
+        return r.id
     }
+
+    func history(limit: Int = 60) async throws -> [HistoryEntry] {
+        struct R: Decodable { let entries: [HistoryEntry] }
+        return (try await get("api/v1/log/history", [.init(name: "limit", value: String(limit))]) as R).entries
+    }
+
+    func deleteEntry(_ id: Int) async throws { _ = try await request("api/v1/events/\(id)", method: "DELETE") }
 }

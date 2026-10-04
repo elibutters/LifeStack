@@ -11,19 +11,15 @@ struct CalendarView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                ErrorRow(text: loader.error)
-                ForEach(days, id: \.key) { day in
-                    Section(day.heading) { ForEach(day.items) { EventRow(item: $0) } }
-                }
-                if loader.value?.isEmpty == true { Section { Text("Nothing scheduled in the next 30 days.").foregroundStyle(.secondary) } }
-                if loader.value == nil && loader.loading { Section { ProgressView() } }
+        Screen(title: "Calendar", refresh: { await load() }) {
+            ErrorBanner(text: loader.error)
+            ForEach(days, id: \.key) { day in
+                Card(title: day.heading) { ForEach(day.items) { EventRow(item: $0) } }
             }
-            .screenHeader("Calendar")
-            .refreshable { await load() }
-            .task { await load() }
+            if loader.value?.isEmpty == true { Card { Empty(text: "Nothing scheduled in the next 30 days.") } }
+            if loader.value == nil && loader.loading { ProgressView().padding(.top, 60) }
         }
+        .task { await load() }
     }
 
     private func load() async { await loader.load(model) { try await $0.calendar() } }

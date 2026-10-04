@@ -8,7 +8,7 @@ struct SetupView: View {
     @FocusState private var focus: Field?
     private enum Field { case address, email, password }
 
-    private let accent = LinearGradient(colors: [Color(red: 0.30, green: 0.44, blue: 1.0), Color(red: 0.56, green: 0.48, blue: 0.94)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    private let accent = Theme.accent
     private var ready: Bool { (AppModel.bundledAddress != nil || !address.isEmpty) && !email.isEmpty && !password.isEmpty && !model.busy }
 
     var body: some View {
@@ -47,7 +47,7 @@ struct SetupView: View {
             .padding(.horizontal, 24)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color.black.ignoresSafeArea())
+        .background(Theme.bg.ignoresSafeArea())
         .onAppear { if address.isEmpty { address = model.address } }
     }
 
@@ -55,7 +55,7 @@ struct SetupView: View {
         view
             .textInputAutocapitalization(.never).autocorrectionDisabled()
             .padding(.horizontal, 16).frame(height: 54)
-            .background(Color.white.opacity(0.09), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(Theme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private func submit() {

@@ -101,6 +101,16 @@ struct ConnectionsStatus: Decodable, Equatable {
 // The profile is a flat object of text and numbers; the app shows whatever is filled in.
 struct ProfileEntry: Identifiable, Equatable { let id: String; let label: String; let value: String }
 
+struct HistoryEntry: Decodable, Equatable, Identifiable {
+    let id: Int
+    let at: String
+    let key: String
+    let label: String
+    let source: String
+}
+
+struct Logged: Equatable { let id: Int; let label: String }
+
 enum Format {
     static func money(_ v: Double, cents: Bool = false) -> String {
         let f = NumberFormatter()
@@ -132,5 +142,12 @@ enum Format {
     static func dayKey(_ item: CalendarItem) -> String {
         item.allDay ? String(item.start.prefix(10)) : (date(item.start).map { $0.formatted(.iso8601.year().month().day()) } ?? item.start)
     }
+    static func clock(_ iso: String) -> String { date(iso)?.formatted(date: .omitted, time: .shortened) ?? "" }
+    static func monthShort(_ ym: String) -> String {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM"; f.timeZone = .current
+        return f.date(from: ym)?.formatted(.dateTime.month(.abbreviated)) ?? ym
+    }
+    static func longDay(_ d: Date) -> String { d.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()) }
+    static func isToday(_ iso: String) -> Bool { date(iso).map { Calendar.current.isDateInToday($0) } ?? false }
     static func shortDay(_ s: String) -> String { dayDate(s)?.formatted(.dateTime.weekday(.abbreviated).month().day()) ?? s }
 }

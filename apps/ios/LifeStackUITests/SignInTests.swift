@@ -22,17 +22,35 @@ final class SignInTests: XCTestCase {
         app.buttons["Sign in"].tap()
 
         XCTAssertTrue(app.tabBars.buttons["Overview"].waitForExistence(timeout: 20), "should reach the home screen")
+        shot("overview", env)
         // Every tab loads its screen from the server.
         for tab in ["Calendar", "Sleep", "Finance", "Log"] {
             let button = app.tabBars.buttons[tab]
             XCTAssertTrue(button.exists, "\(tab) tab")
             button.tap()
+            if tab != "Log" { shot(tab.lowercased(), env) }
         }
         app.tabBars.buttons["Finance"].tap()
-        XCTAssertTrue(app.staticTexts["Net worth"].waitForExistence(timeout: 20), "finance summary loads")
+        XCTAssertTrue(app.staticTexts["NET WORTH"].waitForExistence(timeout: 20), "finance summary loads")
         app.tabBars.buttons["Sleep"].tap()
-        XCTAssertTrue(app.staticTexts["Recent nights"].waitForExistence(timeout: 20), "sleep nights load")
+        XCTAssertTrue(app.staticTexts["LAST NIGHT"].waitForExistence(timeout: 20), "sleep nights load")
         app.tabBars.buttons["Log"].tap()
-        XCTAssertTrue(app.buttons["Coffee"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Coffee'")).firstMatch.waitForExistence(timeout: 15))
+        // One tap logs and says so right away with an Undo. (Undo removing the entry is checked on the server side.)
+        let zinc = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Zinc'")).firstMatch
+        if zinc.waitForExistence(timeout: 10) {
+            zinc.tap()
+            XCTAssertTrue(app.staticTexts["Logged Zinc"].waitForExistence(timeout: 10), "a confirmation appears")
+            shot("log", env)
+            XCTAssertTrue(app.buttons["Undo"].exists, "the confirmation offers Undo")
+            app.buttons["Undo"].tap()
+        }
+    }
+
+    private func shot(_ name: String, _ env: [String: String]) {
+        guard let dir = env["LS_SHOTS"] else { return }
+        Thread.sleep(forTimeInterval: 3)
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
     }
 }
