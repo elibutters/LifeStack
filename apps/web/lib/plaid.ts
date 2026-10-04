@@ -108,6 +108,23 @@ const Credit = z.object({
   next_payment_due_date: str,
 });
 
+export type KeyStatus = "ok" | "rejected" | "unreachable";
+let verifiedAt = 0;
+
+// Whether Plaid accepts this deployment's keys, using a free call. Shown in Settings so a mix-up
+// (such as the sandbox and production secrets swapped) is visible at once. A pass is remembered
+// for five minutes. The request itself is fixed and valid, so "invalid field" means a malformed key.
+export async function keyStatus(): Promise<KeyStatus> {
+  if (Date.now() - verifiedAt < 5 * 60 * 1000) return "ok";
+  try {
+    await call("/institutions/get", { count: 1, offset: 0, country_codes: ["US"] }, z.object({ institutions: z.array(z.unknown()) }));
+    verifiedAt = Date.now();
+    return "ok";
+  } catch (e) {
+    return e instanceof PlaidError && ["INVALID_API_KEYS", "INVALID_CLIENT_ID", "INVALID_SECRET", "INVALID_FIELD"].includes(e.code) ? "rejected" : "unreachable";
+  }
+}
+
 export type PlaidKind = "bank" | "brokerage";
 
 export const linkTokenCreate = (opts: { kind: PlaidKind; accessToken?: string; origin: string }) => {

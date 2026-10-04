@@ -191,4 +191,11 @@ let flood = 0; keyResponse = err("INVALID_FIELD", "INVALID_REQUEST"); const befo
 for (let i = 0; i < 40; i++) { flood++; await plaid.verifyWebhook(body, jwt(body, { kid: `aaaaaaaa-0000-0000-0000-${String(i).padStart(12, "0")}` })); }
 assert.ok(keyFetches - before2 <= 10, "key lookups are rate limited: " + (keyFetches - before2));
 
+// ---- key status: a mix-up is reported as such, and only a pass is remembered
+let ksFetches = 0; let ksResponse: Response = err("INVALID_API_KEYS", "INVALID_INPUT");
+globalThis.fetch = (async (i: any) => { assert.ok(String(i).endsWith("/institutions/get")); ksFetches++; return ksResponse.clone(); }) as any;
+assert.equal(await plaid.keyStatus(), "rejected"); assert.equal(await plaid.keyStatus(), "rejected"); assert.equal(ksFetches, 2);
+ksResponse = err("INTERNAL_SERVER_ERROR", "API_ERROR", 500); assert.equal(await plaid.keyStatus(), "unreachable");
+ksResponse = ok({ institutions: [] }); assert.equal(await plaid.keyStatus(), "ok"); const seen = ksFetches; assert.equal(await plaid.keyStatus(), "ok"); assert.equal(ksFetches, seen, "a pass is cached");
+
 console.log("PLAID ALL OK"); process.exit(0);

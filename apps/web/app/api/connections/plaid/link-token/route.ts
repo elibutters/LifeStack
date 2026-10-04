@@ -4,7 +4,7 @@ import { z } from "zod";
 import { isAuthed } from "@/lib/auth";
 import { accessTokenFor } from "@/lib/finance";
 import { appOrigin } from "@/lib/microsoft";
-import { linkTokenCreate, plaidConfigured } from "@/lib/plaid";
+import { linkTokenCreate, plaidConfigured, PlaidError } from "@/lib/plaid";
 import { crossSite } from "@/lib/request";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ link_token });
   } catch (e) {
     console.error("plaid: link token failed", describeError(e));
-    return NextResponse.json({ error: "plaid_error" }, { status: 502 });
+    // Plaid's error code (such as INVALID_API_KEYS) is safe to show and saves a trip to the logs.
+    return NextResponse.json({ error: "plaid_error", code: e instanceof PlaidError ? e.code : undefined }, { status: 502 });
   }
 }
