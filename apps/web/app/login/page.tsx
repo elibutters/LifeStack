@@ -17,12 +17,12 @@ export default function Login() {
           autoComplete="current-password"
           autoFocus
           required
-          className="rounded-lg border border-line bg-surface px-3 py-2.5 text-base outline-none focus:border-accent"
+          className="rounded-md border border-line bg-surface px-3 py-2.5 text-base outline-none focus:border-accent"
         />
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-fg px-3 py-2.5 font-medium text-bg disabled:opacity-50"
+          className="rounded-md bg-fg px-3 py-2.5 font-medium text-bg disabled:opacity-50"
         >
           Sign in
         </button>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Card } from "@/components/card";
+import { SignOutIcon } from "@/components/icons";
 import { PlaidLinkButton } from "@/components/plaid-link";
 import { requireSession } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/dates";
@@ -10,6 +11,7 @@ import { getConnection, getSyncState } from "@/lib/outlook";
 import { db } from "@/lib/db";
 import { accounts } from "@lifestack/db";
 import { count } from "drizzle-orm";
+import { logout } from "@/app/login/actions";
 import { disconnect, syncFinance, syncNow, unlinkFinance } from "./actions";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -24,7 +26,7 @@ const MESSAGES: Record<string, string> = {
   exchange: "Microsoft sign-in could not be completed. Try again.",
 };
 
-const button = "flex h-11 items-center rounded-lg border border-line px-4 text-sm hover:bg-raised";
+const button = "flex h-11 items-center rounded-md border border-line px-4 text-sm hover:bg-raised";
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
   await requireSession();
@@ -47,9 +49,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
 
-      {error && <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-red-300">{error}</p>}
+      {error && <p className="rounded-md border border-red-400/30 bg-red-400/10 px-4 py-3 text-red-300">{error}</p>}
       {sp.connected && !error && (
-        <p className="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-accent">
+        <p className="rounded-md border border-accent/30 bg-accent/10 px-4 py-3 text-accent">
           Outlook connected. Your calendar is syncing and will appear in a moment.
         </p>
       )}
@@ -106,7 +108,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           ) : (
             <>
               {plaidEnv() === "sandbox" && (
-                <p className="rounded-lg border border-line bg-raised px-3 py-2 text-sm text-muted">
+                <p className="rounded-md border border-line bg-raised px-3 py-2 text-sm text-muted">
                   Test mode: only Plaid's fake sandbox banks can be linked here, so no real data is stored.
                 </p>
               )}
@@ -156,6 +158,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </>
           )}
         </div>
+      </Card>
+
+      <Card title="Session" className="max-w-2xl">
+        <form action={logout}>
+          <button type="submit" className={`${button} gap-2`}>
+            <SignOutIcon width={18} height={18} />
+            Sign out
+          </button>
+        </form>
       </Card>
     </div>
   );

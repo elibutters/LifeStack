@@ -49,7 +49,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         <h1 className="mr-auto text-xl font-semibold tracking-tight sm:text-2xl">{fmtMonth(month)}</h1>
         <Link
           href={href(today.slice(0, 7), today)}
-          className="flex h-11 items-center rounded-lg border border-line px-3 text-sm hover:bg-raised"
+          className="flex h-11 items-center rounded-md border border-line px-3 text-sm hover:bg-raised"
         >
           Today
         </Link>
@@ -57,14 +57,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <Link
             href={href(shiftMonth(month, -1))}
             aria-label="Previous month"
-            className="grid h-11 w-11 place-items-center rounded-lg text-muted hover:bg-raised hover:text-fg"
+            className="grid h-11 w-11 place-items-center rounded-md text-muted hover:bg-raised hover:text-fg"
           >
             <ChevronLeftIcon />
           </Link>
           <Link
             href={href(shiftMonth(month, 1))}
             aria-label="Next month"
-            className="grid h-11 w-11 place-items-center rounded-lg text-muted hover:bg-raised hover:text-fg"
+            className="grid h-11 w-11 place-items-center rounded-md text-muted hover:bg-raised hover:text-fg"
           >
             <ChevronRightIcon />
           </Link>
@@ -72,7 +72,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+        <div className="overflow-hidden rounded-md border border-line bg-surface">
           <div className="grid grid-cols-7 border-b border-line">
             {WEEKDAYS.map((w) => (
               <div key={w} className="py-2 text-center text-xs text-muted">
@@ -99,7 +99,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                   } ${idx < cells.length - 7 ? "border-b" : ""} ${isSelected ? "bg-raised" : "hover:bg-raised/60"}`}
                 >
                   <span
-                    className={`grid h-6 w-6 place-items-center rounded-full text-sm tabular-nums ${
+                    className={`grid h-6 w-6 place-items-center rounded-sm text-sm tabular-nums ${
                       isToday ? "bg-accent font-semibold text-bg" : inMonth ? "" : "text-muted/70"
                     }`}
                   >
@@ -109,7 +109,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                     {list.slice(0, 3).map((i) => (
                       <span
                         key={i.id}
-                        className={`truncate rounded px-1.5 py-0.5 text-xs ${
+                        className={`truncate rounded-sm px-1.5 py-0.5 text-xs ${
                           i.kind === "holiday" ? "bg-holiday/15 text-holiday" : "bg-accent/15 text-accent"
                         }`}
                       >
