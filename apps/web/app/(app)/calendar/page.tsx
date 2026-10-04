@@ -129,7 +129,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           </div>
         </div>
 
-        <Card title={fmtDayLong(selected)} className="lg:sticky lg:top-20 lg:self-start">
+        <Card title={fmtDayLong(selected)} className="lg:sticky lg:top-6 lg:self-start">
           {dayItems.length > 0 ? (
             <ul className="w-max min-w-full divide-y divide-line">
               {dayItems.map((i) => (
@@ -143,7 +143,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               {notConnected ? (
                 <>
                   Your calendar isn't connected yet.{" "}
-                  <Link href="/settings" className="text-accent">
+                  <Link href="/connections" className="text-accent">
                     Connect Outlook
                   </Link>
                 </>
