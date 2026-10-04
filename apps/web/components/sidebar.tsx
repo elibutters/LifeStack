@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { LogoMark } from "./logo";
 import { SidebarNav } from "./nav";
 import { ProfileMenu } from "./profile-menu";
 
@@ -32,8 +33,8 @@ export function Sidebar() {
       >
         <div className={`mb-4 flex ${expanded ? "items-center gap-1 px-1" : "flex-col items-center"}`}>
           <Link href="/" className={`flex min-w-0 items-center ${expanded ? "h-11 flex-1" : "h-11 w-10 justify-center"}`}>
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-raised text-[11px] font-bold tracking-tight">
-              LS
+            <span className="grid h-7 w-7 shrink-0 place-items-center">
+              <LogoMark size={26} />
             </span>
             {expanded ? (
               <span className="truncate pl-2.5 font-semibold tracking-tight">Life Stack</span>

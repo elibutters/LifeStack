@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { LogoMark } from "@/components/logo";
 import { login } from "./actions";
 
 export default function Login() {
@@ -8,7 +9,8 @@ export default function Login() {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-xs flex-col justify-center p-6 pt-[max(1.5rem,env(safe-area-inset-top))]">
-      <h1 className="text-2xl font-semibold">Life Stack</h1>
+      <LogoMark size={56} />
+      <h1 className="mt-4 text-2xl font-semibold">Life Stack</h1>
       <form action={action} className="mt-6 flex flex-col gap-3">
         <input
           type="password"

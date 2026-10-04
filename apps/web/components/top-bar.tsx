@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LogoMark } from "./logo";
 import { ProfileMenu } from "./profile-menu";
 
 export function MobileHeader() {
@@ -6,9 +7,7 @@ export function MobileHeader() {
     <header className="sticky top-0 z-30 border-b border-line bg-bg/80 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
       <div className="flex h-12 items-center gap-3 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))]">
         <Link href="/" className="flex items-center gap-2.5">
-          <span className="grid h-7 w-7 place-items-center rounded-md bg-raised text-[11px] font-bold tracking-tight">
-            LS
-          </span>
+          <LogoMark size={28} />
           <span className="font-semibold tracking-tight">Life Stack</span>
         </Link>
         <div className="ml-auto">
