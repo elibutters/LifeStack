@@ -6,7 +6,7 @@ import { insertLog, loadToday } from "./capture";
 import { calendarItems } from "./calendar";
 import { addDays, isValidDay, startOfDay, ymd } from "./dates";
 import { describeError } from "./errors";
-import { classify, fmtMoney, insights, merchantName, monthOf, netWorth, shiftMonthKey, summarizeMonth } from "./finance-calc";
+import { classify, fmtMoney, insights, merchantName, monthOf, netWorth, shiftMonthKey, summarizeMonth, accountLabel } from "./finance-calc";
 import { loadFinance, loadHoldings } from "./finance-data";
 import { loadProfile, profileForAgents } from "./profile";
 import { loadNights } from "./sleep";
@@ -129,7 +129,7 @@ export function buildServer(token: VerifiedToken): McpServer {
       return ok({
         today: f.today,
         netWorth: { assets: nw.assets, liabilities: nw.liabilities, net: nw.net },
-        groups: nw.groups.map((g) => ({ label: g.label, total: g.total, accounts: g.accounts.map((a) => ({ name: a.name, institution: a.institution, subtype: a.subtype, balance: a.current })) })),
+        groups: nw.groups.map((g) => ({ label: g.label, total: g.total, accounts: g.accounts.map((a) => ({ name: accountLabel(a), institution: a.institution, subtype: a.subtype, balance: a.current })) })),
         thisMonth: summarizeMonth(f.txns, month),
         lastMonth: summarizeMonth(f.txns, shiftMonthKey(month, -1)),
         insights: insights({ txns: f.txns, accounts: f.accounts, liabilities: f.liabilities, today: f.today }).map((i) => `${i.title}: ${i.detail}`),

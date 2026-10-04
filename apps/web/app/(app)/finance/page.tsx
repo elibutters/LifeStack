@@ -5,7 +5,7 @@ import { AreaChart, BarRows } from "@/components/charts";
 import { requireSession } from "@/lib/auth";
 import { fmtDayShort } from "@/lib/dates";
 import { loadFinance } from "@/lib/finance-data";
-import { cashPositionHistory, fmtMoney, insights, isLiability, monthOf, netWorth, summarizeMonth } from "@/lib/finance-calc";
+import { cashPositionHistory, fmtMoney, insights, isLiability, monthOf, netWorth, summarizeMonth, accountLabel } from "@/lib/finance-calc";
 
 export const metadata: Metadata = { title: "Finance" };
 export const dynamic = "force-dynamic";
@@ -106,13 +106,13 @@ export default async function FinanceOverview() {
                     return (
                       <li key={a.id} className="flex items-baseline justify-between gap-4 py-2">
                         <div className="min-w-0">
-                          <p className="truncate">{a.name}</p>
+                          <p className="truncate">{accountLabel(a)}</p>
                           <p className="truncate text-sm text-muted">
                             {a.institution ?? "Linked account"}
                             {a.balanceAt ? ` · updated ${fmtDayShort(a.balanceAt.toISOString().slice(0, 10))}` : ""}
                           </p>
                         </div>
-                        <span className={`shrink-0 tabular-nums ${balance == null ? "" : moneyTone(balance)}`}>{balance == null ? "n/a" : fmtMoney(balance, true)}</span>
+                        <span className={`shrink-0 tabular-nums ${balance == null ? "" : moneyTone(balance)}`}>{balance == null ? "n/a" : fmtMoney(balance)}</span>
                       </li>
                     );
                   })}
@@ -143,10 +143,10 @@ export default async function FinanceOverview() {
               {due.map(({ l, acct }) => (
                 <li key={l.accountId} className="flex items-baseline justify-between gap-3 py-2">
                   <div className="min-w-0">
-                    <p className="truncate">{acct!.name}</p>
+                    <p className="truncate">{accountLabel(acct!)}</p>
                     <p className={`text-sm ${l.isOverdue ? "text-red-300" : "text-muted"}`}>Due {fmtDayShort(l.nextPaymentDue!)}</p>
                   </div>
-                  <span className="shrink-0 tabular-nums">{l.minimumPayment != null ? `min ${fmtMoney(l.minimumPayment, true)}` : ""}</span>
+                  <span className="shrink-0 tabular-nums">{l.minimumPayment != null ? `min ${fmtMoney(l.minimumPayment)}` : ""}</span>
                 </li>
               ))}
             </ul>

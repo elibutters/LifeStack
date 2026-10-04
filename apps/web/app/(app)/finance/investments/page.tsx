@@ -4,7 +4,7 @@ import { Card } from "@/components/card";
 import { BarRows } from "@/components/charts";
 import { requireSession } from "@/lib/auth";
 import { loadAccounts, loadHoldings } from "@/lib/finance-data";
-import { fmtMoney, fmtPct } from "@/lib/finance-calc";
+import { fmtMoney, fmtPct, accountLabel } from "@/lib/finance-calc";
 
 export const metadata: Metadata = { title: "Investments" };
 export const dynamic = "force-dynamic";
@@ -66,7 +66,7 @@ export default async function Investments() {
       {invAccounts.map((a) => {
         const list = holdings.filter((h) => h.accountId === a.plaidAccountId);
         return (
-          <Card key={a.id} title={`${a.name}${a.institution ? ` · ${a.institution}` : ""}`} action={<span className="tabular-nums">{a.current != null ? fmtMoney(a.current) : "n/a"}</span>}>
+          <Card key={a.id} title={`${accountLabel(a)}${a.institution ? ` · ${a.institution}` : ""}`} action={<span className="tabular-nums">{a.current != null ? fmtMoney(a.current) : "n/a"}</span>}>
             {list.length ? (
               <div className="-mx-1 overflow-x-auto">
                 <table className="w-full min-w-[34rem] text-left text-sm">

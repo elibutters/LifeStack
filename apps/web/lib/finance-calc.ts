@@ -17,6 +17,7 @@ export type AccountInfo = {
   id: number;
   plaidAccountId: string;
   name: string;
+  nickname: string | null;
   institution: string | null;
   type: string; // depository | credit | loan | investment | other
   subtype: string | null;
@@ -94,6 +95,7 @@ export type MonthSummary = {
 };
 
 export const merchantName = (t: Pick<Txn, "merchant" | "name">) => (t.merchant ?? t.name).trim();
+export const accountLabel = (a: { name: string; nickname?: string | null }) => a.nickname?.trim() || a.name;
 
 export function summarizeMonth(txns: Txn[], month: string): MonthSummary {
   let income = 0;
@@ -338,8 +340,8 @@ export function insights(input: { txns: Txn[]; accounts: AccountInfo[]; liabilit
       out.push({
         id: `due-${l.accountId}`,
         tone: l.isOverdue ? "warn" : days <= 3 ? "warn" : "info",
-        title: `${acct.name} payment ${days <= 0 ? "is due now" : `is due in ${days} day${days === 1 ? "" : "s"}`}`,
-        detail: `${l.minimumPayment != null ? `Minimum ${fmtMoney(l.minimumPayment, true)}. ` : ""}${l.lastStatementBalance != null ? `Statement balance ${fmtMoney(l.lastStatementBalance, true)}.` : ""}`.trim(),
+        title: `${accountLabel(acct)} payment ${days <= 0 ? "is due now" : `is due in ${days} day${days === 1 ? "" : "s"}`}`,
+        detail: `${l.minimumPayment != null ? `Minimum ${fmtMoney(l.minimumPayment)}. ` : ""}${l.lastStatementBalance != null ? `Statement balance ${fmtMoney(l.lastStatementBalance)}.` : ""}`.trim(),
       });
     }
   }
@@ -365,7 +367,7 @@ export function insights(input: { txns: Txn[]; accounts: AccountInfo[]; liabilit
 
   // subscriptions that started recently
   for (const r of detectRecurring(txns, today)) {
-    if (dayNum(today) - dayNum(r.firstDate) <= 45 && r.count <= 3) out.push({ id: `new-${r.name}`, tone: "info", title: `New recurring charge: ${r.name}`, detail: `${fmtMoney(r.amount, true)} ${r.cadence}.` });
+    if (dayNum(today) - dayNum(r.firstDate) <= 45 && r.count <= 3) out.push({ id: `new-${r.name}`, tone: "info", title: `New recurring charge: ${r.name}`, detail: `${fmtMoney(r.amount)} ${r.cadence}.` });
   }
   return out;
 }
