@@ -84,13 +84,6 @@ export const ChevronUpIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
-export const PinIcon = (p: SVGProps<SVGSVGElement>) => (
-  <Icon {...p}>
-    <path d="M15 4.5l4.5 4.5-5.5 2-2 5.5-1.5-1.5 2.2-4.2-4.2 2.2-1.5-1.5 5.5-2z" />
-    <path d="M9 15l-4.5 4.5" />
-  </Icon>
-);
-
 export const FinanceIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="M4 19.5h16" />
