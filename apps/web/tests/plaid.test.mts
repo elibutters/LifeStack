@@ -123,6 +123,18 @@ S.accounts = [acct("a_brk2", "Replacement", "investment", 1)]; await fin.syncIte
 await db().insert(plaidItems).values({ id: "item-prod", kind: "bank", env: "production", institutionName: "Real Bank", accessTokenEnc: "x" });
 assert.equal(await fin.syncItem("item-prod"), "missing"); assert.ok(!(await fin.listItems()).some((i: any) => i.id === "item-prod")); await db().delete(plaidItems).where(eq(plaidItems.id, "item-prod"));
 
+// ---- a brokerage linked through "bank or card": transactions flow, holdings wait for permission, then arrive
+const id6 = await fin.linkItem("bank", "p6"); S.accounts = [acct("a_inv6", "IRA", "investment", 900), acct("a_chk6", "Checking", "depository", 50)];
+S.pages = [page({ added: [tx("x1", "a_chk6", 5, "2026-10-02")], next_cursor: "k1" })];
+S.holdings = { holdings: [{ account_id: "a_inv6", security_id: "s9", quantity: 3, institution_price: 300, institution_value: 900, cost_basis: null, iso_currency_code: "USD" }], securities: [{ security_id: "s9", name: "Example Fund", ticker_symbol: "EXF", type: "etf" }] }; S.invTxns = [];
+S.errors["/investments/holdings/get"] = ["ADDITIONAL_CONSENT_REQUIRED"];
+assert.equal(await fin.syncItem(id6), "synced");                                                              // not allowed yet: skipped, never a failure
+const ofItem6 = async (k: string) => (await rows(k)).filter((r: any) => (r.payload as any).itemId === id6);
+assert.equal((await ofItem6("finance.transaction")).length, 1); assert.equal((await ofItem6("finance.holding")).length, 0); assert.equal((await ofItem6("finance.balance")).length, 2);
+assert.equal((await item(id6)).lastError, null);
+assert.equal(await fin.syncItem(id6), "synced"); assert.equal((await ofItem6("finance.holding")).length, 1);   // permission granted: holdings arrive
+assert.ok(calls.some((c) => c.path === "/investments/holdings/get")); await fin.unlinkItem(id6);
+
 // ---- two syncs at once: one runs, one is skipped
 S.accounts = [acct("a_chk", "Checking", "depository", 1000), acct("a_cc", "Card", "credit", 250, { limit: 5000 })];
 let release!: () => void; S.gate = new Promise<void>((r) => (release = r)); S.gatePath = "/accounts/get";
@@ -148,10 +160,11 @@ assert.equal(calls.find((c) => c.path === "/item/remove")!.body.access_token, "a
 // ---- link token requests
 globalThis.fetch = (async (i: any, init: any) => { calls.push({ path: new URL(String(i)).pathname, body: JSON.parse(init.body) }); return ok({ link_token: "lt" }); }) as any;
 await plaid.linkTokenCreate({ kind: "bank", origin: "https://app.example" }); let lt = calls.at(-1)!.body;
-assert.deepEqual(lt.products, ["transactions"]); assert.deepEqual(lt.optional_products, ["liabilities"]); assert.equal(lt.transactions.days_requested, 730);
+assert.deepEqual(lt.products, ["transactions"]); assert.deepEqual(lt.optional_products, ["liabilities", "investments"]); assert.equal(lt.transactions.days_requested, 730);
 assert.equal(lt.redirect_uri, "https://app.example/settings/oauth"); assert.equal(lt.webhook, "https://app.example/api/webhooks/plaid"); assert.equal(lt.user.client_user_id, "owner");
 await plaid.linkTokenCreate({ kind: "brokerage", origin: "http://localhost:3000" }); lt = calls.at(-1)!.body; assert.deepEqual(lt.products, ["investments"]); assert.equal("redirect_uri" in lt, false); assert.equal("webhook" in lt, false, "no webhook is sent from an http address"); assert.equal("transactions" in lt, false);
-await plaid.linkTokenCreate({ kind: "bank", accessToken: "access-x", origin: "https://app.example" }); lt = calls.at(-1)!.body; assert.equal(lt.access_token, "access-x"); assert.equal("products" in lt, false);
+await plaid.linkTokenCreate({ kind: "bank", accessToken: "access-x", origin: "https://app.example" }); lt = calls.at(-1)!.body; assert.equal(lt.access_token, "access-x"); assert.equal("products" in lt, false); assert.equal("additional_consented_products" in lt, false);
+await plaid.linkTokenCreate({ kind: "bank", accessToken: "access-x", addInvestments: true, origin: "https://app.example" }); lt = calls.at(-1)!.body; assert.deepEqual(lt.additional_consented_products, ["investments"]);
 
 // ---- the Plaid environment follows the database, and nothing can override it
 const setEnv = (e: Record<string, string | undefined>) => { for (const [k, v] of Object.entries(e)) v === undefined ? delete process.env[k] : (process.env[k] = v); };

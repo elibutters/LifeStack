@@ -102,6 +102,14 @@ from a deployment with an https address.
 Transactions, balances, holdings and credit card due dates are stored; account numbers never are.
 Data syncs when Plaid reports changes and once a day as a backstop.
 
+### Finance
+
+Once accounts are linked, the **Finance** tab shows net worth, accounts, spending by category and
+merchant, a searchable transaction list, recurring charges and investment holdings, plus a few
+plain-language insights (spending changes, upcoming card payments, savings rate). Run `pnpm test`
+to check the logic; `pnpm db:seed-finance` fills a local database with clearly fake data to look at.
+Investment holdings need the brokerage's permission: in Settings use **Allow investment data**.
+
 ### Security model
 
 The app is reachable from the public internet, so the password is what stands between

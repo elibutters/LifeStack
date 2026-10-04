@@ -9,7 +9,7 @@ import { crossSite } from "@/lib/request";
 
 export const dynamic = "force-dynamic";
 
-const Body = z.object({ kind: z.enum(["bank", "brokerage"]), itemId: z.string().min(1).optional() });
+const Body = z.object({ kind: z.enum(["bank", "brokerage"]), itemId: z.string().min(1).optional(), addInvestments: z.boolean().optional() });
 
 export async function POST(req: NextRequest) {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     const { link_token } = await linkTokenCreate({
       kind: body.data.kind,
       accessToken: accessToken ?? undefined,
+      addInvestments: body.data.addInvestments,
       origin: appOrigin(req.nextUrl.origin),
     });
     return NextResponse.json({ link_token });
