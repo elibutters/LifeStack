@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { fmtDayShort, isValidMonth } from "@/lib/dates";
 import { loadFinance } from "@/lib/finance-data";
-import { CATEGORY_KEYS, categoryLabel, classify, fmtMoney, lastMonths, merchantName, monthOf } from "@/lib/finance-calc";
+import { CATEGORY_KEYS, categoryLabel, classify, fmtMoney, lastMonths, merchantName, monthOf, accountLabel } from "@/lib/finance-calc";
 
 export const metadata: Metadata = { title: "Transactions" };
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ export default async function Transactions({ searchParams }: { searchParams: Pro
     .filter((t) => (!q || `${t.name} ${t.merchant ?? ""}`.toLowerCase().includes(q)) && (!acct || t.accountId === acct) && (!cat || t.category === cat) && (!month || monthOf(t.date) === month) && (kind === "all" || classify(t) === kind))
     .sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount);
   const shown = rows.slice((page - 1) * PAGE, page * PAGE);
-  const accountName = new Map(accounts.map((a) => [a.plaidAccountId, `${a.name}${a.institution ? ` (${a.institution})` : ""}`]));
+  const accountName = new Map(accounts.map((a) => [a.plaidAccountId, `${accountLabel(a)}${a.institution ? ` (${a.institution})` : ""}`]));
   const spent = rows.filter((t) => classify(t) === "spending").reduce((s, t) => s + t.amount, 0);
   const received = rows.filter((t) => classify(t) === "income").reduce((s, t) => s - t.amount, 0);
 
@@ -56,7 +56,7 @@ export default async function Transactions({ searchParams }: { searchParams: Pro
         </select>
         <select name="acct" defaultValue={acct} aria-label="Account" className={field}>
           <option value="">All accounts</option>
-          {accounts.map((a) => <option key={a.id} value={a.plaidAccountId}>{a.name}</option>)}
+          {accounts.map((a) => <option key={a.id} value={a.plaidAccountId}>{accountLabel(a)}</option>)}
         </select>
         <select name="cat" defaultValue={cat} aria-label="Category" className={field}>
           <option value="">All categories</option>
@@ -72,7 +72,8 @@ export default async function Transactions({ searchParams }: { searchParams: Pro
           <button type="submit" className="h-11 rounded-md bg-fg px-4 text-sm font-medium text-bg">Apply</button>
           <Link href="/finance/transactions" className="flex h-11 items-center rounded-md border border-line px-4 text-sm hover:bg-raised">Clear</Link>
           <p className="ml-auto self-center text-sm text-muted">
-            {rows.length.toLocaleString()} found &middot; out {fmtMoney(spent)} &middot; in {fmtMoney(received)}
+            {rows.length.toLocaleString()} found &middot; out <span className="text-red-300 tabular-nums">{fmtMoney(spent)}</span> &middot; in{" "}
+            <span className="text-emerald-300 tabular-nums">{fmtMoney(received)}</span>
           </p>
         </div>
       </form>
@@ -97,7 +98,7 @@ export default async function Transactions({ searchParams }: { searchParams: Pro
                           {t.pending ? " · pending" : ""}
                         </p>
                       </div>
-                      <span className={`shrink-0 tabular-nums ${k === "transfer" ? "text-muted" : out ? "" : "text-emerald-300"}`}>
+                      <span className={`shrink-0 tabular-nums ${k === "transfer" ? "text-muted" : out ? "text-red-300" : "text-emerald-300"}`}>
                         {out ? "-" : "+"}{fmtMoney(Math.abs(t.amount), true)}
                       </span>
                     </li>

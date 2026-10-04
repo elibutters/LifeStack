@@ -87,6 +87,7 @@ export const plaidItems = pgTable("plaid_items", {
 export const accounts = pgTable("accounts", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   name: text("name").notNull(),
+  nickname: text("nickname"), // owner's display name; name stays the institution's label
   institution: text("institution"),
   type: text("type"),
   itemId: text("item_id").references(() => plaidItems.id, { onDelete: "cascade" }),

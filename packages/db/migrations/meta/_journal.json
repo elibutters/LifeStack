@@ -57,6 +57,13 @@
       "when": 1791140060022,
       "tag": "0007_opposite_jackpot",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791141650947,
+      "tag": "0008_sour_nighthawk",
+      "breakpoints": true
     }
   ]
 }

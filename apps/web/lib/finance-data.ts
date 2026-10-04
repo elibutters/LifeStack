@@ -21,11 +21,27 @@ const TxnPayload = z.object({
 });
 
 export async function loadAccounts(): Promise<AccountInfo[]> {
-  const rows = await db().select().from(accounts).orderBy(accounts.institution, accounts.type, accounts.name);
+  const rows = await db()
+    .select({
+      id: accounts.id,
+      plaidAccountId: accounts.plaidAccountId,
+      name: accounts.name,
+      nickname: sql<string | null>`"nickname"`,
+      institution: accounts.institution,
+      type: accounts.type,
+      subtype: accounts.subtype,
+      currentBalance: accounts.currentBalance,
+      availableBalance: accounts.availableBalance,
+      creditLimit: accounts.creditLimit,
+      balanceAt: accounts.balanceAt,
+    })
+    .from(accounts)
+    .orderBy(accounts.institution, accounts.type, accounts.name);
   return rows.map((r) => ({
     id: r.id,
     plaidAccountId: r.plaidAccountId ?? String(r.id),
     name: r.name,
+    nickname: r.nickname,
     institution: r.institution,
     type: r.type ?? "other",
     subtype: r.subtype,

@@ -3,7 +3,10 @@
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { disconnectAmazon } from "@/lib/amazon";
 import { disconnectEight, saveEightConnection, syncEight } from "@/lib/eight";
 import { syncItem, unlinkItem } from "@/lib/finance";
@@ -91,4 +94,17 @@ export async function disconnectAmazonNow(): Promise<void> {
   await requireSession();
   await disconnectAmazon();
   revalidatePath("/", "layout");
+}
+
+const Nickname = z.object({ id: z.coerce.number().int().positive(), nickname: z.string().trim().max(40) });
+
+export async function renameAccount(id: number, nickname: string): Promise<void> {
+  await requireSession();
+  const parsed = Nickname.safeParse({ id, nickname });
+  if (!parsed.success) return;
+  await db().execute(
+    sql`update "accounts" set "nickname" = ${parsed.data.nickname || null} where "id" = ${parsed.data.id}`,
+  );
+  revalidatePath("/connections");
+  revalidatePath("/finance", "layout");
 }

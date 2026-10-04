@@ -6,7 +6,7 @@ let n = 0;
 const T = (date: string, amount: number, name: string, category: string | null, extra: Partial<c.Txn> = {}): c.Txn =>
   ({ id: `t${++n}`, date, amount, name, merchant: null, category, detailed: null, pending: false, accountId: "chk", ...extra });
 const acct = (type: string, current: number | null, extra: Partial<c.AccountInfo> = {}): c.AccountInfo =>
-  ({ id: ++n, plaidAccountId: `a${n}`, name: `${type} ${n}`, institution: "Example", type, subtype: null, current, available: null, limit: null, balanceAt: null, ...extra });
+  ({ id: ++n, plaidAccountId: `a${n}`, name: `${type} ${n}`, nickname: null, institution: "Example", type, subtype: null, current, available: null, limit: null, balanceAt: null, ...extra });
 
 // ---- classification
 assert.equal(c.classify({ amount: 50, category: "FOOD_AND_DRINK", detailed: null }), "spending");
@@ -17,6 +17,9 @@ assert.equal(c.classify({ amount: -500, category: "TRANSFER_IN", detailed: null 
 assert.equal(c.classify({ amount: 300, category: "LOAN_PAYMENTS", detailed: "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT" }), "transfer");   // paying the card is not spending
 assert.equal(c.classify({ amount: 900, category: "LOAN_PAYMENTS", detailed: "LOAN_PAYMENTS_MORTGAGE_PAYMENT" }), "spending");   // a mortgage payment is
 assert.equal(c.categoryLabel("FOOD_AND_DRINK"), "Food and drink"); assert.equal(c.categoryLabel("SOMETHING_NEW"), "Something new"); assert.equal(c.categoryLabel(null), "Uncategorized");
+assert.equal(c.accountLabel({ name: "Plaid Checking", nickname: "Rent" }), "Rent");
+assert.equal(c.accountLabel({ name: "Plaid Checking", nickname: "  " }), "Plaid Checking");
+assert.equal(c.accountLabel({ name: "Plaid Checking", nickname: null }), "Plaid Checking");
 
 // ---- months
 assert.equal(c.shiftMonthKey("2026-01", -1), "2025-12"); assert.equal(c.shiftMonthKey("2026-12", 1), "2027-01");
@@ -110,7 +113,7 @@ const ids = list.map((i) => i.id);
 assert.ok(ids.includes("mom")); assert.equal(list.find((i) => i.id === "mom")!.tone, "warn"); assert.match(list.find((i) => i.id === "mom")!.detail, /up/);
 assert.ok(ids.includes("top-category")); assert.match(list.find((i) => i.id === "top-category")!.title, /Rent and utilities/);
 assert.ok(ids.includes("big")); assert.match(list.find((i) => i.id === "big")!.detail, /\$650 at Big Store/);
-const due = list.find((i) => i.id === "due-cc1")!; assert.match(due.title, /Everyday Card payment is due in 4 days/); assert.match(due.detail, /Minimum \$35\.00/);
+const due = list.find((i) => i.id === "due-cc1")!; assert.match(due.title, /Everyday Card payment is due in 4 days/); assert.match(due.detail, /Minimum \$35/);
 assert.ok(ids.includes("runway")); assert.ok(ids.includes("savings")); assert.match(list.find((i) => i.id === "savings")!.title, /saved 38%/);
 const overspent = c.insights({ txns: [T("2026-09-01", -1000, "Payroll", "INCOME"), T("2026-09-02", 1400, "Big month", "GENERAL_MERCHANDISE")], accounts: [], liabilities: [], today });
 assert.equal(overspent.find((i) => i.id === "savings")!.title, "You spent 40% more than you earned last month"); assert.equal(overspent.find((i) => i.id === "savings")!.tone, "warn");

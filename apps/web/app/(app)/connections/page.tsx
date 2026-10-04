@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
-import { Card } from "@/components/card";
+import type { ReactNode } from "react";
+import { ConnectionPanel } from "@/components/connection-panel";
+import { LastSyncAgo } from "@/components/last-sync-ago";
+import { AccountNickname } from "@/components/account-nickname";
+import { StatusMark } from "@/components/status-mark";
 import { PlaidLinkButton } from "@/components/plaid-link";
 import { requireSession } from "@/lib/auth";
-import { fmtDateTime } from "@/lib/dates";
+import { fmtMoney, isLiability } from "@/lib/finance-calc";
 import { listItems } from "@/lib/finance";
 import { microsoftConfigured } from "@/lib/microsoft";
 import { keyStatus, plaidConfigured, plaidEnv } from "@/lib/plaid";
 import { getConnection, getSyncState } from "@/lib/outlook";
 import { db } from "@/lib/db";
 import { accounts, events } from "@lifestack/db";
-import { count, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { disconnect, syncFinance, syncNow, unlinkFinance, connectEight, disconnectEightNow, syncEightNow, disconnectAmazonNow } from "../settings/actions";
 import { getEightConnection, getEightSyncState } from "@/lib/eight";
 import { loadAmazon } from "@/lib/amazon";
@@ -31,12 +35,23 @@ const MESSAGES: Record<string, string> = {
     "Could not sign in to Eight Sleep. Check the email and password. Accounts with two-factor authentication are not supported.",
 };
 
-const button = "flex h-11 items-center rounded-md border border-line px-4 text-sm hover:bg-raised";
+const button = "flex h-9 cursor-pointer items-center rounded-md border border-line px-3 text-sm hover:bg-raised";
+const moneyTone = (n: number) => (n > 0 ? "text-emerald-300" : n < 0 ? "text-red-300" : "");
+const accountKind = (type: string | null, subtype: string | null) => {
+  if (subtype) return subtype.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+  if (type === "depository") return "Cash";
+  if (type === "credit") return "Credit";
+  if (type === "investment") return "Investment";
+  if (type === "loan") return "Loan";
+  return "Account";
+};
+const danger = `${button} text-red-300`;
+const field = "h-9 rounded-md border border-line bg-bg px-3 text-sm outline-none focus:border-accent";
 
 export default async function ConnectionsPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
   await requireSession();
   const sp = await searchParams;
-  const [conn, state, eightConn, eightState, amazon, nightCount, items, perItem] = await Promise.all([
+  const [conn, state, eightConn, eightState, amazon, nightCount, items, acctRows, holdingRows] = await Promise.all([
     getConnection().catch(() => null),
     getSyncState().catch(() => null),
     getEightConnection().catch(() => null),
@@ -44,31 +59,37 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
     loadAmazon().catch(() => ({ state: null, orders: [] as { sourceId: string }[], cart: [] as { sourceId: string }[] })),
     loadNightCount().catch(() => 0),
     listItems().catch(() => []),
-    db()
-      .select({ itemId: accounts.itemId, n: count() })
-      .from(accounts)
-      .groupBy(accounts.itemId)
-      .catch(() => []),
+    loadAcctRows(),
+    // Brokerages linked without permission for investment data have accounts but no holdings yet.
+    loadHoldingCounts(),
   ]);
-  const accountCount = new Map(perItem.map((r) => [r.itemId, r.n]));
-  // Brokerages linked without permission for investment data have accounts but no holdings yet.
-  const [investAccounts, holdingRows] = await Promise.all([
-    db().select({ itemId: accounts.itemId, n: count() }).from(accounts).where(eq(accounts.type, "investment")).groupBy(accounts.itemId).catch(() => []),
-    db()
-      .select({ itemId: sql<string>`${events.payload}->>'itemId'`, n: count() })
-      .from(events)
-      .where(eq(events.key, "finance.holding"))
-      .groupBy(sql`${events.payload}->>'itemId'`)
-      .catch(() => []),
-  ]);
-  const holdingCount = new Map(holdingRows.map((r) => [r.itemId, r.n]));
-  const needsInvestmentAccess = (id: string) => investAccounts.some((r) => r.itemId === id && r.n > 0) && !(holdingCount.get(id) ?? 0);
+  const accountsByItem = new Map<string, typeof acctRows>();
+  for (const a of acctRows) {
+    if (!a.itemId) continue;
+    const list = accountsByItem.get(a.itemId);
+    if (list) list.push(a);
+    else accountsByItem.set(a.itemId, [a]);
+  }
+  const holdingCount = new Map(holdingRows.map((r) => [r.itemId, Number(r.n)]));
+  const needsInvestmentAccess = (id: string) =>
+    (accountsByItem.get(id) ?? []).some((a) => a.type === "investment") && !(holdingCount.get(id) ?? 0);
   const plaidKeys = plaidConfigured() ? await keyStatus() : null;
   // "not configured" is already explained inside the card, so it gets no banner.
   const error = sp.error && sp.error !== "not_configured" ? (MESSAGES[sp.error] ?? "Something went wrong.") : null;
 
+  const amazonLive = Boolean(amazon.state?.lastOkAt || amazon.state?.lastError || amazon.orders.length || amazon.cart.length);
+  const amazonLogin = amazon.state?.lastError === LOGIN_REQUIRED;
+  const plaidNeedsAttention = !plaidConfigured() || plaidKeys === "rejected" || items.some((it) => it.status !== "ok" || needsInvestmentAccess(it.id));
+  let eightImporting = false;
+  try {
+    const parsed = eightState?.cursor ? (JSON.parse(eightState.cursor) as { backfillBefore?: string | null }) : null;
+    eightImporting = typeof parsed?.backfillBefore === "string";
+  } catch {
+    eightImporting = false;
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <h1 className="text-3xl font-semibold tracking-tight">Connections</h1>
 
       {error && <p className="rounded-md border border-red-400/30 bg-red-400/10 px-4 py-3 text-red-300">{error}</p>}
@@ -83,252 +104,277 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
         </p>
       )}
 
-      <Card title="Outlook calendar" className="max-w-2xl">
-        {conn ? (
-          <div className="space-y-4">
-            <dl className="divide-y divide-line">
-              <Row label="Account" value={conn.account ?? "Connected"} />
-              <Row label="Last synced" value={state?.lastOkAt ? fmtDateTime(state.lastOkAt) : "Not yet"} />
-              {state?.lastError && <Row label="Status" value={state.lastError} bad />}
-            </dl>
-            <div className="flex flex-wrap gap-2">
+      <ConnectionPanel
+        title="Outlook calendar"
+        status={conn ? (state?.lastError ? "Sync problem" : "Connected") : "Not linked"}
+        tone={conn ? (state?.lastError ? "bad" : "ok") : "muted"}
+        defaultOpen={!conn || Boolean(state?.lastError)}
+        meta={conn && state?.lastOkAt ? <LastSyncAgo at={state.lastOkAt.toISOString()} /> : undefined}
+        actions={
+          conn ? (
+            <>
               <form action={syncNow}>
                 <button type="submit" className={button}>
-                  Sync now
+                  Sync
                 </button>
               </form>
               <a href="/api/connections/outlook/start" className={button}>
                 Reconnect
               </a>
               <form action={disconnect}>
-                <button type="submit" className={`${button} text-red-300`}>
-                  Disconnect and remove events
+                <button type="submit" className={danger}>
+                  Disconnect
                 </button>
               </form>
-            </div>
+            </>
+          ) : microsoftConfigured() ? (
+            <a href="/api/connections/outlook/start" className={button}>
+              Connect
+            </a>
+          ) : undefined
+        }
+      >
+        {conn ? (
+          <>
+            <dl>
+              <Row label="Account" value={conn.account ?? "Connected"} />
+              {state?.lastError && <Row label="Status" value={state.lastError} bad />}
+            </dl>
             <p className="text-sm text-muted">
-              Disconnecting stops syncing and deletes the copied events. To also withdraw Life Stack's access at Microsoft,
-              remove it at account.live.com/consent/Manage.
+              Disconnecting stops syncing and deletes the copied events. To also withdraw Life Stack's access at Microsoft, remove it at
+              account.live.com/consent/Manage.
             </p>
-          </div>
+          </>
         ) : (
-          <div className="space-y-4">
-            <p className="text-muted">
-              Link a personal Outlook account (outlook.com, hotmail.com or live.com) to show its calendar here. The app only
-              reads your calendar; it can never change it.
+          <>
+            <p className="text-sm text-muted">
+              Link a personal Outlook account (outlook.com, hotmail.com or live.com). The app only reads the calendar; it can never change
+              it.
             </p>
-            {microsoftConfigured() ? (
-              <a href="/api/connections/outlook/start" className={`${button} w-fit`}>
-                Connect Outlook
-              </a>
-            ) : (
-              <p className="text-red-300">{MESSAGES.not_configured}</p>
-            )}
-          </div>
+            {!microsoftConfigured() && <p className="text-sm text-red-300">{MESSAGES.not_configured}</p>}
+          </>
         )}
-      </Card>
+      </ConnectionPanel>
 
-      <Card title="Eight Sleep" className="max-w-2xl">
+      <ConnectionPanel
+        title="Eight Sleep"
+        status={eightConn ? (eightState?.lastError ? "Sync problem" : eightImporting ? "Importing" : "Connected") : "Not linked"}
+        tone={eightConn ? (eightState?.lastError ? "bad" : eightImporting ? "warn" : "ok") : "muted"}
+        defaultOpen={!eightConn || Boolean(eightState?.lastError)}
+        meta={eightConn && eightState?.lastOkAt ? <LastSyncAgo at={eightState.lastOkAt.toISOString()} /> : undefined}
+        actions={
+          eightConn ? (
+            <>
+              <form action={syncEightNow}>
+                <button type="submit" className={button}>
+                  Sync
+                </button>
+              </form>
+              <form action={disconnectEightNow}>
+                <button type="submit" className={danger}>
+                  Disconnect
+                </button>
+              </form>
+            </>
+          ) : undefined
+        }
+      >
         {eightConn ? (
-          <EightConnected
-            account={eightConn.account}
-            lastOkAt={eightState?.lastOkAt ?? null}
-            lastError={eightState?.lastError ?? null}
-            nightCount={nightCount}
-            cursor={eightState?.cursor ?? null}
-          />
+          <dl>
+            <Row label="Account" value={eightConn.account ?? "Connected"} />
+            <Row label="Nights stored" value={String(nightCount)} />
+            {eightImporting && <Row label="History" value="Still importing older nights" />}
+            {eightState?.lastError && <Row label="Status" value={eightState.lastError} bad />}
+          </dl>
         ) : (
-          <div className="space-y-4">
-            <p className="text-muted">
-              Link an Eight Sleep account to copy nightly scores, stages, heart rate, HRV and time in bed. Eight Sleep has no
-              public API; this uses the same private app login as Home Assistant. The pod is never controlled. Two-factor
-              authentication is not supported.
+          <>
+            <p className="text-sm text-muted">
+              Copies nightly scores, stages, heart rate, HRV and time in bed. The pod is never controlled. Two-factor authentication is
+              not supported.
             </p>
-            <form action={connectEight} className="flex max-w-sm flex-col gap-2">
-              <input
-                type="email"
-                name="email"
-                required
-                autoComplete="username"
-                placeholder="Eight Sleep email"
-                className="h-11 rounded-md border border-line bg-bg px-3 text-sm outline-none focus:border-accent"
-              />
-              <input
-                type="password"
-                name="password"
-                required
-                autoComplete="current-password"
-                placeholder="Password"
-                className="h-11 rounded-md border border-line bg-bg px-3 text-sm outline-none focus:border-accent"
-              />
-              <button type="submit" className={`${button} w-fit`}>
-                Connect Eight Sleep
+            <form action={connectEight} className="flex max-w-md flex-col gap-2 sm:flex-row">
+              <input type="email" name="email" required autoComplete="username" placeholder="Email" className={`${field} flex-1`} />
+              <input type="password" name="password" required autoComplete="current-password" placeholder="Password" className={`${field} flex-1`} />
+              <button type="submit" className={`${button} shrink-0`}>
+                Connect
               </button>
             </form>
-          </div>
+          </>
         )}
-      </Card>
+      </ConnectionPanel>
 
-      <Card title="Amazon" className="max-w-2xl">
-        {amazon.state?.lastOkAt || amazon.state?.lastError || amazon.orders.length || amazon.cart.length ? (
-          <div className="space-y-4">
-            <dl className="divide-y divide-line">
-              <Row label="Recent orders" value={String(amazon.orders.length)} />
-              <Row label="Cart" value={String(amazon.cart.length)} />
-              <Row label="Last snapshot" value={amazon.state?.lastOkAt ? fmtDateTime(amazon.state.lastOkAt) : "Not yet"} />
-              {amazon.state?.lastError && <Row label="Status" value={amazon.state.lastError} bad />}
-            </dl>
-            <div className="flex flex-wrap gap-2">
+      <ConnectionPanel
+        title="Amazon"
+        status={amazonLive ? (amazonLogin ? "Needs sign-in" : amazon.state?.lastError ? "Sync problem" : "Connected") : "Not linked"}
+        tone={amazonLive ? (amazon.state?.lastError ? "bad" : "ok") : "muted"}
+        defaultOpen={!amazonLive || Boolean(amazon.state?.lastError)}
+        meta={amazon.state?.lastOkAt ? <LastSyncAgo at={amazon.state.lastOkAt.toISOString()} /> : undefined}
+        actions={
+          amazonLive ? (
+            <>
               <a href="/purchases" className={button}>
-                View purchases
+                Purchases
               </a>
               <form action={disconnectAmazonNow}>
-                <button type="submit" className={`${button} text-red-300`}>
-                  Remove stored Amazon data
+                <button type="submit" className={danger}>
+                  Remove
                 </button>
               </form>
-            </div>
-            <p className="text-sm text-muted">
-              Amazon has no shopper API for a personal US account. A Chrome session on the worker laptop posts the last few
-              months of orders and the current cart about every 15 minutes while that laptop is awake.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-muted">
-              There is nothing to connect in the browser. Create an Amazon laptop worker key on the API keys page, then run
-              the worker on the second laptop while Chrome stays signed in to Amazon.
-            </p>
-            <a href="/api-keys" className={`${button} w-fit`}>
-              Create a worker key
-            </a>
-            {amazon.state?.lastError === LOGIN_REQUIRED && <p className="text-sm text-red-300">{LOGIN_REQUIRED}</p>}
-          </div>
-        )}
-      </Card>
-
-      <Card title="Bank and investment accounts" className="max-w-2xl">
-        <div className="space-y-4">
-          {!plaidConfigured() ? (
-            <p className="text-red-300">Plaid is not set up on this deployment yet.</p>
-          ) : (
-            <>
-              {plaidKeys === "rejected" && (
-                <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-300">
-                  Plaid rejected this app's keys. Check that the client ID is right and that the secret matches the environment
-                  (production secret on the live site).
-                </p>
-              )}
-              {plaidKeys === "ok" && plaidEnv() === "production" && <p className="text-sm text-muted">Connected to Plaid with live keys.</p>}
-              {plaidEnv() === "sandbox" && (
-                <p className="rounded-md border border-line bg-raised px-3 py-2 text-sm text-muted">
-                  Test mode: only Plaid's fake sandbox banks can be linked here, so no real data is stored.
-                </p>
-              )}
-              {items.length > 0 && (
-                <ul className="divide-y divide-line">
-                  {items.map((it) => (
-                    <li key={it.id} className="space-y-2 py-3">
-                      <div className="flex items-baseline justify-between gap-4">
-                        <span className="font-medium">{it.institutionName}</span>
-                        <span className={it.status === "ok" ? "text-sm text-muted" : "text-sm text-red-300"}>
-                          {STATUS[it.status] ?? it.status}
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted">
-                        {it.kind === "brokerage" ? "Brokerage" : "Bank or card"} &middot; {accountCount.get(it.id) ?? 0} account
-                        {(accountCount.get(it.id) ?? 0) === 1 ? "" : "s"} &middot;{" "}
-                        {it.lastSyncedAt ? `synced ${fmtDateTime(it.lastSyncedAt)}` : "not synced yet"}
-                      </p>
-                      {it.lastError && <p className="text-sm text-red-300">{it.lastError}</p>}
-                      <div className="flex flex-wrap items-start gap-2">
-                        {needsInvestmentAccess(it.id) && (
-                          <PlaidLinkButton kind={it.kind as "bank" | "brokerage"} itemId={it.id} addInvestments label="Allow investment data" className={button} />
-                        )}
-                        {it.status === "login_required" && (
-                          <PlaidLinkButton kind={it.kind as "bank" | "brokerage"} itemId={it.id} label="Sign in again" className={button} />
-                        )}
-                        <form action={syncFinance.bind(null, it.id)}>
-                          <button type="submit" className={button}>
-                            Sync now
-                          </button>
-                        </form>
-                        <form action={unlinkFinance.bind(null, it.id)}>
-                          <button type="submit" className={`${button} text-red-300`}>
-                            Remove and delete data
-                          </button>
-                        </form>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <PlaidLinkButton kind="bank" label="Add bank or card" className={button} />
-                <PlaidLinkButton kind="brokerage" label="Add brokerage" className={button} />
-              </div>
-              <p className="text-sm text-muted">
-                You sign in inside Plaid's secure window; this app never sees your bank password. Only transactions, balances and
-                holdings are read, never account numbers.
-              </p>
             </>
-          )}
-        </div>
-      </Card>
+          ) : (
+            <a href="/api-keys" className={button}>
+              Worker key
+            </a>
+          )
+        }
+      >
+        {amazonLive ? (
+          <>
+            <dl>
+              <Row label="Recent orders" value={String(amazon.orders.length)} />
+              <Row label="Cart" value={String(amazon.cart.length)} />
+              {amazon.state?.lastError && <Row label="Status" value={amazon.state.lastError} bad />}
+            </dl>
+            <p className="text-sm text-muted">
+              Amazon has no shopper API for a personal US account. A Chrome session on the worker laptop posts recent orders and the cart
+              while that laptop is awake.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted">
+              Nothing to connect in the browser. Create an Amazon laptop worker key, then run the worker on the second laptop while Chrome
+              stays signed in to Amazon.
+            </p>
+            {amazonLogin && <p className="text-sm text-red-300">{LOGIN_REQUIRED}</p>}
+          </>
+        )}
+      </ConnectionPanel>
+
+      <ConnectionPanel
+        title="Financial"
+        status={!plaidConfigured() ? "Not set up" : items.length ? `${items.length} linked` : "Not linked"}
+        tone={!plaidConfigured() || plaidKeys === "rejected" || items.some((it) => it.status !== "ok") ? "bad" : items.length ? "ok" : "muted"}
+        defaultOpen={plaidNeedsAttention || items.length === 0}
+        actions={
+          plaidConfigured() ? (
+            <>
+              <PlaidLinkButton kind="bank" label="Add bank" className={button} />
+              <PlaidLinkButton kind="brokerage" label="Add brokerage" className={button} />
+            </>
+          ) : undefined
+        }
+      >
+        {!plaidConfigured() ? (
+          <p className="text-sm text-red-300">Plaid is not set up on this deployment yet.</p>
+        ) : (
+          <>
+            {plaidKeys === "rejected" && (
+              <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-300">
+                Plaid rejected this app's keys. Check that the client ID is right and that the secret matches the environment (production
+                secret on the live site).
+              </p>
+            )}
+            {plaidEnv() === "sandbox" && (
+              <p className="rounded-md border border-line bg-raised px-3 py-2 text-sm text-muted">
+                Test mode: only Plaid's fake sandbox banks can be linked here, so no real data is stored.
+              </p>
+            )}
+            {items.length > 0 && (
+              <ul className="-mx-1 divide-y divide-line">
+                {items.map((it) => {
+                  const accts = accountsByItem.get(it.id) ?? [];
+                  return (
+                    <li key={it.id} className="space-y-2 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <StatusMark ok={it.status === "ok"} label={STATUS[it.status] ?? it.status} />
+                        <div className="min-w-0 flex-1">
+                          <p className="flex min-w-0 items-baseline gap-2">
+                            <span className="truncate font-medium">{it.institutionName}</span>
+                            {it.lastSyncedAt ? <LastSyncAgo at={it.lastSyncedAt.toISOString()} /> : <span className="shrink-0 text-sm font-normal text-muted">(not synced yet)</span>}
+                          </p>
+                          {it.lastError && <p className="text-sm text-red-300">{it.lastError}</p>}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {needsInvestmentAccess(it.id) && (
+                            <PlaidLinkButton kind={it.kind as "bank" | "brokerage"} itemId={it.id} addInvestments label="Allow investments" className={button} />
+                          )}
+                          {it.status === "login_required" && (
+                            <PlaidLinkButton kind={it.kind as "bank" | "brokerage"} itemId={it.id} label="Sign in" className={button} />
+                          )}
+                          <form action={syncFinance.bind(null, it.id)}>
+                            <button type="submit" className={button}>
+                              Sync
+                            </button>
+                          </form>
+                          <form action={unlinkFinance.bind(null, it.id)}>
+                            <button type="submit" className={danger}>
+                              Remove
+                            </button>
+                          </form>
+                        </div>
+                      </div>
+                      {accts.length ? (
+                        <ul className="ml-7 space-y-1">
+                          {accts.map((a) => {
+                            const balance = a.current == null ? null : isLiability({ type: a.type ?? "other" }) ? -a.current : a.current;
+                            return (
+                              <li key={a.id} className="flex items-baseline justify-between gap-4 text-sm">
+                                <AccountNickname id={a.id} name={a.name} nickname={a.nickname} kind={accountKind(a.type, a.subtype)} />
+                                <span className={`shrink-0 tabular-nums ${balance == null ? "text-muted" : moneyTone(balance)}`}>
+                                  {balance == null ? "n/a" : fmtMoney(balance)}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <p className="ml-7 text-sm text-muted">No accounts synced yet.</p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
+        )}
+      </ConnectionPanel>
     </div>
   );
 }
 
-function EightConnected({
-  account,
-  lastOkAt,
-  lastError,
-  nightCount,
-  cursor,
-}: {
-  account: string | null;
-  lastOkAt: Date | null;
-  lastError: string | null;
-  nightCount: number;
-  cursor: string | null;
-}) {
-  let importing = false;
+function Row({ label, value, bad }: { label: string; value: ReactNode; bad?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1.5">
+      <dt className="text-sm text-muted">{label}</dt>
+      <dd className={`text-right text-sm ${bad ? "text-red-300" : ""}`}>{value}</dd>
+    </div>
+  );
+}
+
+async function loadAcctRows() {
+  return db()
+    .select({
+      id: accounts.id,
+      itemId: accounts.itemId,
+      name: accounts.name,
+      nickname: sql<string | null>`"nickname"`,
+      type: accounts.type,
+      subtype: accounts.subtype,
+      current: accounts.currentBalance,
+    })
+    .from(accounts)
+    .orderBy(accounts.name);
+}
+
+async function loadHoldingCounts() {
   try {
-    const parsed = cursor ? (JSON.parse(cursor) as { backfillBefore?: string | null }) : null;
-    importing = typeof parsed?.backfillBefore === "string";
+    return await db()
+      .select({ itemId: sql<string>`${events.payload}->>'itemId'`, n: sql<number>`count(*)` })
+      .from(events)
+      .where(eq(events.key, "finance.holding"))
+      .groupBy(sql`${events.payload}->>'itemId'`);
   } catch {
-    importing = false;
+    return [];
   }
-  return (
-    <div className="space-y-4">
-      <dl className="divide-y divide-line">
-        <Row label="Account" value={account ?? "Connected"} />
-        <Row label="Nights stored" value={String(nightCount)} />
-        <Row label="Last synced" value={lastOkAt ? fmtDateTime(lastOkAt) : "Not yet"} />
-        {importing && <Row label="History" value="Still importing older nights" />}
-        {lastError && <Row label="Status" value={lastError} bad />}
-      </dl>
-      <div className="flex flex-wrap gap-2">
-        <form action={syncEightNow}>
-          <button type="submit" className={button}>
-            Sync now
-          </button>
-        </form>
-        <form action={disconnectEightNow}>
-          <button type="submit" className={`${button} text-red-300`}>
-            Disconnect and remove data
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, value, bad }: { label: string; value: string; bad?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-2.5">
-      <dt className="text-muted">{label}</dt>
-      <dd className={`text-right ${bad ? "text-red-300" : ""}`}>{value}</dd>
-    </div>
-  );
 }
