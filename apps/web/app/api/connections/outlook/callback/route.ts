@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/errors";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { appOrigin, exchangeCode, microsoftConfigured, OAUTH_COOKIE, OAUTH_COOKIE_PATH } from "@/lib/microsoft";
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
     if (!tokens.refresh_token) return done("error=exchange");
     await saveConnection(tokens.refresh_token, await fetchAccount(tokens.access_token));
   } catch (e) {
-    console.error("outlook: connect failed", e instanceof Error ? e.message : "unknown error");
+    console.error("outlook: connect failed", describeError(e));
     return done("error=exchange");
   }
 

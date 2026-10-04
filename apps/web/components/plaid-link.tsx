@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { syncFinance } from "@/app/(app)/settings/actions";
+import { repairedFinance } from "@/app/(app)/settings/actions";
 import { loadPlaid, PENDING_KEY, type Pending } from "@/lib/plaid-client";
 
 // Opens Plaid's secure window. Bank logins are typed into Plaid's window, never into this app.
@@ -40,8 +40,9 @@ export function PlaidLinkButton({
         token: link_token,
         onSuccess: async (publicToken) => {
           try {
-            if (itemId) await syncFinance(itemId);
-            else {
+            if (itemId) {
+              if (!(await repairedFinance(itemId))) throw new Error("repair did not sync");
+            } else {
               const r = await fetch("/api/connections/plaid/exchange", {
                 method: "POST",
                 headers: { "content-type": "application/json" },

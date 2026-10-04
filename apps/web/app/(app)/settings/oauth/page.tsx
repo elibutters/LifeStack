@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { syncFinance } from "../actions";
+import { repairedFinance } from "../actions";
 import { loadPlaid, PENDING_KEY, type Pending } from "@/lib/plaid-client";
 
 // Plaid sends you back here after a bank's own sign-in page (OAuth). This resumes the same
@@ -28,8 +28,9 @@ export default function PlaidOAuthReturn() {
           receivedRedirectUri: window.location.href,
           onSuccess: async (publicToken) => {
             try {
-              if (p.itemId) await syncFinance(p.itemId);
-              else {
+              if (p.itemId) {
+                if (!(await repairedFinance(p.itemId))) throw new Error("repair did not sync");
+              } else {
                 const r = await fetch("/api/connections/plaid/exchange", {
                   method: "POST",
                   headers: { "content-type": "application/json" },

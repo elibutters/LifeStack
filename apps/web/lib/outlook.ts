@@ -1,4 +1,5 @@
 import "server-only";
+import { describeError } from "./errors";
 import { and, count, eq, gte, isNull, lt, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { connections, events, syncState } from "@lifestack/db";
@@ -201,7 +202,7 @@ export async function syncOutlook(): Promise<SyncResult> {
     return { events: list.length };
   } catch (e) {
     const expired = e instanceof TokenError && e.code === "invalid_grant";
-    console.error("outlook: sync failed", e instanceof Error ? e.message : "unknown error");
+    console.error("outlook: sync failed", describeError(e));
     await recordState({ lastError: expired ? EXPIRED : "Sync failed. It will retry." }).catch(() => {});
     throw e;
   } finally {

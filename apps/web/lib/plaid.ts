@@ -3,14 +3,15 @@ import { createHash, createPublicKey, timingSafeEqual, verify } from "node:crypt
 import { z } from "zod";
 
 // Thin Plaid client: plain HTTPS calls, every response checked against a schema.
-// Local development always talks to Plaid's fake Sandbox, so real financial data can only
-// ever reach the deployed (Vercel production) app. PLAID_ENV overrides this explicitly.
+// Real data is only ever fetched by the deployed production app: it takes all of Vercel's production
+// runtime, and a non-local database. Everything else (local dev, previews, builds, a pulled .env)
+// uses Plaid's fake Sandbox, with no way to override that from configuration.
 export type PlaidEnv = "sandbox" | "production";
 
 export function plaidEnv(): PlaidEnv {
-  const forced = process.env.PLAID_ENV;
-  if (forced === "sandbox" || forced === "production") return forced;
-  return process.env.VERCEL_ENV === "production" ? "production" : "sandbox";
+  const onVercelProduction = process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production";
+  const localDatabase = /(\/\/|@)(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(process.env.DATABASE_URL ?? "");
+  return onVercelProduction && !localDatabase ? "production" : "sandbox";
 }
 
 const secret = () => (plaidEnv() === "production" ? process.env.PLAID_PRODUCTION_SECRET : process.env.PLAID_SANDBOX_SECRET);
@@ -32,6 +33,7 @@ async function call<S extends z.ZodTypeAny>(path: string, body: Record<string, u
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ client_id: process.env.PLAID_CLIENT_ID, secret: secret(), ...body }),
     cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
   });
   const json: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -233,20 +235,37 @@ export const itemRemove = (accessToken: string) => call("/item/remove", { access
 
 // ---- webhooks
 const b64 = (s: string) => Buffer.from(s, "base64url").toString("utf8");
-const keyCache = new Map<string, ReturnType<typeof createPublicKey>>();
+// Verification keys: valid ones are cached for an hour, failed lookups for a minute, and a single
+// instance makes at most 10 lookups a minute, so unsigned traffic cannot drive Plaid calls.
+const KID = /^[0-9a-f-]{36}$/i;
+const keyCache = new Map<string, { key: ReturnType<typeof createPublicKey>; at: number }>();
+const missCache = new Map<string, number>();
+let lookups: number[] = [];
 
 async function verificationKey(kid: string) {
-  const cached = keyCache.get(kid);
-  if (cached) return cached;
-  const r = await call(
-    "/webhook_verification_key/get",
-    { key_id: kid },
-    z.object({ key: z.object({ kty: z.string(), crv: z.string(), x: z.string(), y: z.string(), expired_at: z.string().nullish() }) }),
-  );
-  if (r.key.expired_at) return null;
-  const key = createPublicKey({ key: { kty: r.key.kty, crv: r.key.crv, x: r.key.x, y: r.key.y }, format: "jwk" });
-  keyCache.set(kid, key);
-  return key;
+  if (!KID.test(kid)) return null;
+  const now = Date.now();
+  const hit = keyCache.get(kid);
+  if (hit && now - hit.at < 60 * 60 * 1000) return hit.key;
+  const miss = missCache.get(kid);
+  if (miss && now - miss < 60 * 1000) return null;
+  lookups = lookups.filter((t) => now - t < 60 * 1000);
+  if (lookups.length >= 10) return null;
+  lookups.push(now);
+  try {
+    const r = await call(
+      "/webhook_verification_key/get",
+      { key_id: kid },
+      z.object({ key: z.object({ kty: z.string(), crv: z.string(), x: z.string(), y: z.string(), expired_at: z.string().nullish() }) }),
+    );
+    if (r.key.expired_at) throw new Error("expired");
+    const key = createPublicKey({ key: { kty: r.key.kty, crv: r.key.crv, x: r.key.x, y: r.key.y }, format: "jwk" });
+    keyCache.set(kid, { key, at: now });
+    return key;
+  } catch {
+    missCache.set(kid, now);
+    return null;
+  }
 }
 
 // Checks Plaid's signed header: ES256 signature, issued within 5 minutes, and the body hash.
