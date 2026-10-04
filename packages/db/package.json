@@ -12,7 +12,8 @@
     "migrate": "tsx --env-file-if-exists=../../.env src/migrate.ts",
     "typecheck": "tsc -p tsconfig.json",
     "seed": "tsx --env-file-if-exists=../../.env src/seed.ts",
-    "seed-finance": "tsx --env-file-if-exists=../../.env src/seed-finance.ts"
+    "seed-finance": "tsx --env-file-if-exists=../../.env src/seed-finance.ts",
+    "dedupe-supplements": "tsx --env-file-if-exists=../../.env src/dedupe-supplements.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",

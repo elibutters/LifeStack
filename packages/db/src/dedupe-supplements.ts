@@ -2,11 +2,13 @@
 // rest. Shows what it would remove; nothing is deleted unless you pass --apply.
 //   pnpm db:dedupe-supplements            (dry run)
 //   pnpm db:dedupe-supplements --apply
+// Days are in APP_TZ (an IANA name such as America/New_York); it must be set to a valid zone.
 import postgres from "postgres";
 
 const url = process.env.DATABASE_URL;
 if (!url) { console.error("DATABASE_URL is not set"); process.exit(2); }
 const tz = process.env.APP_TZ || "UTC";
+try { new Intl.DateTimeFormat("en", { timeZone: tz }); } catch { console.error(`APP_TZ "${tz}" is not a valid time zone; set it, for example APP_TZ=UTC`); process.exit(2); }
 const apply = process.argv.includes("--apply");
 const sql = postgres(url, { prepare: false, max: 1 });
 
@@ -19,6 +21,7 @@ const dupes = await sql<{ id: string; name: string; day: string; ts: Date }[]>`
   select id::text, name, day::text, ts from ranked where rn > 1 order by day, name, ts`;
 
 const byGroup = new Map<string, number>();
+for (const d of dupes) console.log(`  remove id ${d.id}: ${d.name} at ${d.ts.toISOString()}`);
 for (const d of dupes) byGroup.set(`${d.day} ${d.name}`, (byGroup.get(`${d.day} ${d.name}`) ?? 0) + 1);
 console.log(`${dupes.length} duplicate supplement entries across ${byGroup.size} supplement-days`);
 for (const [k, n] of [...byGroup].slice(0, 40)) console.log(`  ${k}: ${n} extra`);
