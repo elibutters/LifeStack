@@ -19,7 +19,7 @@ final class SignInTests: XCTestCase {
         emailField.tap(); emailField.typeText(email)
         let keyField = app.secureTextFields.firstMatch
         keyField.tap(); keyField.typeText(password)
-        app.buttons["Connect"].tap()
+        app.buttons["Sign in"].tap()
 
         XCTAssertTrue(app.tabBars.buttons["Overview"].waitForExistence(timeout: 20), "should reach the home screen")
         // Every tab loads its screen from the server.
