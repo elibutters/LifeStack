@@ -90,7 +90,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               return (
                 <Link
                   key={day}
-                  href={href(day.slice(0, 7), day)}
+                  // Days from the neighbouring month are selectable but never change the month being viewed.
+                  href={href(month, day)}
                   aria-label={`${fmtDayLong(day)}${list.length ? `, ${list.length} ${list.length === 1 ? "event" : "events"}` : ""}${isSelected ? ", selected" : ""}`}
                   aria-current={isToday ? "date" : undefined}
                   className={`flex min-h-14 flex-col gap-1 border-line p-1.5 md:min-h-28 md:p-2 ${
