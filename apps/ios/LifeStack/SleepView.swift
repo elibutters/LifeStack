@@ -28,7 +28,7 @@ struct SleepView: View {
                     }
                 } else if loader.loading { Section { ProgressView() } }
             }
-            .navigationTitle("Sleep")
+            .screenHeader("Sleep")
             .refreshable { await load() }
             .task { await load() }
         }

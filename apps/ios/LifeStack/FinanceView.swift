@@ -38,7 +38,7 @@ struct FinanceView: View {
                     }
                 }
             }
-            .navigationTitle("Finance")
+            .screenHeader("Finance")
             .refreshable { await load() }
             .task { await load() }
         }
