@@ -32,8 +32,23 @@ export async function syncFinance(itemId: string): Promise<void> {
   revalidatePath("/", "layout");
 }
 
+// Called after the owner re-authenticated an institution in Plaid's window. Reports whether the
+// sync that follows actually worked, so the screen never claims a fix that did not happen.
+export async function repairedFinance(itemId: string): Promise<boolean> {
+  await requireSession();
+  let ok = false;
+  try {
+    const outcome = await syncItem(itemId, { repaired: true });
+    ok = outcome === "synced" || outcome === "not_ready";
+  } catch {
+    ok = false;
+  }
+  revalidatePath("/", "layout");
+  return ok;
+}
+
 export async function unlinkFinance(itemId: string): Promise<void> {
   await requireSession();
-  await unlinkItem(itemId);
+  await unlinkItem(itemId); // on failure the item stays and shows an error in Settings
   revalidatePath("/", "layout");
 }

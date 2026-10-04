@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/errors";
 import { after, NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { isAuthed } from "@/lib/auth";
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     after(() => syncItem(itemId).catch(() => {}));
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error("plaid: link failed", e instanceof Error ? e.message : "unknown error");
+    console.error("plaid: link failed", describeError(e));
     return NextResponse.json({ error: "plaid_error" }, { status: 502 });
   }
 }

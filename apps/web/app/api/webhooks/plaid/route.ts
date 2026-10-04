@@ -20,7 +20,6 @@ const SYNC_ON = new Set([
   "TRANSACTIONS:DEFAULT_UPDATE",
   "HOLDINGS:DEFAULT_UPDATE",
   "INVESTMENTS_TRANSACTIONS:DEFAULT_UPDATE",
-  "ITEM:LOGIN_REPAIRED",
 ]);
 const NEEDS_LOGIN_ON = new Set(["ITEM:PENDING_EXPIRATION", "ITEM:PENDING_DISCONNECT", "ITEM:USER_PERMISSION_REVOKED"]);
 
@@ -43,7 +42,8 @@ export async function POST(req: NextRequest) {
   const itemId = ev.data.item_id;
   const code = `${ev.data.webhook_type}:${ev.data.webhook_code}`;
 
-  if (SYNC_ON.has(code)) after(() => syncItem(itemId).catch(() => {}));
+  if (code === "ITEM:LOGIN_REPAIRED") after(() => syncItem(itemId, { repaired: true }).catch(() => {}));
+  else if (SYNC_ON.has(code)) after(() => syncItem(itemId).catch(() => {}));
   else if (NEEDS_LOGIN_ON.has(code) || (code === "ITEM:ERROR" && ev.data.error?.error_code === "ITEM_LOGIN_REQUIRED")) {
     after(() => markNeedsLogin(itemId).catch(() => {}));
   }

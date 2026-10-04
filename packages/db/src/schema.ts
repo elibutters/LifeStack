@@ -70,6 +70,7 @@ export const supplements = pgTable("supplements", {
 export const plaidItems = pgTable("plaid_items", {
   id: text("id").primaryKey(), // Plaid item_id
   kind: text("kind").notNull(), // bank | brokerage
+  env: text("env").notNull().default("sandbox"), // sandbox | production: never synced across environments
   institutionId: text("institution_id"),
   institutionName: text("institution_name").notNull(),
   accessTokenEnc: text("access_token_enc").notNull(),

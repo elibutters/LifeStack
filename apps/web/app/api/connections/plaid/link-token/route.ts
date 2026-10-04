@@ -1,3 +1,4 @@
+import { describeError } from "@/lib/errors";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { isAuthed } from "@/lib/auth";
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ link_token });
   } catch (e) {
-    console.error("plaid: link token failed", e instanceof Error ? e.message : "unknown error");
+    console.error("plaid: link token failed", describeError(e));
     return NextResponse.json({ error: "plaid_error" }, { status: 502 });
   }
 }
