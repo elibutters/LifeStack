@@ -134,6 +134,20 @@ Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep ac
 
 Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep** tab and Overview. The unofficial API can change without notice.
 
+### Backups
+
+A daily cron (`/api/cron/backup`) copies every table (except login attempts) into one file, gzips it,
+encrypts it with a key derived from `ENCRYPTION_KEY`, and stores it in a private Vercel Blob store
+(`backups/lifestack-YYYY-MM-DD.bin`, newest 30 kept). Keep a separate copy of `ENCRYPTION_KEY`:
+without it the backups cannot be read. To restore into a local database:
+
+```
+vercel blob get backups/lifestack-YYYY-MM-DD.bin   # download (needs the linked Vercel project)
+pnpm backup:restore lifestack-YYYY-MM-DD.bin       # replaces the contents of DATABASE_URL
+```
+
+Restoring into a hosted database also needs `ALLOW_REMOTE_RESTORE=1`.
+
 ### Security model
 
 The app is reachable from the public internet, so the password is what stands between
