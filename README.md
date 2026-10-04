@@ -102,6 +102,15 @@ from a deployment with an https address.
 Transactions, balances, holdings and credit card due dates are stored; account numbers never are.
 Data syncs when Plaid reports changes and once a day as a backstop.
 
+### Connect Eight Sleep
+
+Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep account. Eight Sleep has no public developer API, so this uses the same private app login as Home Assistant. The pod is never controlled.
+
+1. Open **Connections** and enter the Eight Sleep email and password. They are stored encrypted. Accounts with two-factor authentication cannot be linked this way.
+2. The first sync pulls the last two weeks, then walks backward through history in chunks on later cron runs and page loads until it runs out of nights.
+
+Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep** tab and Overview. The unofficial API can change without notice.
+
 ### Security model
 
 The app is reachable from the public internet, so the password is what stands between

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
-import { CalendarIcon, OverviewIcon, UserIcon } from "./icons";
+import { CalendarIcon, FinanceIcon, OverviewIcon, SleepIcon } from "./icons";
 
 type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
 
@@ -11,6 +11,8 @@ type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGEl
 const NAV: Item[] = [
   { href: "/", label: "Overview", Icon: OverviewIcon },
   { href: "/calendar", label: "Calendar", Icon: CalendarIcon },
+  { href: "/sleep", label: "Sleep", Icon: SleepIcon },
+  { href: "/finance", label: "Finance", Icon: FinanceIcon },
 ];
 
 function useActive() {
@@ -18,41 +20,25 @@ function useActive() {
   return (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 }
 
-export function DesktopNav() {
+export function SidebarNav({ expanded }: { expanded: boolean }) {
   const active = useActive();
   return (
-    <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
+    <nav aria-label="Main" className="flex flex-col gap-0.5 px-2">
       {NAV.map(({ href, label, Icon }) => (
         <Link
           key={href}
           href={href}
+          title={expanded ? undefined : label}
           aria-current={active(href) ? "page" : undefined}
-          className={`flex h-8 items-center gap-2 rounded-md px-2.5 text-sm transition-colors ${
-            active(href) ? "bg-raised text-fg" : "text-muted hover:text-fg"
-          }`}
+          className={`flex items-center rounded-md py-2 text-sm transition-colors ${
+            expanded ? "gap-2.5 px-2.5" : "justify-center px-0"
+          } ${active(href) ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"}`}
         >
           <Icon width={18} height={18} />
-          {label}
+          {expanded ? label : <span className="sr-only">{label}</span>}
         </Link>
       ))}
     </nav>
-  );
-}
-
-export function ProfileLink() {
-  const pathname = usePathname();
-  const active = pathname.startsWith("/settings");
-  return (
-    <Link
-      href="/settings"
-      aria-label="Settings"
-      aria-current={active ? "page" : undefined}
-      className={`ml-auto grid h-9 w-9 place-items-center rounded-md border border-line transition-colors ${
-        active ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"
-      }`}
-    >
-      <UserIcon width={18} height={18} />
-    </Link>
   );
 }
 

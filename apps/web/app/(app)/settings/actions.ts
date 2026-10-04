@@ -1,7 +1,10 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
+import { disconnectEight, saveEightConnection, syncEight } from "@/lib/eight";
 import { syncItem, unlinkItem } from "@/lib/finance";
 import { disconnectOutlook, syncOutlook } from "@/lib/outlook";
 
@@ -11,7 +14,7 @@ export async function syncNow(): Promise<void> {
   try {
     await syncOutlook();
   } catch {
-    // The failure is recorded and shown on the Settings page.
+    // The failure is recorded and shown on the Connections page.
   }
   revalidatePath("/", "layout");
 }
@@ -27,7 +30,7 @@ export async function syncFinance(itemId: string): Promise<void> {
   try {
     await syncItem(itemId);
   } catch {
-    // Recorded on the item and shown in Settings.
+    // Recorded on the item and shown in Connections.
   }
   revalidatePath("/", "layout");
 }
@@ -49,6 +52,36 @@ export async function repairedFinance(itemId: string): Promise<boolean> {
 
 export async function unlinkFinance(itemId: string): Promise<void> {
   await requireSession();
-  await unlinkItem(itemId); // on failure the item stays and shows an error in Settings
+  await unlinkItem(itemId); // on failure the item stays and shows an error in Connections
+  revalidatePath("/", "layout");
+}
+
+export async function connectEight(form: FormData): Promise<void> {
+  await requireSession();
+  const email = String(form.get("email") ?? "").trim();
+  const password = String(form.get("password") ?? "");
+  if (!email || !password) redirect("/connections?error=eight_auth");
+  try {
+    await saveEightConnection(email, password);
+  } catch {
+    redirect("/connections?error=eight_auth");
+  }
+  after(() => syncEight().catch(() => {}));
+  redirect("/connections?connected=eight");
+}
+
+export async function syncEightNow(): Promise<void> {
+  await requireSession();
+  try {
+    await syncEight();
+  } catch {
+    // Recorded on the Connections page.
+  }
+  revalidatePath("/", "layout");
+}
+
+export async function disconnectEightNow(): Promise<void> {
+  await requireSession();
+  await disconnectEight();
   revalidatePath("/", "layout");
 }

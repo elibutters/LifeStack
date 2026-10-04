@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const site = req.headers.get("sec-fetch-site");
   if (site && site !== "same-origin" && site !== "none") return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const origin = appOrigin(req.nextUrl.origin);
-  if (!microsoftConfigured()) return NextResponse.redirect(new URL("/settings?error=not_configured", origin));
+  if (!microsoftConfigured()) return NextResponse.redirect(new URL("/connections?error=not_configured", origin));
 
   const state = randomBytes(16).toString("base64url");
   const { verifier, challenge } = newPkce();

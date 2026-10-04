@@ -51,9 +51,42 @@ export const ChevronRightIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const SleepIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M20 15.5A7.5 7.5 0 0 1 10 5.5 8.5 8.5 0 1 0 20 15.5z" />
+  </Icon>
+);
+
 export const UserIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <circle cx="12" cy="8" r="3.25" />
     <path d="M5.5 19.5c.8-3.2 3.2-5 6.5-5s5.7 1.8 6.5 5" />
+  </Icon>
+);
+
+export const LinkIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M9.5 14.5l5-5" />
+    <path d="M11 8.5l.8-.8a3.2 3.2 0 0 1 4.5 4.5l-.8.8M13 15.5l-.8.8a3.2 3.2 0 0 1-4.5-4.5l.8-.8" />
+  </Icon>
+);
+
+export const ChevronUpIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M6 14.5l6-6 6 6" />
+  </Icon>
+);
+
+export const PinIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M15 4.5l4.5 4.5-5.5 2-2 5.5-1.5-1.5 2.2-4.2-4.2 2.2-1.5-1.5 5.5-2z" />
+    <path d="M9 15l-4.5 4.5" />
+  </Icon>
+);
+
+export const FinanceIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M4 19.5h16" />
+    <path d="M6.5 16V11M12 16V6.5M17.5 16v-3.5" />
   </Icon>
 );

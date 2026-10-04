@@ -72,6 +72,13 @@ export function addDays(day: string, n: number): string {
   return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 }
 
+export function eachDay(from: string, to: string): string[] {
+  if (from > to) return [];
+  const days: string[] = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
+  return days;
+}
+
 export const isValidDay = (s: string | undefined): s is string =>
   !!s && /^(19[7-9]\d|[2-9]\d{3})-\d{2}-\d{2}$/.test(s) && addDays(s, 0) === s;
 

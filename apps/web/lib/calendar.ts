@@ -100,6 +100,7 @@ export async function systemStatus() {
       sources: sources.length,
       calendarConnected: !!outlook?.lastOkAt,
       calendarSyncedAt: outlook?.lastOkAt ?? null,
+      sleepConnected: sources.some((s) => s.source === "eight" && s.lastOkAt),
     };
   } catch {
     return { ok: false as const };
