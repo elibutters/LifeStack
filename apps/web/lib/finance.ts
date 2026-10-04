@@ -389,10 +389,11 @@ export async function syncItem(itemId: string, opts: { repaired?: boolean } = {}
     return wrote ? "synced" : "missing";
   } catch (e) {
     const login = e instanceof PlaidError && e.code === "ITEM_LOGIN_REQUIRED";
+    const down = e instanceof PlaidError && /^INSTITUTION_(NOT_RESPONDING|DOWN|NOT_AVAILABLE)$/.test(e.code);
     console.error("plaid: sync failed", describeError(e));
     await db()
       .update(plaidItems)
-      .set(login ? { status: "login_required", lastError: REAUTH } : { lastError: "Sync failed. It will retry." })
+      .set(login ? { status: "login_required", lastError: REAUTH } : { lastError: down ? "The institution is not responding right now. It will retry." : "Sync failed. It will retry." })
       .where(eq(plaidItems.id, itemId))
       .catch(() => {});
     throw e;
