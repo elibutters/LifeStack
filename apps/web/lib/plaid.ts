@@ -3,15 +3,14 @@ import { createHash, createPublicKey, timingSafeEqual, verify } from "node:crypt
 import { z } from "zod";
 
 // Thin Plaid client: plain HTTPS calls, every response checked against a schema.
-// Real data is only ever fetched by the deployed production app: it takes all of Vercel's production
-// runtime, and a non-local database. Everything else (local dev, previews, builds, a pulled .env)
-// uses Plaid's fake Sandbox, with no way to override that from configuration.
+// The Plaid environment follows the database, so real and fake data can never mix: a local database
+// only ever sees Plaid's fake Sandbox, and any hosted database (the live one, whether reached from
+// the deployed app or from local development) only ever sees real Plaid. It cannot be overridden.
 export type PlaidEnv = "sandbox" | "production";
 
 export function plaidEnv(): PlaidEnv {
-  const onVercelProduction = process.env.VERCEL === "1" && process.env.VERCEL_ENV === "production";
   const localDatabase = /(\/\/|@)(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(process.env.DATABASE_URL ?? "");
-  return onVercelProduction && !localDatabase ? "production" : "sandbox";
+  return localDatabase ? "sandbox" : "production";
 }
 
 const secret = () => (plaidEnv() === "production" ? process.env.PLAID_PRODUCTION_SECRET : process.env.PLAID_SANDBOX_SECRET);
@@ -128,14 +127,16 @@ export async function keyStatus(): Promise<KeyStatus> {
 export type PlaidKind = "bank" | "brokerage";
 
 export const linkTokenCreate = (opts: { kind: PlaidKind; accessToken?: string; origin: string }) => {
-  const redirect = opts.origin.startsWith("https://") ? { redirect_uri: `${opts.origin}/settings/oauth` } : {};
+  // Webhooks and the OAuth return page need a public https address; from localhost neither is sent.
+  const publicUrls = opts.origin.startsWith("https://")
+    ? { webhook: `${opts.origin}/api/webhooks/plaid`, redirect_uri: `${opts.origin}/settings/oauth` }
+    : {};
   const base = {
     client_name: "Life Stack",
     language: "en",
     country_codes: ["US"],
     user: { client_user_id: "owner" },
-    webhook: `${opts.origin}/api/webhooks/plaid`,
-    ...redirect,
+    ...publicUrls,
   };
   const body = opts.accessToken
     ? { ...base, access_token: opts.accessToken } // update mode: re-authenticate an existing item

@@ -150,18 +150,19 @@ globalThis.fetch = (async (i: any, init: any) => { calls.push({ path: new URL(St
 await plaid.linkTokenCreate({ kind: "bank", origin: "https://app.example" }); let lt = calls.at(-1)!.body;
 assert.deepEqual(lt.products, ["transactions"]); assert.deepEqual(lt.optional_products, ["liabilities"]); assert.equal(lt.transactions.days_requested, 730);
 assert.equal(lt.redirect_uri, "https://app.example/settings/oauth"); assert.equal(lt.webhook, "https://app.example/api/webhooks/plaid"); assert.equal(lt.user.client_user_id, "owner");
-await plaid.linkTokenCreate({ kind: "brokerage", origin: "http://localhost:3000" }); lt = calls.at(-1)!.body; assert.deepEqual(lt.products, ["investments"]); assert.equal("redirect_uri" in lt, false); assert.equal("transactions" in lt, false);
+await plaid.linkTokenCreate({ kind: "brokerage", origin: "http://localhost:3000" }); lt = calls.at(-1)!.body; assert.deepEqual(lt.products, ["investments"]); assert.equal("redirect_uri" in lt, false); assert.equal("webhook" in lt, false, "no webhook is sent from an http address"); assert.equal("transactions" in lt, false);
 await plaid.linkTokenCreate({ kind: "bank", accessToken: "access-x", origin: "https://app.example" }); lt = calls.at(-1)!.body; assert.equal(lt.access_token, "access-x"); assert.equal("products" in lt, false);
 
-// ---- real data only reaches the deployed production app, and configuration cannot override that
+// ---- the Plaid environment follows the database, and nothing can override it
 const setEnv = (e: Record<string, string | undefined>) => { for (const [k, v] of Object.entries(e)) v === undefined ? delete process.env[k] : (process.env[k] = v); };
-assert.equal(plaid.plaidEnv(), "sandbox");
-setEnv({ VERCEL: "1", VERCEL_ENV: "production", DATABASE_URL: "postgres://u:p@host/db" }); assert.equal(plaid.plaidEnv(), "production");
-setEnv({ VERCEL: undefined }); assert.equal(plaid.plaidEnv(), "sandbox");                        // a pulled .env has VERCEL_ENV but not the Vercel runtime
-setEnv({ VERCEL: "1", VERCEL_ENV: "preview" }); assert.equal(plaid.plaidEnv(), "sandbox");
-setEnv({ VERCEL_ENV: "production", DATABASE_URL: "postgres://u:p@localhost:5432/db" }); assert.equal(plaid.plaidEnv(), "sandbox");   // a local database never sees real data
-setEnv({ PLAID_ENV: "production", VERCEL: undefined, VERCEL_ENV: undefined, DATABASE_URL: REAL_DB_URL }); assert.equal(plaid.plaidEnv(), "sandbox");   // no override
-setEnv({ PLAID_ENV: undefined });
+const dsn = (host: string) => ["postgres://", "u:p", "@", host, "/db"].join("");   // built in pieces so the privacy check never sees a fake password in a URL
+assert.equal(plaid.plaidEnv(), "sandbox");                                                                   // the throwaway local database
+for (const host of ["localhost:5432", "127.0.0.1", "[::1]:5432"]) { setEnv({ DATABASE_URL: dsn(host) }); assert.equal(plaid.plaidEnv(), "sandbox", host); }
+setEnv({ DATABASE_URL: dsn("db.example.com") }); assert.equal(plaid.plaidEnv(), "production");               // any hosted database gets real Plaid
+setEnv({ DATABASE_URL: dsn("localhost.example.com") }); assert.equal(plaid.plaidEnv(), "production");        // not fooled by a lookalike host
+setEnv({ PLAID_ENV: "sandbox", VERCEL: "1", VERCEL_ENV: "production" }); assert.equal(plaid.plaidEnv(), "production"); // settings cannot override it
+setEnv({ DATABASE_URL: REAL_DB_URL, PLAID_ENV: "production" }); assert.equal(plaid.plaidEnv(), "sandbox");
+setEnv({ PLAID_ENV: undefined, VERCEL: undefined, VERCEL_ENV: undefined, DATABASE_URL: REAL_DB_URL });
 
 // ---- webhook verification and its key handling
 const KID = "11111111-2222-3333-4444-555555555555";

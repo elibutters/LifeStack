@@ -95,7 +95,10 @@ institutions with real data.
 5. Open **Settings**, then **Add bank or card** or **Add brokerage**. Your bank login is typed into
    Plaid's window, never into this app.
 
-Local development always talks to Plaid's fake Sandbox, so no real data lands on your computer.
+The Plaid environment follows your database. With the local Docker database (`pnpm db:up`) the app
+uses Plaid's fake Sandbox. If you point `DATABASE_URL` at a hosted database it uses real Plaid, so
+fake and real data never mix. Banks that sign you in on their own site (OAuth) can only be linked
+from a deployment with an https address.
 Transactions, balances, holdings and credit card due dates are stored; account numbers never are.
 Data syncs when Plaid reports changes and once a day as a backstop.
 
