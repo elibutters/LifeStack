@@ -13,6 +13,8 @@
 
 html {
   color-scheme: dark;
+  /* Reserve the scrollbar space so the page does not shift when a day has more or fewer items. */
+  scrollbar-gutter: stable;
   background: var(--color-bg);
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;

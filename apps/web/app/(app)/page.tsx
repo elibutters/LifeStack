@@ -41,7 +41,7 @@ export default async function Overview() {
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">{greeting(hourOf(now))}</h1>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card
           title="Today"
           className="md:col-span-2"
@@ -52,7 +52,7 @@ export default async function Overview() {
           }
         >
           {todayItems.length > 0 ? (
-            <ul className="divide-y divide-line">
+            <ul className="w-max min-w-full divide-y divide-line">
               {todayItems.map((i) => (
                 <EventRow key={i.id} item={i} day={today} />
               ))}
@@ -86,7 +86,7 @@ export default async function Overview() {
 
         <Card title="Coming up" className="md:col-span-3">
           {soon.length > 0 ? (
-            <ul className="divide-y divide-line">
+            <ul className="w-max min-w-full divide-y divide-line">
               {soon.slice(0, 6).map((i) => (
                 <EventRow key={i.id} item={i} showDate />
               ))}
