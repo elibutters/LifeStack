@@ -1,0 +1,4 @@
+// Shared build settings. Anything personal (your Apple team, your own bundle id) goes in
+// Local.xcconfig, which is gitignored. See README.md.
+APP_BUNDLE_ID = com.example.lifestack
+#include? "Local.xcconfig"

@@ -103,5 +103,9 @@ assert.equal(await cap.addSupplement("Morning stack"), true); assert.equal(await
 const list = await cap.listSupplements(); assert.equal(list.length, 2); assert.equal(list[1]!.name.length, 60);
 await cap.archiveSupplement(list[0]!.id); assert.equal((await cap.listSupplements()).length, 1); assert.equal(await cap.addSupplement("Morning stack"), true, "an archived name can come back");
 
+const suppCall = async (token: string | null) => { const res = await api.handleSupplements(call("/api/v1/log/supplements", { method: "GET", token })); return { status: res.status, json: await res.json() }; };
+assert.equal((await suppCall(null)).status, 401); assert.equal((await suppCall(W)).status, 403, "a write-only key cannot list supplements");
+await cap.addSupplement("Magnesium"); const sl = await suppCall(t2.token); assert.equal(sl.status, 200); assert.ok(sl.json.supplements.some((x: { name: string }) => x.name === "Magnesium")); assert.deepEqual(Object.keys(sl.json.supplements[0]), ["name"], "only names are returned");
+
 await db().delete(events); await db().delete(apiTokens); await db().delete(supplements);
 console.log("CAPTURE OK"); process.exit(0);
