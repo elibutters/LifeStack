@@ -14,7 +14,7 @@ final class AppModel {
     var toast: Logged?
     var pending = false
     private var toastTask: Task<Void, Never>?
-    var supplements: [String] = []
+    var options: LogOptions?
     var message: String?
     var busy = false
 
@@ -50,19 +50,19 @@ final class AppModel {
 
     func signOut() {
         Keychain.delete()
-        today = nil; supplements = []; message = nil; signedIn = false
+        today = nil; options = nil; history = []; message = nil; signedIn = false
     }
 
     func refresh() async {
         guard let client else { return }
         // The supplement list is a nicety: if it cannot load, the rest of the screen still works.
-        async let names = try? client.supplementNames()
+        async let opts = try? client.options()
         async let feed = try? client.history()
         do {
             today = try await client.today()
             message = nil
         } catch { handle(error) }
-        if let names = await names { supplements = names }
+        if let opts = await opts { options = opts }
         if let feed = await feed { history = feed }
     }
 
@@ -73,7 +73,7 @@ final class AppModel {
         pending = true; defer { pending = false }
         do {
             let id = try await client.log(event)
-            show(Logged(id: id, label: label))
+            show(Logged(id: id, label: "Logged \(label)"))
             await refresh()
             return true
         } catch { handle(error); return false }
@@ -82,7 +82,36 @@ final class AppModel {
     func undo(_ entry: Logged) async {
         guard let client else { return }
         toastTask?.cancel(); toast = nil
-        do { try await client.deleteEntry(entry.id); await refresh() } catch { handle(error) }
+        do {
+            if let redo = entry.redo { _ = try await client.log(redo) } else { try await client.deleteEntry(entry.id) }
+            await refresh()
+        } catch { handle(error) }
+    }
+
+    // Today's entry for a supplement, if it was taken: a supplement is taken or not, never counted.
+    func takenToday(_ name: String) -> HistoryEntry? {
+        history.first { $0.key == "supplement.taken" && Format.isToday($0.at) && ($0.name ?? "").caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    // Tap to take, tap again to un-take.
+    func toggleSupplement(_ s: LogOptions.Supplement) async -> Bool {
+        guard let client, !pending else { return false }
+        pending = true; defer { pending = false }
+        do {
+            if let taken = takenToday(s.name) {
+                try await client.deleteEntry(taken.id)
+                var redo: [String: Any] = ["type": "supplement", "name": s.name]
+                if let d = s.dose { redo["dose"] = d }; if let u = s.unit { redo["unit"] = u }
+                show(Logged(id: taken.id, label: "\(s.name) removed", redo: redo))
+            } else {
+                var event: [String: Any] = ["type": "supplement", "name": s.name]
+                if let d = s.dose { event["dose"] = d }; if let u = s.unit { event["unit"] = u }
+                let id = try await client.log(event)
+                show(Logged(id: id, label: "Logged \(s.name)\(s.doseText.map { " \($0)" } ?? "")"))
+            }
+            await refresh()
+            return true
+        } catch { handle(error); return false }
     }
 
     func remove(_ entry: HistoryEntry) async {

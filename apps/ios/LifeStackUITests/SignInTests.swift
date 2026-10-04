@@ -36,15 +36,20 @@ final class SignInTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["LAST NIGHT"].waitForExistence(timeout: 20), "sleep nights load")
         app.tabBars.buttons["Log"].tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Coffee'")).firstMatch.waitForExistence(timeout: 15))
-        // One tap logs and says so right away with an Undo. (Undo removing the entry is checked on the server side.)
+        // A supplement is taken or not: one tap takes it (with its dose), the next tap un-takes it, and taking it
+        // again leaves exactly one entry.
         let zinc = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Zinc'")).firstMatch
-        if zinc.waitForExistence(timeout: 10) {
-            zinc.tap()
-            XCTAssertTrue(app.staticTexts["Logged Zinc"].waitForExistence(timeout: 10), "a confirmation appears")
-            shot("log", env)
-            XCTAssertTrue(app.buttons["Undo"].exists, "the confirmation offers Undo")
-            app.buttons["Undo"].tap()
-        }
+        XCTAssertTrue(zinc.waitForExistence(timeout: 10))
+        zinc.tap()
+        XCTAssertTrue(app.staticTexts["Logged Zinc 22 mg"].waitForExistence(timeout: 10), "taking it confirms with the dose")
+        shot("log", env)
+        XCTAssertTrue(app.buttons["Undo"].exists, "the confirmation offers Undo")
+        Thread.sleep(forTimeInterval: 1.5)
+        zinc.tap()
+        // Un-taking is confirmed on the server side (create, delete, create leaves one entry); the toast is too brief to assert on.
+        Thread.sleep(forTimeInterval: 1.5)
+        zinc.tap()
+        XCTAssertTrue(app.staticTexts["Logged Zinc 22 mg"].waitForExistence(timeout: 10), "and taking it again works")
     }
 
     private func shot(_ name: String, _ env: [String: String]) {

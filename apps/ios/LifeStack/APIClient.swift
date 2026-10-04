@@ -138,6 +138,8 @@ struct APIClient {
         return r.id
     }
 
+    func options() async throws -> LogOptions { try await get("api/v1/log/options") }
+
     func history(limit: Int = 60) async throws -> [HistoryEntry] {
         struct R: Decodable { let entries: [HistoryEntry] }
         return (try await get("api/v1/log/history", [.init(name: "limit", value: String(limit))]) as R).entries

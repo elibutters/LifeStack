@@ -7,7 +7,8 @@ import { db } from "./db";
 import { addDays, startOfDay, todayInTz } from "./dates";
 
 const isCapture = inArray(events.key, [...CAPTURE_KEYS]);
-const toEntry = (r: typeof events.$inferSelect): Entry => ({ id: r.id, ts: r.ts, key: r.key, valueNum: r.valueNum, valueText: r.valueText, source: r.source });
+const unitOf = (payload: unknown) => (payload && typeof payload === "object" && typeof (payload as { unit?: unknown }).unit === "string" ? (payload as { unit: string }).unit : null);
+const toEntry = (r: typeof events.$inferSelect): Entry => ({ id: r.id, ts: r.ts, key: r.key, valueNum: r.valueNum, valueText: r.valueText, source: r.source, unit: unitOf(r.payload) });
 
 // Writes one entry. Sending the same `sourceId` again returns the existing entry instead of a duplicate.
 export async function insertLog(
@@ -19,6 +20,21 @@ export async function insertLog(
   const when = resolveTime(input.at, now);
   if (!when.ok) return when;
   const sourceId = input.id ?? opts.sourceId ?? randomUUID();
+  // A supplement is taken or not on a given day: logging it again updates that day's entry (for example a new dose)
+  // instead of adding another, so the same supplement can never show up twice in a day.
+  if (input.type === "supplement") {
+    const day = todayInTz(when.ts);
+    const [hit] = await db()
+      .select({ id: events.id })
+      .from(events)
+      .where(and(eq(events.key, "supplement.taken"), sql`lower(${events.valueText}) = ${input.name.trim().toLowerCase()}`, gte(events.ts, startOfDay(day)), lt(events.ts, startOfDay(addDays(day, 1)))))
+      .limit(1);
+    if (hit) {
+      const row = toRow(input, when.ts, source, sourceId);
+      await db().update(events).set({ valueNum: row.valueNum, payload: row.payload, ts: row.ts }).where(eq(events.id, hit.id));
+      return { ok: true, id: hit.id, ts: when.ts, created: false };
+    }
+  }
   const row = toRow(input, when.ts, source, sourceId);
   const [made] = await db().insert(events).values(row).onConflictDoNothing({ target: [events.source, events.sourceId] }).returning({ id: events.id, ts: events.ts });
   if (made) return { ok: true, id: made.id, ts: made.ts, created: true };

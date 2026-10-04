@@ -14,6 +14,15 @@ export const CAFFEINE_PRESETS = [
   { drink: "Soda", mg: 34 },
 ] as const;
 
+// One entry per supplement per day, with a dose. The preset is the default; a request can override it.
+export const SUPPLEMENT_PRESETS = [
+  { name: "Zinc", dose: 22, unit: "mg" },
+  { name: "Vitamin C", dose: 500, unit: "mg" },
+  { name: "Fish Oil", dose: 303, unit: "mg" },
+  { name: "Creatine", dose: 5, unit: "g" },
+  { name: "Ashwaghanda (KSM 66)", dose: 300, unit: "mg" },
+] as const;
+
 const shared = {
   // Lets a client retry a request without logging the same thing twice.
   id: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
@@ -24,7 +33,7 @@ const shared = {
 export const EventInput = z.discriminatedUnion("type", [
   z.object({ type: z.literal("mood"), value: z.number().int().min(1).max(5), note: z.string().trim().max(200).optional(), ...shared }),
   z.object({ type: z.literal("caffeine"), drink: z.string().trim().min(1).max(40).default("Coffee"), mg: z.number().min(0).max(1000).optional(), ...shared }),
-  z.object({ type: z.literal("supplement"), name: z.string().trim().min(1).max(60), ...shared }),
+  z.object({ type: z.literal("supplement"), name: z.string().trim().min(1).max(60), dose: z.number().min(0).max(100_000).optional(), unit: z.enum(["mg", "g"]).optional(), ...shared }),
 ]);
 export type EventInputT = z.infer<typeof EventInput>;
 
@@ -64,6 +73,8 @@ export type LogRow = {
 
 export const presetMg = (drink: string) => CAFFEINE_PRESETS.find((p) => p.drink.toLowerCase() === drink.trim().toLowerCase())?.mg ?? null;
 
+export const presetSupplement = (name: string) => SUPPLEMENT_PRESETS.find((p) => p.name.toLowerCase() === name.trim().toLowerCase()) ?? null;
+
 export function toRow(input: EventInputT, ts: Date, source: string, sourceId: string): LogRow {
   switch (input.type) {
     case "mood":
@@ -72,17 +83,24 @@ export function toRow(input: EventInputT, ts: Date, source: string, sourceId: st
       const mg = input.mg ?? presetMg(input.drink);
       return { ts, domain: "log", key: "caffeine", valueNum: mg, valueText: input.drink, payload: { drink: input.drink, estimated: input.mg == null && mg != null }, source, sourceId };
     }
-    case "supplement":
-      return { ts, domain: "supplement", key: "supplement.taken", valueNum: 1, valueText: input.name, payload: {}, source, sourceId };
+    case "supplement": {
+      const preset = presetSupplement(input.name);
+      const dose = input.dose ?? preset?.dose ?? null;
+      const unit = input.unit ?? preset?.unit ?? (dose != null ? "mg" : null);
+      return { ts, domain: "supplement", key: "supplement.taken", valueNum: dose, valueText: input.name, payload: dose != null && unit ? { unit } : {}, source, sourceId };
+    }
   }
 }
 
-export type Entry = { id: number; ts: Date; key: string; valueNum: number | null; valueText: string | null; source: string };
+export type Entry = { id: number; ts: Date; key: string; valueNum: number | null; valueText: string | null; source: string; unit?: string | null };
 
-export function describeEntry(e: Pick<Entry, "key" | "valueNum" | "valueText">): string {
+export function describeEntry(e: Pick<Entry, "key" | "valueNum" | "valueText" | "unit">): string {
   if (e.key === "mood") return `Mood ${e.valueNum ?? "?"}${e.valueNum && MOOD_LABELS[e.valueNum] ? ` (${MOOD_LABELS[e.valueNum]})` : ""}${e.valueText ? `: ${e.valueText}` : ""}`;
   if (e.key === "caffeine") return `${e.valueText ?? "Caffeine"}${e.valueNum != null ? ` (${Math.round(e.valueNum)} mg)` : ""}`;
-  if (e.key === "supplement.taken") return e.valueText ?? "Supplement";
+  if (e.key === "supplement.taken") {
+    const name = e.valueText ?? "Supplement";
+    return e.valueNum != null && e.unit ? `${name} (${e.valueNum} ${e.unit})` : name;
+  }
   return e.key;
 }
 

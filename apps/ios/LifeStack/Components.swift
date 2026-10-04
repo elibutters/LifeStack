@@ -6,14 +6,13 @@ extension View {
     func screenHeader<T: View>(_ title: String, @ViewBuilder trailing: () -> T = { EmptyView() }) -> some View {
         VStack(spacing: 0) {
             HStack(alignment: .center) {
-                Text(title).font(.largeTitle.weight(.bold)).lineLimit(1).minimumScaleFactor(0.7)
+                Text(title).font(.system(size: 30, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer()
                 trailing()
             }
-            .padding(.horizontal, 20).padding(.top, 6).padding(.bottom, 2)
+            .padding(.horizontal, 18).padding(.top, 2).padding(.bottom, 0)
             self
         }
-        .background(Theme.bg.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
     }
 }

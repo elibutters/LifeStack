@@ -136,6 +136,13 @@ Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep ac
 
 Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep** tab and Overview. The unofficial API can change without notice.
 
+### Supplements
+
+A supplement is taken or not on a given day, with a dose: logging it again that day updates the entry instead of adding
+another, and the app's chip toggles it. Default doses (`SUPPLEMENT_PRESETS`) and caffeine amounts come from the server
+(`GET /api/v1/log/options`), so the web app and the iPhone app always show the same buttons. To fold duplicates left
+from before this rule, run `pnpm db:dedupe-supplements` (dry run) and add `--apply` to remove them.
+
 ### JSON API for the app
 
 Besides quick capture and MCP, these read endpoints back the iPhone app. All take `Authorization: Bearer ls_...`
