@@ -71,6 +71,13 @@ export const LinkIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const KeyIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <circle cx="8" cy="15" r="3.25" />
+    <path d="M10.3 12.7L18.5 4.5M15.5 7.5l2.5 2.5M13 10l2 2" />
+  </Icon>
+);
+
 export const ChevronUpIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="M6 14.5l6-6 6 6" />
