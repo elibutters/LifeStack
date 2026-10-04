@@ -17,7 +17,7 @@
     "db:seed": "pnpm --filter @lifestack/db seed",
     "test": "bash scripts/test.sh",
     "backup:restore": "pnpm --filter @lifestack/db exec tsx --env-file-if-exists=../../.env ../../scripts/backup-restore.mts",
-    "db:dedupe-supplements": "pnpm --filter @lifestack/db exec tsx --env-file-if-exists=../../.env ../../scripts/dedupe-supplements.mts",
+    "db:dedupe-supplements": "pnpm --filter @lifestack/db dedupe-supplements",
     "db:seed-finance": "pnpm --filter @lifestack/db seed-finance"
   }
 }
