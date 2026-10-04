@@ -142,8 +142,8 @@ encrypts it with a key derived from `ENCRYPTION_KEY`, and stores it in a private
 without it the backups cannot be read. To restore into a local database:
 
 ```
-vercel blob get backups/lifestack-YYYY-MM-DD.bin   # download (needs the linked Vercel project)
-pnpm backup:restore lifestack-YYYY-MM-DD.bin       # replaces the contents of DATABASE_URL
+BLOB_READ_WRITE_TOKEN=<from Vercel env> vercel blob get backups/lifestack-YYYY-MM-DD.bin --access private --output backup.bin
+pnpm backup:restore backup.bin                     # replaces the contents of DATABASE_URL
 ```
 
 Restoring into a hosted database also needs `ALLOW_REMOTE_RESTORE=1`.
