@@ -11,7 +11,7 @@ struct TodaySummary: Decodable, Equatable {
 }
 
 enum APIError: LocalizedError {
-    case badAddress, unauthorized, needsReadAccess, offline, server
+    case badAddress, unauthorized, needsReadAccess, offline, server, wrongPassword, tooManyAttempts
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +20,8 @@ enum APIError: LocalizedError {
         case .needsReadAccess: "This key can only add logs. Make one with read access too."
         case .offline: "Could not reach the server. Check your connection."
         case .server: "The server had a problem. Try again shortly."
+        case .wrongPassword: "That password was not accepted."
+        case .tooManyAttempts: "Too many attempts. Try again in 15 minutes."
         }
     }
 }
@@ -39,8 +41,10 @@ struct APIClient {
         return parts.url
     }
 
-    private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
-        var req = URLRequest(url: base.appending(path: path), timeoutInterval: 15)
+    private func request(_ path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) async throws -> Data {
+        var url = base.appending(path: path)
+        if !query.isEmpty { url.append(queryItems: query) }
+        var req = URLRequest(url: url, timeoutInterval: 20)
         req.httpMethod = method
         req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         if let body { req.httpBody = body; req.setValue("application/json", forHTTPHeaderField: "Content-Type") }
@@ -52,6 +56,64 @@ struct APIClient {
         case 401: throw APIError.unauthorized
         case 403: throw APIError.needsReadAccess
         default: throw APIError.server
+        }
+    }
+
+    private func get<T: Decodable>(_ path: String, _ query: [URLQueryItem] = []) async throws -> T {
+        do { return try JSONDecoder().decode(T.self, from: try await request(path, query: query)) }
+        catch let e as APIError { throw e } catch { throw APIError.server }
+    }
+
+    // The one time the password is sent: it is traded for this device's own key and never stored.
+    static func login(base: URL, password: String, device: String) async throws -> String {
+        var req = URLRequest(url: base.appending(path: "api/v1/auth/login"), timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["password": password, "device": device])
+        let data: Data, response: URLResponse
+        do { (data, response) = try await URLSession.shared.data(for: req) } catch { throw APIError.offline }
+        guard let http = response as? HTTPURLResponse else { throw APIError.server }
+        switch http.statusCode {
+        case 200:
+            struct R: Decodable { let token: String }
+            guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw APIError.server }
+            return r.token
+        case 401: throw APIError.wrongPassword
+        case 429: throw APIError.tooManyAttempts
+        default: throw APIError.server
+        }
+    }
+
+    func overview() async throws -> Overview { try await get("api/v1/overview") }
+    func calendar(days: Int = 30) async throws -> [CalendarItem] {
+        struct R: Decodable { let items: [CalendarItem] }
+        let from = Date(), to = Calendar.current.date(byAdding: .day, value: days, to: from) ?? from
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        let r: R = try await get("api/v1/calendar", [.init(name: "from", value: f.string(from: from)), .init(name: "to", value: f.string(from: to))])
+        return r.items
+    }
+    func sleep(nights: Int = 14) async throws -> [Night] {
+        struct R: Decodable { let nights: [Night] }
+        return (try await get("api/v1/sleep", [.init(name: "nights", value: String(nights))]) as R).nights
+    }
+    func finance() async throws -> FinanceSummary { try await get("api/v1/finance") }
+    func transactions(limit: Int = 30) async throws -> [Transaction] {
+        struct R: Decodable { let transactions: [Transaction] }
+        return (try await get("api/v1/finance/transactions", [.init(name: "limit", value: String(limit))]) as R).transactions
+    }
+    func holdings() async throws -> [Holding] {
+        struct R: Decodable { let holdings: [Holding] }
+        return (try await get("api/v1/finance/holdings") as R).holdings
+    }
+    func connections() async throws -> ConnectionsStatus { try await get("api/v1/connections") }
+    func profile() async throws -> [ProfileEntry] {
+        let data = try await request("api/v1/profile")
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw APIError.server }
+        return obj.keys.sorted().compactMap { k in
+            let v = obj[k]
+            let text: String? = (v as? String) ?? (v as? NSNumber).map { "\($0)" }
+            guard let text, !text.isEmpty else { return nil }
+            return ProfileEntry(id: k, label: k == "ageYears" ? "Age" : k.replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression).capitalized, value: text)
         }
     }
 

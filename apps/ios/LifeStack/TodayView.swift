@@ -18,7 +18,7 @@ struct TodayView: View {
                 caffeineSection
                 supplementSection
             }
-            .navigationTitle("Today")
+            .navigationTitle("Log")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
