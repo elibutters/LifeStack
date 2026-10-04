@@ -2,8 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, sessionKey, verifySession } from "@/lib/session";
 
 // The app is on the public internet, so everything is behind the owner session except the
-// login page, the health check, the assets a browser needs to install the PWA, and /api/cron/,
-// whose handlers check a shared secret themselves (Vercel Cron cannot hold a session).
+// login page, the health check, the assets a browser needs to install the PWA, /api/cron/ (handlers check a
+// shared secret themselves, since Vercel Cron cannot hold a session) and the Plaid webhook (which
+// verifies Plaid's signature).
 const PUBLIC = new Set([
   "/login",
   "/api/health",
@@ -12,6 +13,7 @@ const PUBLIC = new Set([
   "/apple-icon",
   "/sw.js",
   "/offline.html",
+  "/api/webhooks/plaid", // checks Plaid's signature itself
 ]);
 
 export async function proxy(req: NextRequest) {
