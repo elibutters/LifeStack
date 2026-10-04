@@ -81,6 +81,24 @@ Every calendar on the account is synced. Anything from a calendar whose name con
 The calendar syncs once a day, and again whenever you open the app if the last sync is
 more than 15 minutes old. Vercel's free plan only allows daily scheduled jobs.
 
+### Connect banks, cards and brokerages (Plaid)
+
+Accounts are linked through [Plaid](https://plaid.com). Plaid's free Trial plan covers up to 10
+institutions with real data.
+
+1. Create a Plaid account and enable two-factor authentication on it.
+2. In the Plaid dashboard, open **Developers -> Keys** and copy the client ID and the sandbox and
+   production secrets into `PLAID_CLIENT_ID`, `PLAID_SANDBOX_SECRET` and `PLAID_PRODUCTION_SECRET`.
+3. Under **Developers -> API -> Allowed redirect URIs** add `<APP_URL>/settings/oauth` (needed by
+   banks that sign you in on their own site).
+4. Set the same variables in Vercel (the production secret is the one the deployed app uses).
+5. Open **Settings**, then **Add bank or card** or **Add brokerage**. Your bank login is typed into
+   Plaid's window, never into this app.
+
+Local development always talks to Plaid's fake Sandbox, so no real data lands on your computer.
+Transactions, balances, holdings and credit card due dates are stored; account numbers never are.
+Data syncs when Plaid reports changes and once a day as a backstop.
+
 ### Security model
 
 The app is reachable from the public internet, so the password is what stands between

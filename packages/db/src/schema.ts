@@ -66,12 +66,35 @@ export const supplements = pgTable("supplements", {
   createdAt,
 });
 
-// Labels only. Never account numbers.
+// A linked Plaid login at one institution. The access token is stored encrypted.
+export const plaidItems = pgTable("plaid_items", {
+  id: text("id").primaryKey(), // Plaid item_id
+  kind: text("kind").notNull(), // bank | brokerage
+  institutionId: text("institution_id"),
+  institutionName: text("institution_name").notNull(),
+  accessTokenEnc: text("access_token_enc").notNull(),
+  cursor: text("cursor"), // transactions sync cursor; advances only together with the data
+  status: text("status").notNull().default("ok"), // ok | login_required | error
+  lastError: text("last_error"),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }), // held while a sync runs
+  createdAt,
+});
+
+// Labels and balances only. Never account numbers.
 export const accounts = pgTable("accounts", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   name: text("name").notNull(),
   institution: text("institution"),
   type: text("type"),
+  itemId: text("item_id").references(() => plaidItems.id, { onDelete: "cascade" }),
+  plaidAccountId: text("plaid_account_id").unique(),
+  subtype: text("subtype"),
+  currency: text("currency"),
+  currentBalance: doublePrecision("current_balance"),
+  availableBalance: doublePrecision("available_balance"),
+  creditLimit: doublePrecision("credit_limit"),
+  balanceAt: timestamp("balance_at", { withTimezone: true }),
   createdAt,
 });
 

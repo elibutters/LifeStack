@@ -1,13 +1,21 @@
 import type { Metadata } from "next";
 import { Card } from "@/components/card";
+import { PlaidLinkButton } from "@/components/plaid-link";
 import { requireSession } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/dates";
+import { listItems } from "@/lib/finance";
 import { microsoftConfigured } from "@/lib/microsoft";
+import { plaidConfigured, plaidEnv } from "@/lib/plaid";
 import { getConnection, getSyncState } from "@/lib/outlook";
-import { disconnect, syncNow } from "./actions";
+import { db } from "@/lib/db";
+import { accounts } from "@lifestack/db";
+import { count } from "drizzle-orm";
+import { disconnect, syncFinance, syncNow, unlinkFinance } from "./actions";
 
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
+
+const STATUS: Record<string, string> = { ok: "Connected", login_required: "Needs you to sign in again", error: "Sync problem" };
 
 const MESSAGES: Record<string, string> = {
   not_configured: "Microsoft app credentials are not set up on this deployment yet.",
@@ -21,10 +29,17 @@ const button = "flex h-11 items-center rounded-lg border border-line px-4 text-s
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
   await requireSession();
   const sp = await searchParams;
-  const [conn, state] = await Promise.all([
+  const [conn, state, items, perItem] = await Promise.all([
     getConnection().catch(() => null),
     getSyncState().catch(() => null),
+    listItems().catch(() => []),
+    db()
+      .select({ itemId: accounts.itemId, n: count() })
+      .from(accounts)
+      .groupBy(accounts.itemId)
+      .catch(() => []),
   ]);
+  const accountCount = new Map(perItem.map((r) => [r.itemId, r.n]));
   // "not configured" is already explained inside the card, so it gets no banner.
   const error = sp.error && sp.error !== "not_configured" ? (MESSAGES[sp.error] ?? "Something went wrong.") : null;
 
@@ -82,6 +97,65 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             )}
           </div>
         )}
+      </Card>
+
+      <Card title="Bank and investment accounts" className="max-w-2xl">
+        <div className="space-y-4">
+          {!plaidConfigured() ? (
+            <p className="text-red-300">Plaid is not set up on this deployment yet.</p>
+          ) : (
+            <>
+              {plaidEnv() === "sandbox" && (
+                <p className="rounded-lg border border-line bg-raised px-3 py-2 text-sm text-muted">
+                  Test mode: only Plaid's fake sandbox banks can be linked here, so no real data is stored.
+                </p>
+              )}
+              {items.length > 0 && (
+                <ul className="divide-y divide-line">
+                  {items.map((it) => (
+                    <li key={it.id} className="space-y-2 py-3">
+                      <div className="flex items-baseline justify-between gap-4">
+                        <span className="font-medium">{it.institutionName}</span>
+                        <span className={it.status === "ok" ? "text-sm text-muted" : "text-sm text-red-300"}>
+                          {STATUS[it.status] ?? it.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted">
+                        {it.kind === "brokerage" ? "Brokerage" : "Bank or card"} &middot; {accountCount.get(it.id) ?? 0} account
+                        {(accountCount.get(it.id) ?? 0) === 1 ? "" : "s"} &middot;{" "}
+                        {it.lastSyncedAt ? `synced ${fmtDateTime(it.lastSyncedAt)}` : "not synced yet"}
+                      </p>
+                      {it.lastError && <p className="text-sm text-red-300">{it.lastError}</p>}
+                      <div className="flex flex-wrap items-start gap-2">
+                        {it.status === "login_required" && (
+                          <PlaidLinkButton kind={it.kind as "bank" | "brokerage"} itemId={it.id} label="Sign in again" className={button} />
+                        )}
+                        <form action={syncFinance.bind(null, it.id)}>
+                          <button type="submit" className={button}>
+                            Sync now
+                          </button>
+                        </form>
+                        <form action={unlinkFinance.bind(null, it.id)}>
+                          <button type="submit" className={`${button} text-red-300`}>
+                            Remove and delete data
+                          </button>
+                        </form>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <PlaidLinkButton kind="bank" label="Add bank or card" className={button} />
+                <PlaidLinkButton kind="brokerage" label="Add brokerage" className={button} />
+              </div>
+              <p className="text-sm text-muted">
+                You sign in inside Plaid's secure window; this app never sees your bank password. Only transactions, balances and
+                holdings are read, never account numbers.
+              </p>
+            </>
+          )}
+        </div>
       </Card>
     </div>
   );

@@ -25,6 +25,12 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   Fail closed. Public paths are the exact list in `proxy.ts`; never put data behind one.
   The one exception is `/api/cron/*`, which skips the session gate because Vercel Cron cannot
   hold one; every handler there must check `CRON_SECRET` itself and fail closed.
+- Finance data comes from Plaid (`lib/plaid.ts`, `lib/finance.ts`) into `events` (domain `finance`,
+  source `plaid`). Local development uses Plaid's Sandbox only; real data must never reach a dev
+  database. Never store account numbers. A sync reads everything from Plaid first and writes data
+  and cursor in one transaction; an unreadable row fails the sync rather than being skipped.
+  `source_id` is unique per source across all kinds, so snapshots are prefixed (`bal:`, `liab:`,
+  `hold:`, `inv:`). The Plaid webhook is a public path and must verify Plaid's signature.
 - Third-party tokens are stored only encrypted (`lib/crypto.ts`, key in `ENCRYPTION_KEY`).
   Outlook is linked through Microsoft Graph for personal accounts only, with read-only scope.
   Work or employer calendars are never connected.
