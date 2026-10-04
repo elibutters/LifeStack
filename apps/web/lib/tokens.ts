@@ -3,10 +3,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { apiTokens } from "@lifestack/db";
 import { db } from "./db";
-import { SCOPES, type Scope } from "./capture-core";
+import { APP_SCOPES, SCOPES, type Scope } from "./capture-core";
 
-export type TokenKind = "shortcut" | "widget" | "agent";
-export const TOKEN_KINDS: TokenKind[] = ["shortcut", "widget", "agent"];
+export type TokenKind = "shortcut" | "widget" | "agent" | "app";
+export const TOKEN_KINDS: TokenKind[] = ["shortcut", "widget", "agent"]; // "app" keys are only issued by the password login
 const MAX_ACTIVE = 10;
 const PREFIX = "ls_";
 
@@ -26,6 +26,13 @@ export async function createToken(name: string, kind: TokenKind, scopes: Scope[]
     .values({ name: clean, kind, prefix: token.slice(0, PREFIX.length + 6), tokenHash: hash(token), scopes })
     .returning({ id: apiTokens.id });
   return { token, id: row!.id };
+}
+
+// Signing in again on the same device replaces its key, so repeated sign-ins never pile up.
+export async function createAppToken(device: string): Promise<{ token: string; id: number }> {
+  const name = device.trim().slice(0, 60) || "iPhone";
+  await db().update(apiTokens).set({ revokedAt: sql`now()` }).where(and(eq(apiTokens.kind, "app"), eq(apiTokens.name, name), isNull(apiTokens.revokedAt)));
+  return createToken(name, "app", APP_SCOPES);
 }
 
 export type VerifiedToken = { id: number; kind: TokenKind; scopes: string[] };

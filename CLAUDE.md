@@ -39,6 +39,9 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Third-party tokens are stored only encrypted (`lib/crypto.ts`, key in `ENCRYPTION_KEY`).
   Outlook is linked through Microsoft Graph for personal accounts only, with read-only scope.
   Work or employer calendars are never connected.
+- App API: `lib/app-api.ts` + `lib/app-data.ts` serve the iPhone app under `/api/v1/*`. The password login
+  (`lib/app-login.ts`) shares `lib/login-guard.ts` with the web form, so throttling is identical; never add a
+  second password check elsewhere.
 - MCP: `/api/v1/mcp` (`lib/mcp.ts`) exposes read tools and `log_event` to agents. Each tool is registered only
   when the key holds its scope; a new tool must pick the narrowest scope and return no secrets. It is
   stateless, rejects browser (Origin) requests, and the body is capped.
