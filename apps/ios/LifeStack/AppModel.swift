@@ -1,5 +1,4 @@
 import Foundation
-import LocalAuthentication
 import Observation
 import UIKit
 
@@ -10,25 +9,13 @@ final class AppModel {
 
     var address: String = UserDefaults.standard.string(forKey: addressKey) ?? ""
     var signedIn: Bool
-    var locked: Bool
     var today: TodaySummary?
     var supplements: [String] = []
     var message: String?
     var busy = false
 
-    // Debug builds only: the automated UI test cannot pass Face ID, so it launches with this argument.
-    private static var lockDisabledForTests: Bool {
-        #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-uitest-no-lock")
-        #else
-        false
-        #endif
-    }
-
     init() {
-        let on = Keychain.read() != nil && !(UserDefaults.standard.string(forKey: Self.addressKey) ?? "").isEmpty
-        signedIn = on
-        locked = on && !Self.lockDisabledForTests
+        signedIn = Keychain.read() != nil && !(UserDefaults.standard.string(forKey: Self.addressKey) ?? "").isEmpty
     }
 
     var client: APIClient? {
@@ -47,25 +34,14 @@ final class AppModel {
             self.address = url.absoluteString
             UserDefaults.standard.set(self.address, forKey: Self.addressKey)
             signedIn = true
-            locked = false
             await refresh()
         } catch { message = error.localizedDescription }
     }
 
     func signOut() {
         Keychain.delete()
-        today = nil; supplements = []; message = nil; signedIn = false; locked = false
+        today = nil; supplements = []; message = nil; signedIn = false
     }
-
-    // Face ID, or the device passcode as the fallback. A device with no lock set has nothing to enforce.
-    func unlock() async {
-        let context = LAContext()
-        var error: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { locked = false; return }
-        if (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock Life Stack")) == true { locked = false }
-    }
-
-    func lock() { if signedIn && !Self.lockDisabledForTests { locked = true } }
 
     func refresh() async {
         guard let client else { return }

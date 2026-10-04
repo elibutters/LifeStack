@@ -8,6 +8,7 @@ struct LifeStackApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                .preferredColorScheme(.dark)
         }
     }
 }

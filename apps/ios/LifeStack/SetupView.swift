@@ -14,7 +14,7 @@ struct SetupView: View {
                     SecureField("Password", text: $password)
                         .textContentType(.password).textInputAutocapitalization(.never).autocorrectionDisabled()
                 } footer: {
-                    Text("The same password as the web app. You sign in once: the password is not kept, this iPhone gets its own key in the Keychain, and Face ID locks the app. Revoke the key any time on the web app's API keys page.")
+                    Text("The same password as the web app. You sign in once: the password is not kept, this iPhone gets its own key in the Keychain. Revoke the key any time on the web app's API keys page.")
                 }
                 if let message = model.message {
                     Section { Text(message).foregroundStyle(.red) }
