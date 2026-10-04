@@ -183,9 +183,17 @@ export async function syncItem(itemId: string, opts: { repaired?: boolean } = {}
     }
 
     const { accounts: accts } = await accountsGet(token);
-    try {
-      if (item.kind === "bank") {
+    // What to ask for follows the accounts the institution actually has, not which button linked it:
+    // a brokerage linked through "bank or card" still gets its holdings once Plaid allows it.
+    const hasInvestmentAccounts = accts.some((a) => a.type === "investment");
+    const hasOtherAccounts = accts.some((a) => a.type !== "investment");
+    let notReady = false;
+    let produced = false;
+
+    if (item.kind === "bank" || hasOtherAccounts) {
+      try {
         const r = await transactionsSyncAll(token, item.cursor);
+        produced = true;
         cursor = r.cursor;
         removed.push(...r.removed);
         for (const t of [...r.added, ...r.modified]) {
@@ -225,8 +233,16 @@ export async function syncItem(itemId: string, opts: { repaired?: boolean } = {}
             if (!(e instanceof PlaidError && SKIPPABLE.has(e.code))) throw e;
           }
         }
-      } else {
+      } catch (e) {
+        if (e instanceof PlaidError && e.code === "PRODUCT_NOT_READY") notReady = true;
+        else if (!(e instanceof PlaidError && SKIPPABLE.has(e.code) && item.kind !== "bank")) throw e;
+      }
+    }
+
+    if (hasInvestmentAccounts) {
+      try {
         const h = await holdingsGet(token);
+        produced = true;
         const sec = new Map(h.securities.map((s) => [s.security_id, s]));
         // Several lots of the same security in one account become one position.
         const positions = new Map<string, { accountId: string; securityId: string; quantity: number; value: number; price: number; cost: number | null; currency: string | null }>();
@@ -287,11 +303,13 @@ export async function syncItem(itemId: string, opts: { repaired?: boolean } = {}
           // Some institutions give holdings only; that is fine.
           if (!(e instanceof PlaidError && SKIPPABLE.has(e.code) && e.code !== "PRODUCT_NOT_READY")) throw e;
         }
+      } catch (e) {
+        // Not allowed yet (the owner has not granted investment access) or not ready: skip, never fail.
+        if (e instanceof PlaidError && e.code === "PRODUCT_NOT_READY") notReady = true;
+        else if (!(e instanceof PlaidError && SKIPPABLE.has(e.code))) throw e;
       }
-    } catch (e) {
-      if (e instanceof PlaidError && e.code === "PRODUCT_NOT_READY") return "not_ready"; // the webhook calls back
-      throw e;
     }
+    if (notReady && !produced) return "not_ready"; // the webhook calls back
 
     const wrote = await db().transaction(async (tx) => {
       const [live] = await tx.select({ id: plaidItems.id }).from(plaidItems).where(eq(plaidItems.id, itemId)).for("share");

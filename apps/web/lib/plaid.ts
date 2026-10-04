@@ -126,7 +126,7 @@ export async function keyStatus(): Promise<KeyStatus> {
 
 export type PlaidKind = "bank" | "brokerage";
 
-export const linkTokenCreate = (opts: { kind: PlaidKind; accessToken?: string; origin: string }) => {
+export const linkTokenCreate = (opts: { kind: PlaidKind; accessToken?: string; addInvestments?: boolean; origin: string }) => {
   // Webhooks and the OAuth return page need a public https address; from localhost neither is sent.
   const publicUrls = opts.origin.startsWith("https://")
     ? { webhook: `${opts.origin}/api/webhooks/plaid`, redirect_uri: `${opts.origin}/settings/oauth` }
@@ -139,9 +139,13 @@ export const linkTokenCreate = (opts: { kind: PlaidKind; accessToken?: string; o
     ...publicUrls,
   };
   const body = opts.accessToken
-    ? { ...base, access_token: opts.accessToken } // update mode: re-authenticate an existing item
+    ? {
+        ...base,
+        access_token: opts.accessToken, // update mode: re-authenticate an existing item,
+        ...(opts.addInvestments ? { additional_consented_products: ["investments"] } : {}), // or allow more data
+      }
     : opts.kind === "bank"
-      ? { ...base, products: ["transactions"], optional_products: ["liabilities"], transactions: { days_requested: 730 } }
+      ? { ...base, products: ["transactions"], optional_products: ["liabilities", "investments"], transactions: { days_requested: 730 } }
       : { ...base, products: ["investments"] };
   return call("/link/token/create", body, z.object({ link_token: z.string() }));
 };

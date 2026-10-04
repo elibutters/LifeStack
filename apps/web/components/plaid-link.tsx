@@ -16,11 +16,13 @@ function explain(j: { error?: string; code?: string }): string {
 export function PlaidLinkButton({
   kind,
   itemId,
+  addInvestments,
   label,
   className,
 }: {
   kind: "bank" | "brokerage";
   itemId?: string;
+  addInvestments?: boolean;
   label: string;
   className?: string;
 }) {
@@ -35,7 +37,7 @@ export function PlaidLinkButton({
       const res = await fetch("/api/connections/plaid/link-token", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind, itemId }),
+        body: JSON.stringify({ kind, itemId, addInvestments }),
       });
       if (!res.ok) {
         setError(explain((await res.json().catch(() => ({}))) as { error?: string; code?: string }));

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
-import { CalendarIcon, OverviewIcon, UserIcon } from "./icons";
+import { CalendarIcon, FinanceIcon, OverviewIcon, UserIcon } from "./icons";
 
 type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
 
@@ -11,6 +11,7 @@ type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGEl
 const NAV: Item[] = [
   { href: "/", label: "Overview", Icon: OverviewIcon },
   { href: "/calendar", label: "Calendar", Icon: CalendarIcon },
+  { href: "/finance", label: "Finance", Icon: FinanceIcon },
 ];
 
 function useActive() {

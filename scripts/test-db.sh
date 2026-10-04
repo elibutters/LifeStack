@@ -7,4 +7,5 @@ PSQL=(docker compose -f infra/docker-compose.yml exec -T postgres psql -U lifest
 if ! "${PSQL[@]}" -c "select 1 from pg_database where datname='lifestack_test'" | grep -q 1; then
   "${PSQL[@]}" -c "create database lifestack_test" >/dev/null
 fi
-DATABASE_URL=postgres://lifestack:lifestack@127.0.0.1:5432/lifestack_test pnpm -s db:migrate >/dev/null
+# DATABASE_URL_UNPOOLED is blanked on purpose: a developer .env may hold the live database there.
+DATABASE_URL=postgres://lifestack:lifestack@127.0.0.1:5432/lifestack_test DATABASE_URL_UNPOOLED= pnpm -s db:migrate >/dev/null

@@ -68,3 +68,12 @@ with bearer tokens. The web app stays for desktop and as a fallback. What that m
 - Design for widgets: small, cheap endpoints that return pre-digested summaries
   (for example `/api/v1/overview`), since widgets refresh on a tight system budget.
 - Dates cross the API as ISO 8601 with offset; all-day items carry a plain `YYYY-MM-DD`.
+
+## Finance pages
+
+`/finance` (overview, spending, transactions, recurring, investments) reads the synced `finance.*`
+events. All the maths lives in `apps/web/lib/finance-calc.ts` (pure, no database, fully tested);
+`lib/finance-data.ts` only loads and shapes rows. Plaid's sign convention holds throughout (positive
+= money out), transfers and credit card payments are never counted as spending or income, and
+every page calls `requireSession()`. Charts are plain SVG and CSS. Run `pnpm test` (needs Docker)
+before changing any of it; it only touches the throwaway `lifestack_test` database.

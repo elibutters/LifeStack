@@ -15,6 +15,7 @@
     "db:up": "docker compose -f infra/docker-compose.yml up -d --build --wait",
     "db:down": "docker compose -f infra/docker-compose.yml down",
     "db:seed": "pnpm --filter @lifestack/db seed",
-    "test": "bash scripts/test-db.sh && DATABASE_URL=postgres://lifestack:lifestack@127.0.0.1:5432/lifestack_test pnpm --filter @lifestack/db exec tsx --conditions=react-server ../../apps/web/tests/plaid.test.mts"
+    "test": "bash scripts/test.sh",
+    "db:seed-finance": "pnpm --filter @lifestack/db seed-finance"
   }
 }

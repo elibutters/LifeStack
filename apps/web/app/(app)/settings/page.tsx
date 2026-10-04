@@ -10,7 +10,8 @@ import { keyStatus, plaidConfigured, plaidEnv } from "@/lib/plaid";
 import { getConnection, getSyncState } from "@/lib/outlook";
 import { db } from "@/lib/db";
 import { accounts } from "@lifestack/db";
-import { count } from "drizzle-orm";
+import { count, eq, sql } from "drizzle-orm";
+import { events } from "@lifestack/db";
 import { logout } from "@/app/login/actions";
 import { disconnect, syncFinance, syncNow, unlinkFinance } from "./actions";
 
@@ -42,6 +43,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       .catch(() => []),
   ]);
   const accountCount = new Map(perItem.map((r) => [r.itemId, r.n]));
+  // Brokerages linked without permission for investment data have accounts but no holdings yet.
+  const [investAccounts, holdingRows] = await Promise.all([
+    db().select({ itemId: accounts.itemId, n: count() }).from(accounts).where(eq(accounts.type, "investment")).groupBy(accounts.itemId).catch(() => []),
+    db()
+      .select({ itemId: sql<string>`${events.payload}->>'itemId'`, n: count() })
+      .from(events)
+      .where(eq(events.key, "finance.holding"))
+      .groupBy(sql`${events.payload}->>'itemId'`)
+      .catch(() => []),
+  ]);
+  const holdingCount = new Map(holdingRows.map((r) => [r.itemId, r.n]));
+  const needsInvestmentAccess = (id: string) => investAccounts.some((r) => r.itemId === id && r.n > 0) && !(holdingCount.get(id) ?? 0);
   const plaidKeys = plaidConfigured() ? await keyStatus() : null;
   // "not configured" is already explained inside the card, so it gets no banner.
   const error = sp.error && sp.error !== "not_configured" ? (MESSAGES[sp.error] ?? "Something went wrong.") : null;
@@ -142,6 +155,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                       </p>
                       {it.lastError && <p className="text-sm text-red-300">{it.lastError}</p>}
                       <div className="flex flex-wrap items-start gap-2">
+                        {needsInvestmentAccess(it.id) && (
+                          <PlaidLinkButton kind={it.kind as "bank" | "brokerage"} itemId={it.id} addInvestments label="Allow investment data" className={button} />
+                        )}
                         {it.status === "login_required" && (
                           <PlaidLinkButton kind={it.kind as "bank" | "brokerage"} itemId={it.id} label="Sign in again" className={button} />
                         )}

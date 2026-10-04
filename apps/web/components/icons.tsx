@@ -57,3 +57,10 @@ export const UserIcon = (p: SVGProps<SVGSVGElement>) => (
     <path d="M5.5 19.5c.8-3.2 3.2-5 6.5-5s5.7 1.8 6.5 5" />
   </Icon>
 );
+
+export const FinanceIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M4 19.5h16" />
+    <path d="M6.5 16V11M12 16V6.5M17.5 16v-3.5" />
+  </Icon>
+);
