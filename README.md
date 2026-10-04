@@ -134,6 +134,11 @@ Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep ac
 
 Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep** tab and Overview. The unofficial API can change without notice.
 
+### iPhone app
+
+`apps/ios` is a small SwiftUI app (see its README): connect with your address and an API key, log mood,
+caffeine and supplements in one tap, and see today. Widgets are next.
+
 ### MCP server (agents)
 
 `POST /api/v1/mcp` is a stateless MCP endpoint over HTTP, authenticated with the same revocable keys as

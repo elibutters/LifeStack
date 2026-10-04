@@ -79,7 +79,9 @@ Several agents and tools work on this repo. To stop work diverging:
 The owner wants a full native iOS app with home-screen widgets, built once the web app has
 real data. A PWA or a web wrapper cannot do widgets, App Intents, HealthKit or Live
 Activities, so the app will be SwiftUI + WidgetKit, talking to this deployment over HTTPS
-with bearer tokens. The web app stays for desktop and as a fallback. What that means now:
+with bearer tokens. The web app stays for desktop and as a fallback. The app lives in `apps/ios` (SwiftUI, generated with
+XcodeGen: `cd apps/ios && xcodegen generate`); its project file, Info.plist, signing team and bundle id
+are never committed, so nothing personal enters the repo. What that means now:
 
 - Every feature gets a versioned JSON API under `/api/v1/*` (bearer-token auth,
   zod-validated, stable shapes). Server components may call the same functions in

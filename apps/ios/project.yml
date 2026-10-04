@@ -1,0 +1,48 @@
+name: LifeStack
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config.xcconfig
+  Release: Config.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  LifeStack:
+    type: application
+    platform: iOS
+    sources: [LifeStack]
+    info:
+      path: LifeStack/Info.plist
+      properties:
+        CFBundleDisplayName: Life Stack
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        GENERATE_INFOPLIST_FILE: NO
+  LifeStackUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [LifeStackUITests]
+    dependencies:
+      - target: LifeStack
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  LifeStack:
+    build:
+      targets:
+        LifeStack: all
+    test:
+      targets: [LifeStackUITests]

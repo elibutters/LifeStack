@@ -19,3 +19,11 @@ pgdata/
 next-env.d.ts
 .vercel
 .next-*/
+
+# iOS
+apps/ios/LifeStack.xcodeproj/
+apps/ios/Local.xcconfig
+DerivedData/
+*.xcuserstate
+xcuserdata/
+apps/ios/LifeStack/Info.plist

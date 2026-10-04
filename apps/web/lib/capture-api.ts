@@ -1,6 +1,6 @@
 import "server-only";
 import { EventInput, type Scope } from "./capture-core";
-import { insertLog, loadToday } from "./capture";
+import { insertLog, listSupplements, loadToday } from "./capture";
 import { describeError } from "./errors";
 import { verifyBearer, type VerifiedToken } from "./tokens";
 
@@ -56,6 +56,18 @@ export async function handleToday(req: Request): Promise<Response> {
     });
   } catch (e) {
     console.error("capture: could not read today", describeError(e));
+    return json({ error: "server_error" }, 500);
+  }
+}
+
+// The supplement names offered in the quick log, so a client can show one button for each.
+export async function handleSupplements(req: Request): Promise<Response> {
+  const token = await authenticate(req, "log:read");
+  if (token instanceof Response) return token;
+  try {
+    return json({ supplements: (await listSupplements()).map((s) => ({ name: s.name })) });
+  } catch (e) {
+    console.error("capture: could not list supplements", describeError(e));
     return json({ error: "server_error" }, 500);
   }
 }
