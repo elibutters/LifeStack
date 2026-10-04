@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { href: "/log", label: "Quick log" },
   { href: "/log/history", label: "History" },
-  { href: "/log/shortcuts", label: "Shortcuts" },
 ];
 
 export function LogTabs() {

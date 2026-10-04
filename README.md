@@ -113,7 +113,7 @@ Investment holdings need the brokerage's permission: in Connections use **Allow 
 ### Quick capture
 
 Things that have no other source (mood, caffeine, supplements) are logged in the **Log** tab: one tap,
-with a short Undo. The **Shortcuts** page creates revocable keys for iPhone Shortcuts, widgets or agents,
+with a short Undo. The **API keys** page (Account menu) creates revocable keys for iPhone Shortcuts, widgets or agents,
 and explains how to set one up. A key is shown once and only a fingerprint is stored.
 
 ```
@@ -137,7 +137,7 @@ Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep
 ### MCP server (agents)
 
 `POST /api/v1/mcp` is a stateless MCP endpoint over HTTP, authenticated with the same revocable keys as
-quick capture. In the **Log > Shortcuts** page create a key with access **Agent: read everything and add
+quick capture. On the **API keys** page (Account menu) create a key with access **Agent: read everything and add
 logs**. Each tool is only offered to a key that holds its scope (`log:read`, `log:write`, `calendar:read`,
 `sleep:read`, `finance:read`).
 
