@@ -198,7 +198,10 @@ the world and your data. Keep it in a password manager.
 - Sign-in is rate limited: 5 failed attempts per address and 300 overall per 15
   minutes. If you are ever locked out, wait 15 minutes or run
   `delete from auth_attempts` in your database console.
-- Changing `APP_PASSWORD` or `SESSION_SECRET` signs out every device immediately. Accounts live in the `users` table
+- Change your email and password on the **Security** page (Account menu); no redeploy needed. With `OWNER_EMAIL` set,
+  `APP_PASSWORD` is only the first password (used once to create your account) and sessions are signed by
+  `SESSION_SECRET` alone, so changing the password signs your phone out but not the web. Rotating `SESSION_SECRET`
+  signs out every device. Without `OWNER_EMAIL`, changing `APP_PASSWORD` or `SESSION_SECRET` signs out every device. Accounts live in the `users` table
   (email and a scrypt hash); every key and session names its user. Data is still owned by the one owner: separating
   data per user is the next step and means adding `user_id` to the data tables and scoping each query.
 - Nothing from signed-in pages is cached on the device; offline shows a blank shell.

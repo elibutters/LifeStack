@@ -78,6 +78,13 @@ export const KeyIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const ShieldIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M12 4l6.5 2.5v5c0 4-2.7 6.7-6.5 8.5-3.8-1.8-6.5-4.5-6.5-8.5v-5z" />
+    <path d="M9.5 12l1.8 1.8 3.4-3.6" />
+  </Icon>
+);
+
 export const ChevronUpIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="M6 14.5l6-6 6 6" />

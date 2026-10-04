@@ -42,6 +42,9 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Accounts: sign-in is email plus password through `lib/login-guard.ts` (throttled, scrypt hashes in `users`).
   `OWNER_EMAIL` + `APP_PASSWORD` create the owner on first sign-in; with no `OWNER_EMAIL` the original password-only login
   still works. Build features as if there could be several users: take the user from the session or key, never assume one.
+- Security page (`/security`): changing email or password re-checks the current password through `checkPassword`
+  (same throttle), and a password change revokes that user's `app` keys. Session signing must not depend on a
+  password that users can change.
 - App API: `lib/app-api.ts` + `lib/app-data.ts` serve the iPhone app under `/api/v1/*`. The password login
   (`lib/app-login.ts`) shares `lib/login-guard.ts` with the web form, so throttling is identical; never add a
   second password check elsewhere.

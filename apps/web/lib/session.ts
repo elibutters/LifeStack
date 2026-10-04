@@ -11,7 +11,11 @@ const enc = new TextEncoder();
 export function sessionKey(): string | null {
   const password = process.env.APP_PASSWORD ?? "";
   const secret = process.env.SESSION_SECRET ?? "";
-  if (password.length < 16 || secret.length < 32) return null;
+  if (secret.length < 32) return null;
+  // With accounts (OWNER_EMAIL set) passwords live in the database and can be changed in the app, so sessions
+  // are signed by the secret alone. Without accounts the shared password is part of the key, as before.
+  if (process.env.OWNER_EMAIL) return secret;
+  if (password.length < 16) return null;
   return `${secret}\0${password}`;
 }
 
