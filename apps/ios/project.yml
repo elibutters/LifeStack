@@ -22,6 +22,7 @@ targets:
       properties:
         CFBundleDisplayName: Life Stack
         UILaunchScreen: {}
+        NSFaceIDUsageDescription: Life Stack uses Face ID to keep your data private.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
