@@ -28,7 +28,7 @@ const calOnly2 = (await tok.createToken("cal2", "agent", ["calendar:read"])).tok
 const init = await rpc(agent, "initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "t", version: "1" } });
 assert.equal(init.result.serverInfo.name, "life-stack");
 const names = async (t: string) => ((await rpc(t, "tools/list")).result.tools as { name: string }[]).map((x) => x.name).sort();
-assert.deepEqual(await names(agent), ["get_calendar", "get_finance_summary", "get_holdings", "get_sleep", "get_today", "get_transactions", "log_event"]);
+assert.deepEqual(await names(agent), ["get_calendar", "get_finance_summary", "get_holdings", "get_profile", "get_sleep", "get_today", "get_transactions", "log_event"]);
 assert.deepEqual(await names(logOnly), ["log_event"]); assert.deepEqual(await names(calOnly2), ["get_calendar"]);
 const denied = await rpc(calOnly2, "tools/call", { name: "get_finance_summary", arguments: {} });
 assert.ok(denied.error || denied.result?.isError, "a calendar-only key cannot call finance tools");
@@ -58,6 +58,10 @@ assert.equal(text(await rpc(agent, "tools/call", { name: "get_finance_summary", 
 assert.deepEqual(text(await rpc(agent, "tools/call", { name: "get_transactions", arguments: { limit: 5 } })), []);
 assert.deepEqual(text(await rpc(agent, "tools/call", { name: "get_holdings", arguments: {} })), []);
 assert.equal((await rpc(agent, "tools/call", { name: "get_transactions", arguments: { limit: 1000 } })).result?.isError ?? true, true, "limit is capped");
+
+const who = text(await rpc(agent, "tools/call", { name: "get_profile", arguments: {} }));
+assert.equal(who.timezone, "UTC");
+assert.equal(who.preferredName, undefined);
 
 await db().delete(events); await db().delete(apiTokens);
 console.log("MCP OK"); process.exit(0);
