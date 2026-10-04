@@ -14,7 +14,7 @@ const hash = (token: string) => createHash("sha256").update(token).digest("hex")
 
 // The key is 256 bits of randomness, so a plain SHA-256 is enough to store it safely: there is nothing
 // to brute-force. It is returned once and never stored.
-export async function createToken(name: string, kind: TokenKind, scopes: Scope[]): Promise<{ token: string; id: number }> {
+export async function createToken(name: string, kind: TokenKind, scopes: Scope[], userId: number | null = null): Promise<{ token: string; id: number }> {
   const clean = name.trim().slice(0, 60);
   if (!clean) throw new Error("name is required");
   if (!scopes.length || scopes.some((s) => !SCOPES.includes(s))) throw new Error("invalid scopes");
@@ -23,19 +23,19 @@ export async function createToken(name: string, kind: TokenKind, scopes: Scope[]
   const token = PREFIX + randomBytes(32).toString("base64url");
   const [row] = await db()
     .insert(apiTokens)
-    .values({ name: clean, kind, prefix: token.slice(0, PREFIX.length + 6), tokenHash: hash(token), scopes })
+    .values({ name: clean, kind, prefix: token.slice(0, PREFIX.length + 6), tokenHash: hash(token), scopes, userId })
     .returning({ id: apiTokens.id });
   return { token, id: row!.id };
 }
 
 // Signing in again on the same device replaces its key, so repeated sign-ins never pile up.
-export async function createAppToken(device: string): Promise<{ token: string; id: number }> {
+export async function createAppToken(device: string, userId: number | null): Promise<{ token: string; id: number }> {
   const name = device.trim().slice(0, 60) || "iPhone";
-  await db().update(apiTokens).set({ revokedAt: sql`now()` }).where(and(eq(apiTokens.kind, "app"), eq(apiTokens.name, name), isNull(apiTokens.revokedAt)));
-  return createToken(name, "app", APP_SCOPES);
+  await db().update(apiTokens).set({ revokedAt: sql`now()` }).where(and(eq(apiTokens.kind, "app"), eq(apiTokens.name, name), isNull(apiTokens.revokedAt), userId == null ? isNull(apiTokens.userId) : eq(apiTokens.userId, userId)));
+  return createToken(name, "app", APP_SCOPES, userId);
 }
 
-export type VerifiedToken = { id: number; kind: TokenKind; scopes: string[] };
+export type VerifiedToken = { id: number; kind: TokenKind; scopes: string[]; userId: number | null };
 
 // Returns the token only if it exists, is not revoked, and carries the scope (when one is asked for). A wrong, revoked or
 // malformed key all look the same to the caller.
@@ -54,7 +54,7 @@ export async function verifyBearer(header: string | null, scope?: Scope): Promis
     .set({ lastUsedAt: sql`now()` })
     .where(and(eq(apiTokens.id, row.id), sql`(${apiTokens.lastUsedAt} is null or ${apiTokens.lastUsedAt} < now() - interval '1 minute')`))
     .catch(() => {});
-  return { ok: true, token: { id: row.id, kind: row.kind as TokenKind, scopes: row.scopes } };
+  return { ok: true, token: { id: row.id, kind: row.kind as TokenKind, scopes: row.scopes, userId: row.userId } };
 }
 
 // Never includes the hash.

@@ -13,12 +13,13 @@ brew install xcodegen
 cd apps/ios && xcodegen generate && open LifeStack.xcodeproj
 ```
 
-Run on a simulator with no setup. To run on your own iPhone, copy `Local.xcconfig.example` to
-`Local.xcconfig` and fill in your Apple team id and a bundle id of your own.
+Copy `Local.xcconfig.example` to `Local.xcconfig` (gitignored) and set `API_BASE_URL` to your deployment. To run on your
+own iPhone also fill in your Apple team id and a bundle id of your own. If `API_BASE_URL` is empty the sign-in screen
+asks for the address instead.
 
 ## Signing in
 
-Enter your deployment address and the same password as the web app. You sign in once: the password is sent over
+Enter the same email and password as the web app. The deployment address is built into the app (see below), so it is never typed. You sign in once: the password is sent over
 HTTPS to `POST /api/v1/auth/login`, never stored, and traded for a key made for this phone that lives in the iOS
 Keychain. The app has no Face ID lock for now. Revoke the phone's key any time on the web app's **API keys**
 page, and the app signs itself out.
@@ -35,5 +36,5 @@ throwaway password set on that server and a reset simulator Keychain:
 
 ```
 xcrun simctl keychain <device> reset
-TEST_RUNNER_LS_ADDRESS=http://localhost:3000 TEST_RUNNER_LS_PASSWORD=... xcodebuild test -project LifeStack.xcodeproj -scheme LifeStack -destination 'platform=iOS Simulator,name=iPhone 18 Pro' CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO -only-testing:LifeStackUITests
+TEST_RUNNER_LS_EMAIL=... TEST_RUNNER_LS_PASSWORD=... xcodebuild test -project LifeStack.xcodeproj -scheme LifeStack -destination 'platform=iOS Simulator,name=iPhone 18 Pro' CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO -only-testing:LifeStackUITests 'API_BASE_URL=http:/$()/localhost:3000'
 ```

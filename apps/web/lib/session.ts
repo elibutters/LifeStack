@@ -36,16 +36,22 @@ export async function safeEqual(a: string, b: string, key: string): Promise<bool
   return diff === 0;
 }
 
-export async function createSession(key: string): Promise<string> {
-  const exp = String(Math.floor(Date.now() / 1000) + SESSION_TTL_S);
-  return `${exp}.${hex(await hmac(key, exp))}`;
+// "<user id>.<expiry>.<signature>"; user id 0 means the owner of a deployment that has no accounts yet.
+export async function createSession(key: string, userId = 0): Promise<string> {
+  const body = `${userId}.${Math.floor(Date.now() / 1000) + SESSION_TTL_S}`;
+  return `${body}.${hex(await hmac(key, body))}`;
+}
+
+// The user the session belongs to, or null if it is missing, forged or expired.
+export async function sessionUserId(token: string | undefined, key: string): Promise<number | null> {
+  if (!token) return null;
+  const parts = token.split(".");
+  const [uid, exp, sig] = parts;
+  if (parts.length !== 3 || !uid || !exp || !sig || !/^\d+$/.test(uid) || !/^\d+$/.test(exp)) return null;
+  if (Number(exp) < Date.now() / 1000) return null;
+  return (await safeEqual(sig, hex(await hmac(key, `${uid}.${exp}`)), key)) ? Number(uid) : null;
 }
 
 export async function verifySession(token: string | undefined, key: string): Promise<boolean> {
-  if (!token) return false;
-  const parts = token.split(".");
-  const [exp, sig] = parts;
-  if (parts.length !== 2 || !exp || !sig || !/^\d+$/.test(exp)) return false;
-  if (Number(exp) < Date.now() / 1000) return false;
-  return safeEqual(sig, hex(await hmac(key, exp)), key);
+  return (await sessionUserId(token, key)) !== null;
 }
