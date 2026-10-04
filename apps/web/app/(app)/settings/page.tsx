@@ -6,7 +6,7 @@ import { requireSession } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/dates";
 import { listItems } from "@/lib/finance";
 import { microsoftConfigured } from "@/lib/microsoft";
-import { plaidConfigured, plaidEnv } from "@/lib/plaid";
+import { keyStatus, plaidConfigured, plaidEnv } from "@/lib/plaid";
 import { getConnection, getSyncState } from "@/lib/outlook";
 import { db } from "@/lib/db";
 import { accounts } from "@lifestack/db";
@@ -42,6 +42,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       .catch(() => []),
   ]);
   const accountCount = new Map(perItem.map((r) => [r.itemId, r.n]));
+  const plaidKeys = plaidConfigured() ? await keyStatus() : null;
   // "not configured" is already explained inside the card, so it gets no banner.
   const error = sp.error && sp.error !== "not_configured" ? (MESSAGES[sp.error] ?? "Something went wrong.") : null;
 
@@ -107,6 +108,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <p className="text-red-300">Plaid is not set up on this deployment yet.</p>
           ) : (
             <>
+              {plaidKeys === "rejected" && (
+                <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-300">
+                  Plaid rejected this app's keys. Check that the client ID is right and that the secret matches the environment
+                  (production secret on the live site).
+                </p>
+              )}
+              {plaidKeys === "ok" && plaidEnv() === "production" && <p className="text-sm text-muted">Connected to Plaid with live keys.</p>}
               {plaidEnv() === "sandbox" && (
                 <p className="rounded-md border border-line bg-raised px-3 py-2 text-sm text-muted">
                   Test mode: only Plaid's fake sandbox banks can be linked here, so no real data is stored.

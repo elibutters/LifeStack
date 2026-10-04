@@ -5,6 +5,13 @@ import { useState } from "react";
 import { repairedFinance } from "@/app/(app)/settings/actions";
 import { loadPlaid, PENDING_KEY, type Pending } from "@/lib/plaid-client";
 
+function explain(j: { error?: string; code?: string }): string {
+  if (j.error === "not_configured") return "Plaid is not set up on this deployment.";
+  if (j.code === "INVALID_API_KEYS") return "Plaid rejected this app's keys. Check the client ID and secret in Vercel.";
+  if (j.code) return `Plaid could not start the connection (${j.code}).`;
+  return "Could not start the connection. Try again.";
+}
+
 // Opens Plaid's secure window. Bank logins are typed into Plaid's window, never into this app.
 export function PlaidLinkButton({
   kind,
@@ -30,7 +37,11 @@ export function PlaidLinkButton({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ kind, itemId }),
       });
-      if (!res.ok) throw new Error(String(res.status));
+      if (!res.ok) {
+        setError(explain((await res.json().catch(() => ({}))) as { error?: string; code?: string }));
+        setBusy(false);
+        return;
+      }
       const { link_token } = (await res.json()) as { link_token: string };
       // Banks that use OAuth send the browser away and back; remember what we were doing.
       const pending: Pending = { token: link_token, kind, itemId };
