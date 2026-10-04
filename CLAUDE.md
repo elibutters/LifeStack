@@ -26,8 +26,13 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   The one exception is `/api/cron/*`, which skips the session gate because Vercel Cron cannot
   hold one; every handler there must check `CRON_SECRET` itself and fail closed.
 - Finance data comes from Plaid (`lib/plaid.ts`, `lib/finance.ts`) into `events` (domain `finance`,
-  source `plaid`). Local development uses Plaid's Sandbox only; real data must never reach a dev
-  database. Never store account numbers. A sync reads everything from Plaid first and writes data
+  source `plaid`). The Plaid environment follows the database (`plaidEnv()`): a local database only ever gets
+  Plaid's fake Sandbox, a hosted database only ever gets real Plaid, and nothing can override
+  that, so fake and real data never mix. Developing against the live database is allowed (the
+  owner chose it), so never run tests, seeds or deletes against it: `pnpm test` only touches
+  `lifestack_test`, the seed script refuses hosted databases, and `db:migrate` refuses them
+  unless `ALLOW_REMOTE_MIGRATE=1`. Webhooks and the OAuth return page need an https address, so
+  banks that sign in on their own site can only be linked from the live site. Never store account numbers. A sync reads everything from Plaid first and writes data
   and cursor in one transaction; an unreadable row fails the sync rather than being skipped.
   `source_id` is unique per source across all kinds, so snapshots are prefixed (`bal:`, `liab:`,
   `hold:`, `inv:`). The Plaid webhook is a public path and must verify Plaid's signature.
