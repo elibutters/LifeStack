@@ -64,3 +64,10 @@ export const FinanceIcon = (p: SVGProps<SVGSVGElement>) => (
     <path d="M6.5 16V11M12 16V6.5M17.5 16v-3.5" />
   </Icon>
 );
+
+export const LogIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <rect x="4.5" y="4.5" width="15" height="15" rx="1.5" />
+    <path d="M8.5 12.5l2.5 2.5 4.5-5" />
+  </Icon>
+);

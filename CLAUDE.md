@@ -77,3 +77,15 @@ events. All the maths lives in `apps/web/lib/finance-calc.ts` (pure, no database
 = money out), transfers and credit card payments are never counted as spending or income, and
 every page calls `requireSession()`. Charts are plain SVG and CSS. Run `pnpm test` (needs Docker)
 before changing any of it; it only touches the throwaway `lifestack_test` database.
+
+## Quick capture and API keys
+
+Mood, caffeine and supplements are logged from `/log` (one tap, Undo for six seconds) or through
+`POST /api/v1/events` with a bearer key. `/api/v1/*` skips the session gate in `proxy.ts`, so every
+handler there must call `verifyBearer` (via `lib/capture-api.ts`) and fail closed. Keys are shown once,
+stored only as a SHA-256 hash, scoped (`log:write`, `log:read`), revocable, and at most ten are active.
+The rules for what can be logged and how a day is summarised live in `lib/capture-core.ts` (pure,
+tested). `deleteLog` only ever removes capture entries. Server actions must be declared as
+`export async function` (an arrow function wrapper fails the production build, though typecheck
+passes). Never echo request values back in an API error.
+

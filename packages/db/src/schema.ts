@@ -159,3 +159,17 @@ export const connections = pgTable("connections", {
   createdAt,
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Access keys for clients that cannot hold a login session (iPhone Shortcuts, widgets, agents).
+// Only a SHA-256 hash is stored; the key itself is shown once, when it is created.
+export const apiTokens = pgTable("api_tokens", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  name: text("name").notNull(),
+  kind: text("kind").notNull().default("shortcut"), // shortcut | widget | agent; becomes the source label on what it writes
+  prefix: text("prefix").notNull(), // first characters of the key, so it can be recognised in a list
+  tokenHash: text("token_hash").notNull().unique(),
+  scopes: text("scopes").array().notNull(), // log:write | log:read
+  createdAt,
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});

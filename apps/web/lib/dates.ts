@@ -110,3 +110,5 @@ export const fmtDayShort = (day: string) =>
 
 export const fmtDateTime = (d: Date) =>
   new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(d);
+
+export const todayInTz = (now = new Date()) => ymd(now);
