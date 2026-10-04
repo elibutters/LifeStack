@@ -1,6 +1,6 @@
 // Offline fallback only. Nothing from an authenticated page or the API is ever cached,
 // so no personal data is left on the device after the session ends.
-const CACHE = "lifestack-shell-v2";
+const CACHE = "lifestack-shell-v3";
 const OFFLINE = "/offline.html";
 
 self.addEventListener("install", (e) => {
@@ -19,5 +19,10 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   if (e.request.mode !== "navigate") return;
-  e.respondWith(fetch(e.request).catch(() => caches.match(OFFLINE)));
+  e.respondWith(
+    fetch(e.request).catch((err) => {
+      if (err && err.name === "AbortError") return Promise.reject(err);
+      return caches.match(OFFLINE);
+    }),
+  );
 });

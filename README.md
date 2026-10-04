@@ -123,6 +123,7 @@ POST /api/v1/events        Authorization: Bearer ls_...       (key with log:writ
   { "type": "supplement", "name": "Morning stack" }
   optional: "at" (ISO time, up to 30 days back) and "id" (8-64 letters/numbers; a retry with the same id never logs twice)
 GET  /api/v1/log/today     Authorization: Bearer ls_...       (key with log:read)
+GET  /api/v1/profile       Authorization: Bearer ls_...       (key with log:read; owner profile for agents)
 ```
 
 ### Connect Eight Sleep
@@ -148,6 +149,7 @@ logs**. Each tool is only offered to a key that holds its scope (`log:read`, `lo
 
 | Tool | Scope | What it does |
 | --- | --- | --- |
+| `get_profile` | log:read | Owner identity, physical details and notes for agents (empty fields omitted) |
 | `get_today` | log:read | Today's mood, caffeine and supplements |
 | `log_event` | log:write | Log a mood, caffeine or supplement (retry-safe with an `id`) |
 | `get_calendar` | calendar:read | Events and holidays between two dates (90 days at most) |

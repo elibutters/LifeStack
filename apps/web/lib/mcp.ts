@@ -8,6 +8,7 @@ import { addDays, isValidDay, startOfDay, ymd } from "./dates";
 import { describeError } from "./errors";
 import { classify, fmtMoney, insights, merchantName, monthOf, netWorth, shiftMonthKey, summarizeMonth } from "./finance-calc";
 import { loadFinance, loadHoldings } from "./finance-data";
+import { loadProfile, profileForAgents } from "./profile";
 import { loadNights } from "./sleep";
 import type { VerifiedToken } from "./tokens";
 
@@ -33,6 +34,11 @@ export function buildServer(token: VerifiedToken): McpServer {
   const has = (s: Scope) => token.scopes.includes(s);
 
   if (has("log:read")) {
+    server.registerTool(
+      "get_profile",
+      { description: "Who the owner is: name, physical details, life context and notes for agents. Empty fields are omitted. Timezone and age (from date of birth) are included when known." },
+      guard(async () => ok(profileForAgents(await loadProfile()))),
+    );
     server.registerTool("get_today", { description: "Today's mood, caffeine and supplements as logged in Life Stack." }, guard(async () => {
       const { date, summary } = await loadToday();
       return ok({

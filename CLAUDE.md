@@ -61,18 +61,20 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 
 ## Working with multiple agents
 
-Several agents and tools work on this repo. To stop work diverging:
+There is one clone: this folder. Do not add extra git worktrees or sibling `LifeStack-*`
+directories. New work happens on a git branch here.
 
-- Never edit files in the shared main folder. Start every task in your own worktree off fresh
-  origin/main: `git fetch && git worktree add ../<task> -b <task> origin/main`.
-- The shared main folder stays on `main` and clean. It only ever fast-forwards to origin/main.
+- `git fetch` and start from current `origin/main`: `git switch -c <task> origin/main` (stash or
+  finish other uncommitted work first; never discard someone else's files).
 - Small PRs, merged quickly. Run `pnpm test`, typecheck and build before opening one, and wait for
   CI to finish before merging.
-- Stage files by name, read `git diff --cached` before committing, never `git add -A` in a folder
-  other agents may have touched.
+- After a PR merges, delete the local branch (`git branch -d <task>`) and the remote branch
+  (`git push origin --delete <task>`). Fast-forward `main` to `origin/main`. Do not keep finished
+  feature branches around. GitHub should also auto-delete the head branch on merge.
+- Stage files by name, read `git diff --cached` before committing, never `git add -A` if another
+  agent may have touched the tree.
 - Production deploys come only from merges to main. No manual deploys.
-- If you find uncommitted changes in the shared folder, do not discard or commit them. Snapshot them
-  to a branch from a separate worktree and tell the owner.
+- If you find uncommitted changes that are not yours, leave them. Do not discard or commit them.
 
 ## Native iOS app (the end goal)
 

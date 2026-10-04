@@ -50,6 +50,13 @@
       "when": 1791134235125,
       "tag": "0006_volatile_the_hood",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791140060022,
+      "tag": "0007_opposite_jackpot",
+      "breakpoints": true
     }
   ]
 }

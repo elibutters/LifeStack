@@ -3,6 +3,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   date,
   doublePrecision,
   index,
@@ -22,7 +23,7 @@ export const events = pgTable(
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
     ts: timestamp("ts", { withTimezone: true }).notNull(),
-    domain: text("domain").notNull(), // sleep | finance | supplement | calendar | email | location | log | work
+    domain: text("domain").notNull(), // sleep | finance | supplement | calendar | email | location | log | work | commerce
     key: text("key").notNull(), // e.g. sleep.duration_min, supplement.taken, mood
     valueNum: doublePrecision("value_num"),
     valueText: text("value_text"),
@@ -159,6 +160,17 @@ export const connections = pgTable("connections", {
   createdAt,
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// One row: the owner's identity for the UI and for agents. Personal values live only here, never in the repo.
+export const ownerProfile = pgTable(
+  "owner_profile",
+  {
+    id: integer("id").primaryKey(),
+    payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("owner_profile_singleton", sql`${t.id} = 1`)],
+);
 
 // Access keys for clients that cannot hold a login session (iPhone Shortcuts, widgets, agents).
 // Only a SHA-256 hash is stored; the key itself is shown once, when it is created.
