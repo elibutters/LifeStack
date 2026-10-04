@@ -110,6 +110,21 @@ plain-language insights (spending changes, upcoming card payments, savings rate)
 to check the logic; `pnpm db:seed-finance` fills a local database with clearly fake data to look at.
 Investment holdings need the brokerage's permission: in Settings use **Allow investment data**.
 
+### Quick capture
+
+Things that have no other source (mood, caffeine, supplements) are logged in the **Log** tab: one tap,
+with a short Undo. The **Shortcuts** page creates revocable keys for iPhone Shortcuts, widgets or agents,
+and explains how to set one up. A key is shown once and only a fingerprint is stored.
+
+```
+POST /api/v1/events        Authorization: Bearer ls_...       (key with log:write)
+  { "type": "mood", "value": 4, "note": "calm" }
+  { "type": "caffeine", "drink": "Coffee", "mg": 95 }
+  { "type": "supplement", "name": "Morning stack" }
+  optional: "at" (ISO time, up to 30 days back) and "id" (8-64 letters/numbers; a retry with the same id never logs twice)
+GET  /api/v1/log/today     Authorization: Bearer ls_...       (key with log:read)
+```
+
 ### Security model
 
 The app is reachable from the public internet, so the password is what stands between
