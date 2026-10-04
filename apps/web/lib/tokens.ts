@@ -30,9 +30,9 @@ export async function createToken(name: string, kind: TokenKind, scopes: Scope[]
 
 export type VerifiedToken = { id: number; kind: TokenKind; scopes: string[] };
 
-// Returns the token only if it exists, is not revoked, and carries the scope. A wrong, revoked or
+// Returns the token only if it exists, is not revoked, and carries the scope (when one is asked for). A wrong, revoked or
 // malformed key all look the same to the caller.
-export async function verifyBearer(header: string | null, scope: Scope): Promise<{ ok: true; token: VerifiedToken } | { ok: false; status: 401 | 403 }> {
+export async function verifyBearer(header: string | null, scope?: Scope): Promise<{ ok: true; token: VerifiedToken } | { ok: false; status: 401 | 403 }> {
   const m = /^Bearer (ls_[A-Za-z0-9_-]{20,80})$/.exec(header ?? "");
   if (!m) return { ok: false, status: 401 };
   const [row] = await db()
@@ -40,7 +40,7 @@ export async function verifyBearer(header: string | null, scope: Scope): Promise
     .from(apiTokens)
     .where(and(eq(apiTokens.tokenHash, hash(m[1]!)), isNull(apiTokens.revokedAt)));
   if (!row) return { ok: false, status: 401 };
-  if (!row.scopes.includes(scope)) return { ok: false, status: 403 };
+  if (scope && !row.scopes.includes(scope)) return { ok: false, status: 403 };
   // Remember when it was last used, at most once a minute.
   await db()
     .update(apiTokens)

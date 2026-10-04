@@ -28,7 +28,9 @@ export const EventInput = z.discriminatedUnion("type", [
 ]);
 export type EventInputT = z.infer<typeof EventInput>;
 
-export const SCOPES = ["log:write", "log:read"] as const;
+// log:* are for shortcuts and widgets; the :read scopes below let an agent read each area through MCP.
+export const SCOPES = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read"] as const;
+export const AGENT_SCOPES: Scope[] = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read"];
 export type Scope = (typeof SCOPES)[number];
 
 // Domain and key each kind of entry is stored under in the shared events table.
