@@ -117,29 +117,48 @@ assert.equal(await del(W, String(victim)), 200); assert.equal(await del(W, Strin
 const calRow = (await db().select().from(events).where(eq(events.sourceId, "keep-me")))[0]!; assert.equal(await del(W, String(calRow.id)), 404, "other kinds of events cannot be deleted through the app API");
 assert.equal((await db().select().from(events).where(eq(events.sourceId, "keep-me"))).length, 1);
 
-// ---- a supplement is taken or not on a given day, with a dose
+// ---- a supplement is taken or not on a given day, with a dose that lives in the database
 {
-  await db().delete(events);
+  await db().delete(events); await db().delete(supplements);
+  await cap.addSupplement("Alpha"); await cap.addSupplement("Beta");
+  const [alpha, creatine] = await cap.listSupplements();
+  assert.ok(alpha && creatine && alpha.dose == null, "a new supplement starts with no dose");
+  assert.equal(await cap.setSupplementDose(alpha.id, 22, "mg"), true); assert.equal(await cap.setSupplementDose(creatine.id, 5, "g"), true); assert.equal(await cap.setSupplementDose(99999, 1, "mg"), false);
   const day = new Date("2026-10-10T16:00:00Z");
-  const a = await cap.insertLog({ type: "supplement", name: "Zinc" }, "manual", { now: day });
-  const b = await cap.insertLog({ type: "supplement", name: "zinc", dose: 30 }, "app", { now: new Date(day.getTime() + 3_600_000) });
-  assert.ok(a.ok && b.ok && a.id === b.id && a.created && !b.created, "the same supplement on the same day is one entry");
-  const rows1 = (await db().select().from(events)).filter((e) => e.key === "supplement.taken");
-  assert.equal(rows1.length, 1); assert.equal(rows1[0]!.valueNum, 30, "a later log updates the dose"); assert.deepEqual(rows1[0]!.payload, { unit: "mg" });
-  const c = await cap.insertLog({ type: "supplement", name: "Zinc" }, "app", { now: new Date(day.getTime() + 24 * 3_600_000) });
-  assert.ok(c.ok && c.id !== a.id, "the next day is a new entry");
-  const d = await cap.insertLog({ type: "supplement", name: "Creatine" }, "app", { now: day }); assert.ok(d.ok);
-  assert.equal((await db().select().from(events)).find((e) => e.id === (d as any).id)!.valueNum, 5, "the preset dose is the default"); assert.equal(core.describeEntry({ key: "supplement.taken", valueNum: 5, valueText: "Creatine", unit: "g" }), "Creatine (5 g)");
-  assert.ok(!core.EventInput.safeParse({ type: "supplement", name: "Zinc", unit: "lb" }).success); assert.ok(!core.EventInput.safeParse({ type: "supplement", name: "Zinc", dose: -1 }).success);
+  const a = await cap.insertLog({ type: "supplement", name: "Alpha" }, "manual", { now: day });
+  assert.ok(a.ok && a.created); const rowA = () => db().select().from(events).where(eq(events.key, "supplement.taken"));
+  assert.equal((await rowA())[0]!.valueNum, 22, "the default dose comes from the supplements table"); assert.deepEqual((await rowA())[0]!.payload, { unit: "mg" });
+  const b = await cap.insertLog({ type: "supplement", name: "alpha", dose: 30 }, "app", { now: new Date(day.getTime() + 3_600_000) });
+  assert.ok(b.ok && a.ok && a.id === b.id && !b.created, "the same supplement on the same day is one entry");
+  assert.equal((await rowA()).length, 1); assert.equal((await rowA())[0]!.valueNum, 30, "logging again with a dose updates it");
+  const c = await cap.insertLog({ type: "supplement", name: "Alpha" }, "app", { now: new Date(day.getTime() + 24 * 3_600_000) });
+  assert.ok(c.ok && a.ok && c.id !== a.id, "the next day is a new entry");
+  const d = await cap.insertLog({ type: "supplement", name: "Beta" }, "app", { now: day }); assert.ok(d.ok);
+  assert.equal((await db().select().from(events).where(eq(events.id, (d as any).id)))[0]!.valueNum, 5); assert.equal(core.describeEntry({ key: "supplement.taken", valueNum: 5, valueText: "Beta", unit: "g" }), "Beta (5 g)");
+  assert.ok(!core.EventInput.safeParse({ type: "supplement", name: "Alpha", unit: "lb" }).success); assert.ok(!core.EventInput.safeParse({ type: "supplement", name: "Alpha", dose: -1 }).success);
+
+  // changing a dose also updates today's entry
+  const todayOnly = await cap.insertLog({ type: "supplement", name: "Beta" }, "app"); assert.ok(todayOnly.ok);
+  assert.equal(await cap.setSupplementDose(creatine.id, 3, "g"), true);
+  assert.equal((await db().select().from(events).where(eq(events.id, (todayOnly as any).id)))[0]!.valueNum, 3, "today's entry follows the new dose");
+  assert.equal((await db().select().from(events).where(eq(events.id, (d as any).id)))[0]!.valueNum, 5, "other days keep what was taken");
+
+  // the options and dose endpoints
   const optsCall = await api.handleOptions(call("/api/v1/log/options", { method: "GET", token: t2.token })); const o = await optsCall.json();
-  assert.equal(optsCall.status, 200); assert.ok(o.supplements.every((x: any) => "dose" in x && "unit" in x)); assert.ok(o.caffeine.length >= 1 && "mg" in o.caffeine[0]);
+  assert.equal(optsCall.status, 200); assert.deepEqual(Object.keys(o.supplements[0]).sort(), ["dose", "id", "name", "unit"]); assert.ok(o.caffeine.length >= 1 && "mg" in o.caffeine[0]);
   assert.equal((await api.handleOptions(call("/api/v1/log/options", { method: "GET", token: W }))).status, 403); assert.equal((await api.handleOptions(call("/api/v1/log/options", { method: "GET", token: null }))).status, 401);
-  await db().delete(events);
+  const put = async (token: string | null, id: string, body: unknown) => (await api.handleSetDose(call("/api/v1/log/supplements/" + id, { method: "PUT", token, body }), id)).status;
+  assert.equal(await put(null, String(alpha.id), { dose: 10, unit: "mg" }), 401); assert.equal(await put(ro.token, String(alpha.id), { dose: 10, unit: "mg" }), 403, "a read-only key cannot change doses");
+  assert.equal(await put(W, "abc", { dose: 1 }), 400); assert.equal(await put(W, String(alpha.id), { dose: -5, unit: "mg" }), 400); assert.equal(await put(W, String(alpha.id), { dose: 5, unit: "lb" }), 400); assert.equal(await put(W, String(alpha.id), { nope: 1 }), 400);
+  assert.equal(await put(W, "99999", { dose: 1, unit: "mg" }), 404);
+  assert.equal(await put(W, String(alpha.id), { dose: 15, unit: "mg" }), 200); assert.equal((await cap.listSupplements()).find((x) => x.name === "Alpha")!.dose, 15);
+  assert.equal(await put(W, String(alpha.id), { dose: null }), 200); assert.equal((await cap.listSupplements()).find((x) => x.name === "Alpha")!.dose, null, "a dose can be cleared");
+  await db().delete(events); await db().delete(supplements);
 }
 
 const suppCall = async (token: string | null) => { const res = await api.handleSupplements(call("/api/v1/log/supplements", { method: "GET", token })); return { status: res.status, json: await res.json() }; };
 assert.equal((await suppCall(null)).status, 401); assert.equal((await suppCall(W)).status, 403, "a write-only key cannot list supplements");
-await cap.addSupplement("Magnesium"); const sl = await suppCall(t2.token); assert.equal(sl.status, 200); assert.ok(sl.json.supplements.some((x: { name: string }) => x.name === "Magnesium")); assert.deepEqual(Object.keys(sl.json.supplements[0]), ["name", "dose", "unit"], "name and default dose only");
+await cap.addSupplement("Magnesium"); const sl = await suppCall(t2.token); assert.equal(sl.status, 200); assert.ok(sl.json.supplements.some((x: { name: string }) => x.name === "Magnesium")); assert.deepEqual(Object.keys(sl.json.supplements[0]), ["id", "name", "dose", "unit"], "id, name and default dose only");
 
 await db().delete(events); await db().delete(apiTokens); await db().delete(supplements);
 console.log("CAPTURE OK"); process.exit(0);

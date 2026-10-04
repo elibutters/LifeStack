@@ -139,8 +139,10 @@ Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep
 ### Supplements
 
 A supplement is taken or not on a given day, with a dose: logging it again that day updates the entry instead of adding
-another, and the app's chip toggles it. Default doses (`SUPPLEMENT_PRESETS`) and caffeine amounts come from the server
-(`GET /api/v1/log/options`), so the web app and the iPhone app always show the same buttons. To fold duplicates left
+another, and the app's chip toggles it. A supplement's default dose lives in the database (the `supplements` table, never in the code) and is edited from the
+Quick log on the web or "Edit doses" in the iPhone app (`PUT /api/v1/log/supplements/{id}`); changing it also updates
+today's entry if already taken. Doses and caffeine amounts come from the server (`GET /api/v1/log/options`), so the
+web app and the iPhone app always show the same buttons. To fold duplicates left
 from before this rule, run `pnpm db:dedupe-supplements` (dry run) and add `--apply` to remove them.
 
 ### JSON API for the app

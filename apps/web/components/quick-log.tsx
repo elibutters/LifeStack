@@ -2,14 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addSupplementAction, archiveSupplementAction, logCaffeine, logMood, logSupplement, undoLog, type LogResult } from "@/app/(app)/log/actions";
+import { addSupplementAction, archiveSupplementAction, logCaffeine, logMood, logSupplement, setSupplementDoseAction, undoLog, type LogResult } from "@/app/(app)/log/actions";
 import { Card } from "@/components/card";
 import { CAFFEINE_PRESETS, MOOD_LABELS } from "@/lib/capture-core";
 
 const tap = "min-h-14 rounded-md border border-line bg-surface px-3 text-base transition-colors hover:bg-raised active:bg-raised disabled:opacity-50";
 
 // One tap logs; the confirmation offers Undo for a few seconds, so a mis-tap costs nothing.
-export function QuickLog({ supplements }: { supplements: { id: number; name: string }[] }) {
+export function QuickLog({ supplements }: { supplements: { id: number; name: string; dose: number | null; unit: "mg" | "g" }[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [toast, setToast] = useState<{ id: number; label: string } | null>(null);
@@ -80,8 +80,17 @@ export function QuickLog({ supplements }: { supplements: { id: number; name: str
             {supplements.map((s) => (
               <li key={s.id} className="flex gap-2">
                 <button type="button" disabled={pending || editing} onClick={() => run(() => logSupplement(s.name))} className={`${tap} min-w-0 flex-1 truncate text-left`}>
-                  {s.name}
+                  {s.name}{s.dose != null && !editing ? <span className="ml-2 text-sm text-muted">{s.dose} {s.unit}</span> : null}
                 </button>
+                {editing && (
+                  <DoseEditor
+                    key={`${s.id}-${s.dose}-${s.unit}`}
+                    name={s.name}
+                    dose={s.dose}
+                    unit={s.unit}
+                    onSave={(dose, unit) => start(async () => { if (!(await setSupplementDoseAction(s.id, dose, unit))) setError("Enter a dose between 0 and 100000."); router.refresh(); })}
+                  />
+                )}
                 {editing && (
                   <button
                     type="button"
@@ -129,6 +138,27 @@ export function QuickLog({ supplements }: { supplements: { id: number; name: str
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// Dose for one supplement: saves when you leave the field or change the unit.
+function DoseEditor({ name, dose, unit, onSave }: { name: string; dose: number | null; unit: "mg" | "g"; onSave: (dose: number | null, unit: "mg" | "g") => void }) {
+  const [value, setValue] = useState(dose == null ? "" : String(dose));
+  const [u, setU] = useState<"mg" | "g">(unit);
+  const commit = (v: string, unitNow: "mg" | "g") => {
+    const n = v.trim() === "" ? null : Number(v);
+    if (n !== null && !Number.isFinite(n)) return;
+    if (n === dose && unitNow === unit) return;
+    onSave(n, unitNow);
+  };
+  return (
+    <div className="flex shrink-0 gap-1">
+      <input value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => commit(value, u)} inputMode="decimal" placeholder="Dose" aria-label={`${name} dose`} className="h-14 w-20 rounded-md border border-line bg-surface px-2 text-base outline-none focus:border-accent" />
+      <select value={u} onChange={(e) => { const next = e.target.value as "mg" | "g"; setU(next); commit(value, next); }} aria-label={`${name} unit`} className="h-14 rounded-md border border-line bg-surface px-1 text-base">
+        <option value="mg">mg</option>
+        <option value="g">g</option>
+      </select>
     </div>
   );
 }

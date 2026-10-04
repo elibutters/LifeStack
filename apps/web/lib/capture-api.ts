@@ -1,6 +1,7 @@
 import "server-only";
-import { CAFFEINE_PRESETS, describeEntry, EventInput, presetSupplement, type Scope } from "./capture-core";
-import { deleteLog, insertLog, listSupplements, loadFeed, loadToday } from "./capture";
+import { z } from "zod";
+import { CAFFEINE_PRESETS, describeEntry, EventInput, type Scope } from "./capture-core";
+import { deleteLog, insertLog, listSupplements, loadFeed, loadToday, setSupplementDose } from "./capture";
 import { describeError } from "./errors";
 import { verifyBearer, type VerifiedToken } from "./tokens";
 
@@ -60,10 +61,7 @@ export async function handleToday(req: Request): Promise<Response> {
   }
 }
 
-const supplementJson = (s: { name: string }) => {
-  const p = presetSupplement(s.name);
-  return { name: s.name, dose: p?.dose ?? null, unit: p?.unit ?? null };
-};
+const supplementJson = (s: { id: number; name: string; dose: number | null; unit: string | null }) => ({ id: s.id, name: s.name, dose: s.dose, unit: s.unit });
 
 // The supplements and caffeine drinks offered in the quick log, with their default amounts, so a client shows
 // the same buttons and doses as the web app instead of keeping its own list.
@@ -115,6 +113,28 @@ export async function handleDeleteEntry(req: Request, rawId: string): Promise<Re
     return (await deleteLog(id)) ? json({ deleted: true }) : json({ error: "not_found" }, 404);
   } catch (e) {
     console.error("capture: could not delete", describeError(e));
+    return json({ error: "server_error" }, 500);
+  }
+}
+
+const DoseBody = z.object({ dose: z.number().min(0).max(100_000).nullable(), unit: z.enum(["mg", "g"]).nullable().optional() });
+
+// Sets a supplement's default dose (and today's, if already taken). A null dose clears it.
+export async function handleSetDose(req: Request, rawId: string): Promise<Response> {
+  const token = await authenticate(req, "log:write");
+  if (token instanceof Response) return token;
+  const id = Number(rawId);
+  if (!Number.isSafeInteger(id) || id < 1) return json({ error: "invalid" }, 400);
+  const text = await req.text();
+  if (text.length > MAX_BODY) return json({ error: "too_large" }, 413);
+  let body: unknown;
+  try { body = JSON.parse(text); } catch { return json({ error: "invalid_json" }, 400); }
+  const parsed = DoseBody.safeParse(body);
+  if (!parsed.success) return json({ error: "invalid", issues: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) }, 400);
+  try {
+    return (await setSupplementDose(id, parsed.data.dose, parsed.data.unit ?? null)) ? json({ updated: true }) : json({ error: "not_found" }, 404);
+  } catch (e) {
+    console.error("capture: could not set the dose", describeError(e));
     return json({ error: "server_error" }, 500);
   }
 }

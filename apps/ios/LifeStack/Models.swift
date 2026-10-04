@@ -114,7 +114,7 @@ struct HistoryEntry: Decodable, Equatable, Identifiable {
 
 // What the quick log offers, with default amounts, as the server defines it.
 struct LogOptions: Decodable, Equatable {
-    struct Supplement: Decodable, Equatable, Hashable { let name: String; let dose: Double?; let unit: String? }
+    struct Supplement: Decodable, Equatable, Hashable { let id: Int; let name: String; let dose: Double?; let unit: String? }
     struct Drink: Decodable, Equatable, Hashable { let drink: String; let mg: Double }
     let supplements: [Supplement]
     let caffeine: [Drink]
@@ -125,14 +125,6 @@ extension LogOptions.Supplement {
         guard let dose, let unit else { return nil }
         return "\(dose == dose.rounded() ? String(Int(dose)) : String(dose)) \(unit)"
     }
-}
-
-// A confirmation with Undo. `redo` is set when the action removed something, so Undo puts it back.
-struct Logged: Equatable {
-    let id: Int
-    let label: String
-    var redo: [String: Any]? = nil
-    static func == (a: Logged, b: Logged) -> Bool { a.id == b.id && a.label == b.label }
 }
 
 enum Format {

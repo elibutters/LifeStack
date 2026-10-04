@@ -5,24 +5,22 @@ private let moodLabels = [1: "Low", 2: "Meh", 3: "Okay", 4: "Good", 5: "Great"]
 struct TodayView: View {
     @Environment(AppModel.self) private var model
     @State private var tapped = 0
+    @State private var editingDoses = false
 
     private var drinks: [LogOptions.Drink] { model.options?.caffeine ?? [] }
     private var takenCount: Int { (model.options?.supplements ?? []).filter { model.takenToday($0.name) != nil }.count }
     private let two = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Screen(title: "Log", refresh: { await model.refresh() }) {
-                ErrorBanner(text: model.message)
-                summary
-                moodCard
-                caffeineCard
-                supplementCard
-                todayList
-            }
-            if let t = model.toast { toast(t).padding(.top, 54).transition(.move(edge: .top).combined(with: .opacity)) }
+        Screen(title: "Log", refresh: { await model.refresh() }) {
+            ErrorBanner(text: model.message)
+            summary
+            moodCard
+            caffeineCard
+            supplementCard
+            todayList
         }
-        .animation(.spring(duration: 0.3), value: model.toast)
+        .sheet(isPresented: $editingDoses) { DoseEditor(supplements: model.options?.supplements ?? []) }
         .sensoryFeedback(.success, trigger: tapped)
         .task { await model.refresh() }
     }
@@ -97,6 +95,10 @@ struct TodayView: View {
                     .disabled(model.pending)
                 }
             }
+            if !(model.options?.supplements ?? []).isEmpty {
+                Button("Edit doses") { editingDoses = true }
+                    .font(.footnote.weight(.medium)).foregroundStyle(Theme.sky).buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
     }
 
@@ -119,19 +121,6 @@ struct TodayView: View {
                 }
             }
         }
-    }
-
-    private func toast(_ t: Logged) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good)
-            Text(t.label).font(.subheadline.weight(.medium)).lineLimit(1)
-            Spacer(minLength: 8)
-            Button("Undo") { Task { await model.undo(t) } }.font(.subheadline.weight(.semibold)).foregroundStyle(Theme.sky)
-        }
-        .padding(.horizontal, 14).frame(height: 46).frame(maxWidth: .infinity)
-        .background(Theme.bg.opacity(0.88), in: .rect(cornerRadius: Theme.rs))
-        .glassEffect(.regular, in: .rect(cornerRadius: Theme.rs))
-        .padding(.horizontal, 14)
     }
 
     private func send(_ event: [String: Any], _ label: String) {

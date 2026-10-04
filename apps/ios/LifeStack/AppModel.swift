@@ -11,9 +11,7 @@ final class AppModel {
     var signedIn: Bool
     var today: TodaySummary?
     var history: [HistoryEntry] = []
-    var toast: Logged?
     var pending = false
-    private var toastTask: Task<Void, Never>?
     var options: LogOptions?
     var message: String?
     var busy = false
@@ -66,26 +64,15 @@ final class AppModel {
         if let feed = await feed { history = feed }
     }
 
-    // One tap logs. The confirmation stays for a few seconds with Undo, like the web app, and more taps are
-    // ignored while a request is in flight so a double tap cannot log twice.
+    // One tap logs. More taps are ignored while a request is in flight, so a double tap cannot log twice.
     func log(_ event: [String: Any], label: String) async -> Bool {
         guard let client, !pending else { return false }
         pending = true; defer { pending = false }
         do {
-            let id = try await client.log(event)
-            show(Logged(id: id, label: "Logged \(label)"))
+            _ = try await client.log(event)
             await refresh()
             return true
         } catch { handle(error); return false }
-    }
-
-    func undo(_ entry: Logged) async {
-        guard let client else { return }
-        toastTask?.cancel(); toast = nil
-        do {
-            if let redo = entry.redo { _ = try await client.log(redo) } else { try await client.deleteEntry(entry.id) }
-            await refresh()
-        } catch { handle(error) }
     }
 
     // Today's entry for a supplement, if it was taken: a supplement is taken or not, never counted.
@@ -100,29 +87,24 @@ final class AppModel {
         do {
             if let taken = takenToday(s.name) {
                 try await client.deleteEntry(taken.id)
-                var redo: [String: Any] = ["type": "supplement", "name": s.name]
-                if let d = s.dose { redo["dose"] = d }; if let u = s.unit { redo["unit"] = u }
-                show(Logged(id: taken.id, label: "\(s.name) removed", redo: redo))
             } else {
                 var event: [String: Any] = ["type": "supplement", "name": s.name]
                 if let d = s.dose { event["dose"] = d }; if let u = s.unit { event["unit"] = u }
-                let id = try await client.log(event)
-                show(Logged(id: id, label: "Logged \(s.name)\(s.doseText.map { " \($0)" } ?? "")"))
+                _ = try await client.log(event)
             }
             await refresh()
             return true
         } catch { handle(error); return false }
     }
 
+    func setDose(_ s: LogOptions.Supplement, dose: Double?, unit: String) async {
+        guard let client else { return }
+        do { try await client.setDose(id: s.id, dose: dose, unit: unit) } catch { handle(error) }
+    }
+
     func remove(_ entry: HistoryEntry) async {
         guard let client else { return }
         do { try await client.deleteEntry(entry.id); await refresh() } catch { handle(error) }
-    }
-
-    private func show(_ entry: Logged) {
-        toastTask?.cancel()
-        toast = entry
-        toastTask = Task { try? await Task.sleep(for: .seconds(6)); if !Task.isCancelled { toast = nil } }
     }
 
     // A rejected key means this device was revoked or the password changed: go back to sign in.

@@ -23,6 +23,11 @@ export async function insertLog(
   // A supplement is taken or not on a given day: logging it again updates that day's entry (for example a new dose)
   // instead of adding another, so the same supplement can never show up twice in a day.
   if (input.type === "supplement") {
+    // No dose given: use the supplement's own default from the supplements table.
+    if (input.dose == null) {
+      const [def] = await db().select({ dose: supplements.dose, unit: supplements.unit }).from(supplements).where(and(eq(supplements.active, true), sql`lower(${supplements.name}) = ${input.name.trim().toLowerCase()}`)).limit(1);
+      if (def?.dose != null) input = { ...input, dose: def.dose, unit: input.unit ?? (def.unit === "g" ? "g" : "mg") };
+    }
     const day = todayInTz(when.ts);
     const [hit] = await db()
       .select({ id: events.id })
@@ -60,6 +65,18 @@ export async function loadFeed(limit = 100): Promise<Entry[]> {
 export async function deleteLog(id: number): Promise<boolean> {
   const gone = await db().delete(events).where(and(eq(events.id, id), isCapture)).returning({ id: events.id });
   return gone.length > 0;
+}
+
+// Sets a supplement's default dose and, if it was already taken today, today's dose too.
+export async function setSupplementDose(id: number, dose: number | null, unit: "mg" | "g" | null, now = new Date()): Promise<boolean> {
+  const [row] = await db().update(supplements).set({ dose, unit: dose == null ? null : (unit ?? "mg") }).where(eq(supplements.id, id)).returning({ name: supplements.name });
+  if (!row) return false;
+  const day = todayInTz(now);
+  await db()
+    .update(events)
+    .set({ valueNum: dose, payload: dose == null ? {} : { unit: unit ?? "mg" } })
+    .where(and(eq(events.key, "supplement.taken"), sql`lower(${events.valueText}) = ${row.name.toLowerCase()}`, gte(events.ts, startOfDay(day)), lt(events.ts, startOfDay(addDays(day, 1)))));
+  return true;
 }
 
 export async function listSupplements() {

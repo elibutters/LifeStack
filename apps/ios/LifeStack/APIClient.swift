@@ -138,6 +138,12 @@ struct APIClient {
         return r.id
     }
 
+    // Sets a supplement's default dose (and today's, if it was taken). A nil dose clears it.
+    func setDose(id: Int, dose: Double?, unit: String) async throws {
+        let body: [String: Any] = ["dose": dose as Any? ?? NSNull(), "unit": unit]
+        _ = try await request("api/v1/log/supplements/\(id)", method: "PUT", body: try JSONSerialization.data(withJSONObject: body))
+    }
+
     func options() async throws -> LogOptions { try await get("api/v1/log/options") }
 
     func history(limit: Int = 60) async throws -> [HistoryEntry] {

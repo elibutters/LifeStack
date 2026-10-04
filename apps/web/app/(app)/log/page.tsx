@@ -33,7 +33,7 @@ export default async function QuickLogPage() {
           </div>
         </dl>
       </Card>
-      <QuickLog supplements={supplements.map((s) => ({ id: s.id, name: s.name }))} />
+      <QuickLog supplements={supplements.map((s) => ({ id: s.id, name: s.name, dose: s.dose, unit: s.unit === "g" ? ("g" as const) : ("mg" as const) }))} />
     </div>
   );
 }
