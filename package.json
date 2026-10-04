@@ -16,6 +16,7 @@
     "db:down": "docker compose -f infra/docker-compose.yml down",
     "db:seed": "pnpm --filter @lifestack/db seed",
     "test": "bash scripts/test.sh",
+    "backup:restore": "pnpm --filter @lifestack/db exec tsx --env-file-if-exists=../../.env ../../scripts/backup-restore.mts",
     "db:seed-finance": "pnpm --filter @lifestack/db seed-finance"
   }
 }

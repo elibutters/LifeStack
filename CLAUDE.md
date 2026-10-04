@@ -39,6 +39,8 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Third-party tokens are stored only encrypted (`lib/crypto.ts`, key in `ENCRYPTION_KEY`).
   Outlook is linked through Microsoft Graph for personal accounts only, with read-only scope.
   Work or employer calendars are never connected.
+- Backups: `/api/cron/backup` writes an encrypted full dump to private Vercel Blob daily. New tables are
+  included automatically; a new table that must not be backed up goes in `SKIP` in `lib/backup-db.ts`.
 - Never cache authenticated responses in the service worker.
 - Scheduled work: Vercel's free plan allows daily cron only. Sources sync on a daily
   cron and on demand when the app is opened or an agent asks; do not assume a
