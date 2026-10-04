@@ -67,7 +67,8 @@ async function authenticate(rawEmail: string | undefined, given: string, key: st
   }
   if (!existing) {
     // First sign-in after OWNER_EMAIL is set: it must match, and it creates the owner's account.
-    const matches = email === ownerEmail && (await safeEqual(given, process.env.APP_PASSWORD!, key));
+    const first = process.env.APP_PASSWORD ?? "";
+    const matches = email === ownerEmail && first.length > 0 && (await safeEqual(given, first, key));
     return matches ? (await createOwner(ownerEmail!, given)).id : false;
   }
   const user = validEmail(email) ? await findUserByEmail(email) : null;

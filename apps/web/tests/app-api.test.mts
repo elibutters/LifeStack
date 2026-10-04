@@ -87,6 +87,29 @@ assert.equal((await tok.verifyBearer(`Bearer ${ownerKey}`)).ok, false); assert.e
 // sessions name their user
 const sk2 = process.env.SESSION_SECRET + "\0" + process.env.APP_PASSWORD; const c = await sess.createSession(sk2, 7);
 assert.equal(await sess.sessionUserId(c, sk2), 7); assert.equal(await sess.sessionUserId(c.replace(/^7/, "8"), sk2), null, "the user id cannot be edited"); assert.equal(await sess.sessionUserId(c.split(".").slice(1).join("."), sk2), null, "the old two-part format is refused");
+
+// ---- changing your own password and email (the Security page)
+await db().delete(authAttempts);
+const ownerRow = (await usr.findUserByEmail("owner@example.com"))!;
+const shortcut = (await tok.createToken("my shortcut", "shortcut", ["log:write"], ownerRow.id)).token;
+const phone = (await (await post({ email: "owner@example.com", password: PW, device: "Phone" })).json() as { token: string }).token;
+await usr.changePassword(ownerRow.id, "a brand new passphrase");
+assert.equal((await tok.verifyBearer(`Bearer ${phone}`)).ok, false, "changing the password signs the phone out");
+assert.equal((await tok.verifyBearer(`Bearer ${shortcut}`)).ok, true, "but shortcut keys keep working");
+assert.equal((await tok.verifyBearer(`Bearer ${secondKey}`)).ok, true, "and nobody else's keys are touched");
+assert.equal((await post({ email: "owner@example.com", password: PW })).status, 401, "the old password stops working");
+assert.equal((await post({ email: "owner@example.com", password: "a brand new passphrase" })).status, 200);
+assert.equal(await usr.changeEmail(ownerRow.id, "  New.Owner@Example.com "), "ok"); assert.equal((await usr.findUserById(ownerRow.id))!.email, "new.owner@example.com");
+assert.equal(await usr.changeEmail(ownerRow.id, "second@example.com"), "taken", "an email in use cannot be taken"); assert.equal(await usr.changeEmail(ownerRow.id, "not an email"), "invalid");
+assert.equal(await usr.changeEmail(ownerRow.id, "new.owner@example.com"), "ok", "keeping your own email is fine");
+assert.equal((await post({ email: "new.owner@example.com", password: "a brand new passphrase" })).status, 200); assert.equal((await post({ email: "owner@example.com", password: "a brand new passphrase" })).status, 401);
+
+// sessions are signed by the secret alone once accounts are on, so changing the password in the app never needs a redeploy
+const keepPw = process.env.APP_PASSWORD; process.env.APP_PASSWORD = "short";
+assert.equal(sess.sessionKey(), process.env.SESSION_SECRET, "accounts: the signing key does not depend on APP_PASSWORD");
+delete process.env.OWNER_EMAIL; assert.equal(sess.sessionKey(), null, "no accounts: a short APP_PASSWORD still fails closed");
+process.env.APP_PASSWORD = keepPw; assert.equal(sess.sessionKey(), `${process.env.SESSION_SECRET}\0${keepPw}`, "no accounts: the original key is unchanged");
+process.env.OWNER_EMAIL = "Owner@Example.com";
 delete process.env.OWNER_EMAIL;
 
 await db().delete(events); await db().delete(apiTokens); await db().delete(users); await db().delete(authAttempts);

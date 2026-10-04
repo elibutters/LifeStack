@@ -4,16 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { logout } from "@/app/login/actions";
-import { ChevronUpIcon, KeyIcon, LinkIcon, SignOutIcon, UserIcon } from "./icons";
+import { ChevronUpIcon, KeyIcon, LinkIcon, ShieldIcon, SignOutIcon, UserIcon } from "./icons";
 
 const ITEMS = [
   { href: "/profile", label: "Profile", Icon: UserIcon },
   { href: "/connections", label: "Connections", Icon: LinkIcon },
   { href: "/api-keys", label: "API keys", Icon: KeyIcon },
+  { href: "/security", label: "Security", Icon: ShieldIcon },
 ] as const;
 
 export function onAccountPath(pathname: string) {
-  return pathname.startsWith("/profile") || pathname.startsWith("/connections") || pathname.startsWith("/api-keys") || pathname.startsWith("/settings");
+  return pathname.startsWith("/profile") || pathname.startsWith("/connections") || pathname.startsWith("/api-keys") || pathname.startsWith("/security") || pathname.startsWith("/settings");
 }
 
 export function ProfileMenu({
