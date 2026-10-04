@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
-import { addSupplement, archiveSupplement, deleteLog, insertLog, setSupplementDose } from "@/lib/capture";
+import { addSupplement, archiveSupplement, deleteLog, deleteTodaySupplement, insertLog, setSupplementDose } from "@/lib/capture";
 import { AGENT_SCOPES, describeEntry, EventInput, SCOPES, type Scope } from "@/lib/capture-core";
 import { createToken, revokeToken, TOKEN_KINDS, type TokenKind } from "@/lib/tokens";
 
@@ -34,6 +34,12 @@ export async function logCaffeine(drink: string, mg?: number): Promise<LogResult
 
 export async function logSupplement(name: string): Promise<LogResult> {
   return record({ type: "supplement", name });
+}
+
+export async function unlogSupplement(name: string): Promise<void> {
+  await requireSession();
+  await deleteTodaySupplement(name);
+  revalidatePath("/log", "layout");
 }
 
 export async function undoLog(id: number): Promise<boolean> {
