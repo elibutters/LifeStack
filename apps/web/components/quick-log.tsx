@@ -2,14 +2,24 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addSupplementAction, archiveSupplementAction, logCaffeine, logMood, logSupplement, setSupplementDoseAction, undoLog, type LogResult } from "@/app/(app)/log/actions";
+import { addSupplementAction, archiveSupplementAction, logCaffeine, logMood, logSupplement, setSupplementDoseAction, unlogSupplement, undoLog, type LogResult } from "@/app/(app)/log/actions";
 import { Card } from "@/components/card";
 import { CAFFEINE_PRESETS, MOOD_LABELS } from "@/lib/capture-core";
 
 const tap = "min-h-14 rounded-md border border-line bg-surface px-3 text-base transition-colors hover:bg-raised active:bg-raised disabled:opacity-50";
+const linkBtn = "min-h-11 px-2 text-sm text-accent";
+const drinkKey = (name: string) => name.trim().toLowerCase();
 
 // One tap logs; the confirmation offers Undo for a few seconds, so a mis-tap costs nothing.
-export function QuickLog({ supplements }: { supplements: { id: number; name: string; dose: number | null; unit: "mg" | "g" }[] }) {
+export function QuickLog({
+  supplements,
+  taken,
+  caffeine,
+}: {
+  supplements: { id: number; name: string; dose: number | null; unit: "mg" | "g" }[];
+  taken: string[];
+  caffeine: { id: number; drink: string }[];
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [toast, setToast] = useState<{ id: number; label: string } | null>(null);
@@ -17,8 +27,20 @@ export function QuickLog({ supplements }: { supplements: { id: number; name: str
   const [editing, setEditing] = useState(false);
   const [mg, setMg] = useState("");
   const [name, setName] = useState("");
+  const [justLogged, setJustLogged] = useState<string[]>([]);
+  const [cleared, setCleared] = useState<string[]>([]);
+  const [addedDrinks, setAddedDrinks] = useState<{ id: number; drink: string }[]>([]);
+  const [removedDrinks, setRemovedDrinks] = useState<number[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const selected = new Set([...taken.map(drinkKey).filter((n) => !cleared.includes(n)), ...justLogged.filter((n) => !cleared.includes(n))]);
+  const anySelected = supplements.some((s) => selected.has(drinkKey(s.name)));
+  const drinkLogs = [
+    ...caffeine.filter((d) => !removedDrinks.includes(d.id)),
+    ...addedDrinks.filter((d) => !removedDrinks.includes(d.id) && !caffeine.some((s) => s.id === d.id)),
+  ];
+  const drinkCount = (drink: string) => drinkLogs.filter((d) => drinkKey(d.drink) === drinkKey(drink)).length;
 
   function show(r: LogResult) {
     if (timer.current) clearTimeout(timer.current);
@@ -36,6 +58,49 @@ export function QuickLog({ supplements }: { supplements: { id: number; name: str
       show(await fn());
       router.refresh();
     });
+  const addDrink = (drink: string) =>
+    start(async () => {
+      const r = await logCaffeine(drink);
+      if (r.ok) setAddedDrinks((a) => (a.some((x) => x.id === r.id) ? a : [...a, { id: r.id, drink }]));
+      show(r);
+      router.refresh();
+    });
+  const removeDrink = (drink: string) => {
+    const last = [...drinkLogs].reverse().find((d) => drinkKey(d.drink) === drinkKey(drink));
+    if (!last) return;
+    start(async () => {
+      setRemovedDrinks((ids) => (ids.includes(last.id) ? ids : [...ids, last.id]));
+      setToast((t) => (t && t.id === last.id ? null : t));
+      await undoLog(last.id);
+      router.refresh();
+    });
+  };
+  const logSupp = (s: { name: string }) => {
+    const key = drinkKey(s.name);
+    if (selected.has(key)) {
+      start(async () => {
+        setCleared((c) => (c.includes(key) ? c : [...c, key]));
+        setJustLogged((n) => n.filter((x) => x !== key));
+        await unlogSupplement(s.name);
+        router.refresh();
+      });
+      return;
+    }
+    setCleared((c) => c.filter((x) => x !== key));
+    setJustLogged((n) => (n.includes(key) ? n : [...n, key]));
+    run(() => logSupplement(s.name));
+  };
+  const deselectAll = () => {
+    const names = supplements.filter((s) => selected.has(drinkKey(s.name))).map((s) => s.name);
+    if (!names.length) return;
+    start(async () => {
+      const keys = names.map(drinkKey);
+      setCleared((c) => [...new Set([...c, ...keys])]);
+      setJustLogged((n) => n.filter((x) => !keys.includes(x)));
+      for (const item of names) await unlogSupplement(item);
+      router.refresh();
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -51,14 +116,28 @@ export function QuickLog({ supplements }: { supplements: { id: number; name: str
       </Card>
 
       <Card title="Caffeine">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {CAFFEINE_PRESETS.map((p) => (
-            <button key={p.drink} type="button" disabled={pending} onClick={() => run(() => logCaffeine(p.drink))} className={`${tap} flex flex-col items-start justify-center py-2 text-left`}>
-              <span>{p.drink}</span>
-              <span className="text-xs text-muted">about {p.mg} mg</span>
-            </button>
-          ))}
-        </div>
+        <ul className="space-y-2">
+          {CAFFEINE_PRESETS.map((p) => {
+            const n = drinkCount(p.drink);
+            return (
+              <li key={p.drink} className="flex items-center gap-2 rounded-md border border-line bg-surface px-3">
+                <div className="min-w-0 flex-1 py-2">
+                  <div>{p.drink}</div>
+                  <div className="text-xs text-muted">{p.mg} mg</div>
+                </div>
+                <div className="flex items-center">
+                  <button type="button" aria-label={`Remove a ${p.drink}`} disabled={pending || n === 0} onClick={() => removeDrink(p.drink)} className="grid h-11 w-11 place-items-center rounded-md text-lg hover:bg-raised disabled:opacity-40">
+                    −
+                  </button>
+                  <span className="w-6 text-center font-semibold tabular-nums">{n}</span>
+                  <button type="button" aria-label={`Add a ${p.drink}`} disabled={pending} onClick={() => addDrink(p.drink)} className="grid h-11 w-11 place-items-center rounded-md text-lg hover:bg-raised disabled:opacity-40">
+                    +
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
         <form
           className="mt-3 flex gap-2"
           onSubmit={(e) => {
@@ -74,12 +153,28 @@ export function QuickLog({ supplements }: { supplements: { id: number; name: str
         </form>
       </Card>
 
-      <Card title="Supplements" action={supplements.length ? <button type="button" onClick={() => setEditing((e) => !e)} className="min-h-11 px-2 text-sm text-accent">{editing ? "Done" : "Edit"}</button> : undefined}>
+      <Card
+        title="Supplements"
+        action={
+          <span className="flex items-center">
+            {anySelected && (
+              <button type="button" disabled={pending || editing} onClick={deselectAll} className={linkBtn}>
+                Deselect all
+              </button>
+            )}
+            {supplements.length ? (
+              <button type="button" onClick={() => setEditing((e) => !e)} className={linkBtn}>
+                {editing ? "Done" : "Edit"}
+              </button>
+            ) : null}
+          </span>
+        }
+      >
         {supplements.length > 0 && (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {supplements.map((s) => (
               <li key={s.id} className="flex gap-2">
-                <button type="button" disabled={pending || editing} onClick={() => run(() => logSupplement(s.name))} className={`${tap} min-w-0 flex-1 truncate text-left`}>
+                <button type="button" disabled={pending || editing} aria-pressed={selected.has(drinkKey(s.name))} onClick={() => logSupp(s)} className={`${tap} min-w-0 flex-1 truncate text-left ${selected.has(drinkKey(s.name)) ? "ring-2 ring-fg" : ""}`}>
                   {s.name}{s.dose != null && !editing ? <span className="ml-2 text-sm text-muted">{s.dose} {s.unit}</span> : null}
                 </button>
                 {editing && (
@@ -131,7 +226,14 @@ export function QuickLog({ supplements }: { supplements: { id: number; name: str
           <span>Logged: {toast.label}</span>
           <button
             type="button"
-            onClick={() => start(async () => { await undoLog(toast.id); setToast(null); router.refresh(); })}
+            onClick={() =>
+              start(async () => {
+                await undoLog(toast.id);
+                setRemovedDrinks((ids) => (ids.includes(toast.id) ? ids : [...ids, toast.id]));
+                setToast(null);
+                router.refresh();
+              })
+            }
             className="min-h-11 text-sm text-accent"
           >
             Undo

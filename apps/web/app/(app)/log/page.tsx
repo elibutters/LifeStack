@@ -25,7 +25,7 @@ export default async function QuickLogPage() {
           </div>
           <div>
             <dt className="text-xs text-muted">Caffeine</dt>
-            <dd>{caffeine.count ? `${caffeine.count} drink${caffeine.count === 1 ? "" : "s"}, about ${caffeine.mg} mg${caffeine.lastAt ? `, last at ${fmtTime(caffeine.lastAt)}` : ""}` : "None yet"}</dd>
+            <dd>{caffeine.count ? `${caffeine.count} drink${caffeine.count === 1 ? "" : "s"}, ${caffeine.mg} mg${caffeine.lastAt ? `, last at ${fmtTime(caffeine.lastAt)}` : ""}` : "None yet"}</dd>
           </div>
           <div>
             <dt className="text-xs text-muted">Supplements</dt>
@@ -33,7 +33,11 @@ export default async function QuickLogPage() {
           </div>
         </dl>
       </Card>
-      <QuickLog supplements={supplements.map((s) => ({ id: s.id, name: s.name, dose: s.dose, unit: s.unit === "g" ? ("g" as const) : ("mg" as const) }))} />
+      <QuickLog
+        supplements={supplements.map((s) => ({ id: s.id, name: s.name, dose: s.dose, unit: s.unit === "g" ? ("g" as const) : ("mg" as const) }))}
+        taken={taken.map((s) => s.name)}
+        caffeine={today.entries.filter((e) => e.key === "caffeine").map((e) => ({ id: e.id, drink: e.valueText ?? "Caffeine" }))}
+      />
     </div>
   );
 }

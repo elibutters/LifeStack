@@ -53,7 +53,8 @@ export async function loadToday(now = new Date()) {
     .select()
     .from(events)
     .where(and(isCapture, gte(events.ts, startOfDay(today)), lt(events.ts, startOfDay(addDays(today, 1)))));
-  return { date: today, summary: summarizeToday(rows.map(toEntry)) };
+  const entries = rows.map(toEntry).sort((a, b) => a.ts.getTime() - b.ts.getTime() || a.id - b.id);
+  return { date: today, summary: summarizeToday(entries), entries };
 }
 
 export async function loadFeed(limit = 100): Promise<Entry[]> {
@@ -65,6 +66,24 @@ export async function loadFeed(limit = 100): Promise<Entry[]> {
 export async function deleteLog(id: number): Promise<boolean> {
   const gone = await db().delete(events).where(and(eq(events.id, id), isCapture)).returning({ id: events.id });
   return gone.length > 0;
+}
+
+export async function deleteTodaySupplement(name: string, now = new Date()): Promise<number> {
+  const clean = name.trim();
+  if (!clean) return 0;
+  const today = todayInTz(now);
+  const gone = await db()
+    .delete(events)
+    .where(
+      and(
+        eq(events.key, "supplement.taken"),
+        sql`lower(${events.valueText}) = ${clean.toLowerCase()}`,
+        gte(events.ts, startOfDay(today)),
+        lt(events.ts, startOfDay(addDays(today, 1))),
+      ),
+    )
+    .returning({ id: events.id });
+  return gone.length;
 }
 
 // Sets a supplement's default dose and, if it was already taken today, today's dose too.
