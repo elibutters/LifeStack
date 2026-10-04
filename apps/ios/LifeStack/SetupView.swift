@@ -33,29 +33,29 @@ struct SetupView: View {
 
                 Button(action: submit) {
                     HStack(spacing: 8) {
-                        if model.busy { ProgressView().tint(.white) }
+                        if model.busy { ProgressView() }
                         Text("Sign in").font(.headline)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 54)
-                    .foregroundStyle(.white)
-                    .background(accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .opacity(ready ? 1 : 0.45)
+                    .frame(maxWidth: .infinity, minHeight: 28)
                 }
+                .buttonStyle(.glassProminent)
+                .tint(Theme.blue)
+                .controlSize(.large)
                 .disabled(!ready)
                 .padding(.top, 8)
             }
             .padding(.horizontal, 24)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Theme.bg.ignoresSafeArea())
+        .background(Ambient())
         .onAppear { if address.isEmpty { address = model.address } }
     }
 
     private func field<F: View>(_ view: F) -> some View {
         view
             .textInputAutocapitalization(.never).autocorrectionDisabled()
-            .padding(.horizontal, 16).frame(height: 54)
-            .background(Theme.raised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 14).frame(height: 48)
+            .glassEffect(.regular, in: .rect(cornerRadius: Theme.rs))
     }
 
     private func submit() {

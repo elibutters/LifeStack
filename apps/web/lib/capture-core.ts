@@ -24,7 +24,7 @@ const shared = {
 export const EventInput = z.discriminatedUnion("type", [
   z.object({ type: z.literal("mood"), value: z.number().int().min(1).max(5), note: z.string().trim().max(200).optional(), ...shared }),
   z.object({ type: z.literal("caffeine"), drink: z.string().trim().min(1).max(40).default("Coffee"), mg: z.number().min(0).max(1000).optional(), ...shared }),
-  z.object({ type: z.literal("supplement"), name: z.string().trim().min(1).max(60), ...shared }),
+  z.object({ type: z.literal("supplement"), name: z.string().trim().min(1).max(60), dose: z.number().min(0).max(100_000).optional(), unit: z.enum(["mg", "g"]).optional(), ...shared }),
 ]);
 export type EventInputT = z.infer<typeof EventInput>;
 
@@ -72,17 +72,24 @@ export function toRow(input: EventInputT, ts: Date, source: string, sourceId: st
       const mg = input.mg ?? presetMg(input.drink);
       return { ts, domain: "log", key: "caffeine", valueNum: mg, valueText: input.drink, payload: { drink: input.drink, estimated: input.mg == null && mg != null }, source, sourceId };
     }
-    case "supplement":
-      return { ts, domain: "supplement", key: "supplement.taken", valueNum: 1, valueText: input.name, payload: {}, source, sourceId };
+    case "supplement": {
+      // The default dose is looked up in the supplements table by the caller; here only what was given is used.
+      const dose = input.dose ?? null;
+      const unit = input.unit ?? (dose != null ? "mg" : null);
+      return { ts, domain: "supplement", key: "supplement.taken", valueNum: dose, valueText: input.name, payload: dose != null && unit ? { unit } : {}, source, sourceId };
+    }
   }
 }
 
-export type Entry = { id: number; ts: Date; key: string; valueNum: number | null; valueText: string | null; source: string };
+export type Entry = { id: number; ts: Date; key: string; valueNum: number | null; valueText: string | null; source: string; unit?: string | null };
 
-export function describeEntry(e: Pick<Entry, "key" | "valueNum" | "valueText">): string {
+export function describeEntry(e: Pick<Entry, "key" | "valueNum" | "valueText" | "unit">): string {
   if (e.key === "mood") return `Mood ${e.valueNum ?? "?"}${e.valueNum && MOOD_LABELS[e.valueNum] ? ` (${MOOD_LABELS[e.valueNum]})` : ""}${e.valueText ? `: ${e.valueText}` : ""}`;
   if (e.key === "caffeine") return `${e.valueText ?? "Caffeine"}${e.valueNum != null ? ` (${Math.round(e.valueNum)} mg)` : ""}`;
-  if (e.key === "supplement.taken") return e.valueText ?? "Supplement";
+  if (e.key === "supplement.taken") {
+    const name = e.valueText ?? "Supplement";
+    return e.valueNum != null && e.unit ? `${name} (${e.valueNum} ${e.unit})` : name;
+  }
   return e.key;
 }
 

@@ -2,6 +2,8 @@ import SwiftUI
 
 // One look for the whole app: near-black canvas, soft cards, big numbers, and the blue-to-violet of the logo.
 enum Theme {
+    static let r: CGFloat = 12   // cards
+    static let rs: CGFloat = 9   // buttons and chips
     static let bg = Color(red: 0.039, green: 0.039, blue: 0.043)
     static let card = Color(red: 0.082, green: 0.082, blue: 0.094)
     static let raised = Color(red: 0.118, green: 0.118, blue: 0.133)
@@ -22,7 +24,7 @@ struct Card<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             if title != nil || trailing != nil {
                 HStack {
                     if let title { Text(title.uppercased()).font(.caption.weight(.semibold)).tracking(0.8).foregroundStyle(Theme.muted) }
@@ -32,10 +34,9 @@ struct Card<Content: View>: View {
             }
             content
         }
-        .padding(18)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Theme.line, lineWidth: 1))
+        .glassEffect(.regular, in: .rect(cornerRadius: Theme.r))
     }
 }
 
@@ -52,19 +53,38 @@ struct Screen<Content: View, Trailing: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) { content }
-                .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 110)
+            VStack(spacing: 10) { content }
+                .padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 110)
         }
         .scrollIndicators(.hidden)
         .refreshable { await refresh?() }
-        .background(Theme.bg.ignoresSafeArea())
         .screenHeader(title) { trailing }
+        .background(Ambient())
     }
 }
 
 extension Screen where Trailing == EmptyView {
     init(title: String, refresh: (() async -> Void)? = nil, @ViewBuilder content: () -> Content) {
         self.init(title: title, refresh: refresh, trailing: { EmptyView() }, content: content)
+    }
+}
+
+// A near-black canvas with two soft colour glows, so the glass cards have something to refract.
+struct Ambient: View {
+    var body: some View {
+        ZStack {
+            Theme.bg
+            Circle().fill(Theme.blue.opacity(0.28)).frame(width: 340).blur(radius: 110).offset(x: -150, y: -240)
+            Circle().fill(Theme.violet.opacity(0.24)).frame(width: 320).blur(radius: 110).offset(x: 160, y: 120)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+extension View {
+    // A compact glass button surface; `tint` marks a selected or taken state.
+    func chip(_ tint: Color? = nil) -> some View {
+        glassEffect(tint.map { Glass.regular.tint($0).interactive() } ?? Glass.regular.interactive(), in: .rect(cornerRadius: Theme.rs))
     }
 }
 
@@ -92,7 +112,7 @@ struct ErrorBanner: View {
     var body: some View {
         if let text {
             Text(text).font(.subheadline).foregroundStyle(Theme.bad).frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14).background(Theme.bad.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(14).background(Theme.bad.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
         }
     }
 }

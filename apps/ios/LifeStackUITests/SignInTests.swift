@@ -2,6 +2,7 @@ import XCTest
 
 // Signs in against a development server and checks that the Today screen loads. Needs a throwaway key:
 //   TEST_RUNNER_LS_EMAIL=... TEST_RUNNER_LS_PASSWORD=... xcodebuild test ... API_BASE_URL=http:/\$()/localhost:3000
+// The development database needs a supplement named Alpha (any dose) and three others, so "1 of 4" holds.
 // Skipped when the variables are not set. The credentials are the development server's. Run it on a
 // simulator whose Keychain is reset (`xcrun simctl keychain <device> reset`) so the app starts signed out.
 final class SignInTests: XCTestCase {
@@ -36,15 +37,28 @@ final class SignInTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["LAST NIGHT"].waitForExistence(timeout: 20), "sleep nights load")
         app.tabBars.buttons["Log"].tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Coffee'")).firstMatch.waitForExistence(timeout: 15))
-        // One tap logs and says so right away with an Undo. (Undo removing the entry is checked on the server side.)
-        let zinc = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Zinc'")).firstMatch
-        if zinc.waitForExistence(timeout: 10) {
-            zinc.tap()
-            XCTAssertTrue(app.staticTexts["Logged Zinc"].waitForExistence(timeout: 10), "a confirmation appears")
-            shot("log", env)
-            XCTAssertTrue(app.buttons["Undo"].exists, "the confirmation offers Undo")
-            app.buttons["Undo"].tap()
-        }
+        // A supplement is taken or not: one tap takes it, the next tap un-takes it, and taking it again leaves one
+        // entry. The chip and the "n of 4" count show the state; there is no banner.
+        let zinc = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Alpha'")).firstMatch
+        XCTAssertTrue(zinc.waitForExistence(timeout: 10))
+        zinc.tap()
+        XCTAssertTrue(app.staticTexts["1 of 4"].waitForExistence(timeout: 10), "taking it is shown on the chip and the count")
+        shot("log", env)
+        XCTAssertFalse(app.buttons["Undo"].exists, "no confirmation banner")
+        zinc.tap()
+        XCTAssertTrue(app.staticTexts["0 of 4"].waitForExistence(timeout: 10), "tapping again un-takes it")
+        zinc.tap()
+        XCTAssertTrue(app.staticTexts["1 of 4"].waitForExistence(timeout: 10), "and taking it again works")
+
+        // Doses can be changed: the new dose shows on the chip.
+        app.buttons["Edit doses"].tap()
+        let field = app.textFields["dose-Alpha"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        app.buttons["Clear Alpha dose"].tap()
+        field.typeText("30")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Alpha' AND label CONTAINS '30'")).firstMatch.waitForExistence(timeout: 15), "the chip shows the new dose")
     }
 
     private func shot(_ name: String, _ env: [String: String]) {

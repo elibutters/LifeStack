@@ -107,9 +107,25 @@ struct HistoryEntry: Decodable, Equatable, Identifiable {
     let key: String
     let label: String
     let source: String
+    let name: String?
+    let dose: Double?
+    let unit: String?
 }
 
-struct Logged: Equatable { let id: Int; let label: String }
+// What the quick log offers, with default amounts, as the server defines it.
+struct LogOptions: Decodable, Equatable {
+    struct Supplement: Decodable, Equatable, Hashable { let id: Int; let name: String; let dose: Double?; let unit: String? }
+    struct Drink: Decodable, Equatable, Hashable { let drink: String; let mg: Double }
+    let supplements: [Supplement]
+    let caffeine: [Drink]
+}
+
+extension LogOptions.Supplement {
+    var doseText: String? {
+        guard let dose, let unit else { return nil }
+        return "\(dose == dose.rounded() ? String(Int(dose)) : String(dose)) \(unit)"
+    }
+}
 
 enum Format {
     static func money(_ v: Double, cents: Bool = false) -> String {

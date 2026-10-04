@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
-import { addSupplement, archiveSupplement, deleteLog, insertLog } from "@/lib/capture";
+import { addSupplement, archiveSupplement, deleteLog, insertLog, setSupplementDose } from "@/lib/capture";
 import { AGENT_SCOPES, describeEntry, EventInput, SCOPES, type Scope } from "@/lib/capture-core";
 import { createToken, revokeToken, TOKEN_KINDS, type TokenKind } from "@/lib/tokens";
 
@@ -52,6 +52,14 @@ export async function deleteEntry(id: number): Promise<void> {
 export async function addSupplementAction(name: string): Promise<boolean> {
   await requireSession();
   const ok = await addSupplement(name);
+  revalidatePath("/log", "layout");
+  return ok;
+}
+
+export async function setSupplementDoseAction(id: number, dose: number | null, unit: "mg" | "g"): Promise<boolean> {
+  await requireSession();
+  if (dose != null && (!Number.isFinite(dose) || dose < 0 || dose > 100_000)) return false;
+  const ok = await setSupplementDose(id, dose, unit);
   revalidatePath("/log", "layout");
   return ok;
 }

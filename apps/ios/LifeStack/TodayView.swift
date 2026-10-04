@@ -1,27 +1,26 @@
 import SwiftUI
 
 private let moodLabels = [1: "Low", 2: "Meh", 3: "Okay", 4: "Good", 5: "Great"]
-private let drinks: [(String, Int)] = [("Coffee", 95), ("Espresso", 64), ("Cold brew", 150), ("Tea", 47), ("Energy drink", 80), ("Soda", 34)]
 
 struct TodayView: View {
     @Environment(AppModel.self) private var model
     @State private var tapped = 0
+    @State private var editingDoses = false
 
-    private func count(_ name: String) -> Int { model.today?.supplements.first { $0.name == name }?.count ?? 0 }
+    private var drinks: [LogOptions.Drink] { model.options?.caffeine ?? [] }
+    private var takenCount: Int { (model.options?.supplements ?? []).filter { model.takenToday($0.name) != nil }.count }
+    private let two = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Screen(title: "Log", refresh: { await model.refresh() }) {
-                ErrorBanner(text: model.message)
-                summary
-                moodCard
-                caffeineCard
-                supplementCard
-                todayList
-            }
-            if let t = model.toast { toast(t).padding(.bottom, 96).transition(.move(edge: .bottom).combined(with: .opacity)) }
+        Screen(title: "Log", refresh: { await model.refresh() }) {
+            ErrorBanner(text: model.message)
+            summary
+            moodCard
+            caffeineCard
+            supplementCard
+            todayList
         }
-        .animation(.spring(duration: 0.3), value: model.toast)
+        .sheet(isPresented: $editingDoses) { DoseEditor(supplements: model.options?.supplements ?? []) }
         .sensoryFeedback(.success, trigger: tapped)
         .task { await model.refresh() }
     }
@@ -31,24 +30,23 @@ struct TodayView: View {
             HStack(alignment: .top) {
                 Stat(label: "Mood", value: model.today?.mood.map { "\($0.value) \(moodLabels[$0.value] ?? "")" } ?? "None yet")
                 Stat(label: "Caffeine", value: (model.today?.caffeine.count ?? 0) == 0 ? "None" : "\(Int(model.today?.caffeine.mg ?? 0)) mg")
-                Stat(label: "Supplements", value: "\(model.today?.supplements.count ?? 0) taken")
+                Stat(label: "Supplements", value: "\(takenCount) taken")
             }
         }
     }
 
     private var moodCard: some View {
         Card(title: "Mood") {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 ForEach(1...5, id: \.self) { n in
                     let on = model.today?.mood?.value == n
                     Button { send(["type": "mood", "value": n], "Mood \(n) (\(moodLabels[n] ?? ""))") } label: {
-                        VStack(spacing: 3) {
-                            Text("\(n)").font(.system(size: 22, weight: .semibold, design: .rounded))
-                            Text(moodLabels[n] ?? "").font(.caption2)
+                        VStack(spacing: 1) {
+                            Text("\(n)").font(.system(size: 19, weight: .semibold, design: .rounded))
+                            Text(moodLabels[n] ?? "").font(.system(size: 10)).foregroundStyle(on ? .white : Theme.muted)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 62)
-                        .foregroundStyle(on ? .white : .white.opacity(0.85))
-                        .background(on ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.raised), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .chip(on ? Theme.blue.opacity(0.7) : nil)
                     }
                     .buttonStyle(.plain)
                     .disabled(model.pending)
@@ -59,15 +57,16 @@ struct TodayView: View {
 
     private var caffeineCard: some View {
         Card(title: "Caffeine") {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(drinks, id: \.0) { d in
-                    Button { send(["type": "caffeine", "drink": d.0], "\(d.0) (\(d.1) mg)") } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(d.0).font(.subheadline.weight(.medium))
-                            Text("about \(d.1) mg").font(.caption).foregroundStyle(Theme.muted)
+            LazyVGrid(columns: two, spacing: 8) {
+                ForEach(drinks, id: \.self) { d in
+                    Button { send(["type": "caffeine", "drink": d.drink], "\(d.drink) (\(Int(d.mg)) mg)") } label: {
+                        HStack {
+                            Text(d.drink).font(.subheadline.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
+                            Spacer(minLength: 4)
+                            Text("\(Int(d.mg))").font(.caption).monospacedDigit().foregroundStyle(Theme.muted)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading).padding(.horizontal, 14)
-                        .background(Theme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(.horizontal, 12).frame(maxWidth: .infinity, minHeight: 42)
+                        .chip()
                     }
                     .buttonStyle(.plain)
                     .disabled(model.pending)
@@ -77,29 +76,32 @@ struct TodayView: View {
     }
 
     private var supplementCard: some View {
-        Card(title: "Supplements") {
-            if model.supplements.isEmpty { Empty(text: "Add supplements on the web app and they show up here.") }
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(model.supplements, id: \.self) { name in
-                    let n = count(name)
-                    Button { send(["type": "supplement", "name": name], name) } label: {
+        Card(title: "Supplements", trailing: "\(takenCount) of \(model.options?.supplements.count ?? 0)") {
+            if (model.options?.supplements ?? []).isEmpty { Empty(text: "Add supplements on the web app and they show up here.") }
+            LazyVGrid(columns: two, spacing: 8) {
+                ForEach(model.options?.supplements ?? [], id: \.self) { s in
+                    let taken = model.takenToday(s.name) != nil
+                    Button { Task { if await model.toggleSupplement(s) { tapped += 1 } } } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: n > 0 ? "checkmark.circle.fill" : "circle").foregroundStyle(n > 0 ? Theme.good : Theme.muted)
-                            Text(name).font(.subheadline.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
-                            Spacer(minLength: 0)
-                            if n > 1 { Text("\(n)").font(.caption.weight(.bold)).padding(.horizontal, 7).padding(.vertical, 2).background(Theme.warm.opacity(0.25), in: Capsule()).foregroundStyle(Theme.warm) }
+                            Image(systemName: taken ? "checkmark.circle.fill" : "circle").font(.callout).foregroundStyle(taken ? Theme.good : Theme.muted)
+                            Text(s.name).font(.subheadline.weight(.medium)).lineLimit(1).minimumScaleFactor(0.75)
+                            Spacer(minLength: 2)
+                            if let d = s.doseText { Text(d).font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
                         }
-                        .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading).padding(.horizontal, 14)
-                        .background(n > 0 ? Theme.good.opacity(0.13) : Theme.raised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(.horizontal, 12).frame(maxWidth: .infinity, minHeight: 42)
+                        .chip(taken ? Theme.good.opacity(0.45) : nil)
                     }
                     .buttonStyle(.plain)
                     .disabled(model.pending)
                 }
             }
+            if !(model.options?.supplements ?? []).isEmpty {
+                Button("Edit doses") { editingDoses = true }
+                    .font(.footnote.weight(.medium)).foregroundStyle(Theme.sky).buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
     }
 
-    // What was logged today, newest first. Swipe-free: each row has its own remove button.
     @ViewBuilder private var todayList: some View {
         let rows = model.history.filter { Format.isToday($0.at) }
         if !rows.isEmpty {
@@ -110,27 +112,15 @@ struct TodayView: View {
                             Text(r.label).font(.subheadline)
                             Spacer()
                             Text(Format.clock(r.at)).font(.caption).foregroundStyle(Theme.muted)
-                            Button { Task { await model.remove(r) } } label: { Image(systemName: "trash").font(.footnote).foregroundStyle(Theme.muted).frame(width: 36, height: 36) }
+                            Button { Task { await model.remove(r) } } label: { Image(systemName: "trash").font(.footnote).foregroundStyle(Theme.muted).frame(width: 34, height: 34) }
                                 .buttonStyle(.plain).accessibilityLabel("Remove \(r.label)")
                         }
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 4)
                         if r.id != rows.last?.id { Divider().overlay(Theme.line) }
                     }
                 }
             }
         }
-    }
-
-    private func toast(_ t: Logged) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good)
-            Text("Logged \(t.label)").font(.subheadline.weight(.medium)).lineLimit(1)
-            Spacer(minLength: 8)
-            Button("Undo") { Task { await model.undo(t) } }.font(.subheadline.weight(.semibold)).foregroundStyle(Theme.sky)
-        }
-        .padding(.horizontal, 18).frame(height: 54).frame(maxWidth: .infinity)
-        .background(.ultraThickMaterial, in: Capsule()).overlay(Capsule().stroke(Theme.line))
-        .padding(.horizontal, 20)
     }
 
     private func send(_ event: [String: Any], _ label: String) {
