@@ -135,6 +135,18 @@ Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep ac
 
 Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep** tab and Overview. The unofficial API can change without notice.
 
+### JSON API for the app
+
+Besides quick capture and MCP, these read endpoints back the iPhone app. All take `Authorization: Bearer ls_...`
+and each is limited to a scope: `GET /api/v1/overview` (sections follow the key's scopes), `calendar`
+(`from`, `to`, 90 days at most), `sleep` (`nights`), `finance`, `finance/transactions`, `finance/holdings`,
+`profile`, and `connections` (`account:read`).
+
+The app signs in with the owner password at `POST /api/v1/auth/login` (`{ "password", "device" }`), which returns
+a revocable key for that device. It has the same attempt limit as the web form, refuses browser (Origin)
+requests, and signing in again on the same device replaces that device's key. Revoke it any time on the
+**API keys** page.
+
 ### iPhone app
 
 `apps/ios` is a small SwiftUI app (see its README): connect with your address and an API key, log mood,
