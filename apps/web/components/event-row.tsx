@@ -23,9 +23,9 @@ export function EventRow({ item, day, showDate = false }: { item: CalendarItem; 
     <li className="flex gap-3 py-2.5">
       <span className="w-20 shrink-0 pt-0.5 text-sm text-muted tabular-nums">{when}</span>
       <span aria-hidden="true" className={`mt-2 h-2 w-2 shrink-0 rounded-full ${holiday ? "bg-holiday" : "bg-accent"}`} />
-      <div className="min-w-0">
-        <p className="truncate">{item.title}</p>
-        {detail && <p className="truncate text-sm text-muted">{detail}</p>}
+      <div>
+        <p className="whitespace-nowrap">{item.title}</p>
+        {detail && <p className="whitespace-nowrap text-sm text-muted">{detail}</p>}
       </div>
     </li>
   );

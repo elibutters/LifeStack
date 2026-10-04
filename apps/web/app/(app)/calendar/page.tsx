@@ -71,7 +71,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="overflow-hidden rounded-2xl border border-line bg-surface">
           <div className="grid grid-cols-7 border-b border-line">
             {WEEKDAYS.map((w) => (
@@ -130,7 +130,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
         <Card title={fmtDayLong(selected)} className="lg:sticky lg:top-20 lg:self-start">
           {dayItems.length > 0 ? (
-            <ul className="divide-y divide-line">
+            <ul className="w-max min-w-full divide-y divide-line">
               {dayItems.map((i) => (
                 <EventRow key={i.id} item={i} day={selected} />
               ))}
