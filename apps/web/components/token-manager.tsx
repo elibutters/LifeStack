@@ -41,6 +41,7 @@ export function CreateTokenForm() {
           <option value="write">Can only add logs</option>
           <option value="readwrite">Can add and read today</option>
           <option value="agent">Agent: read everything and add logs</option>
+          <option value="amazon">Amazon laptop worker</option>
         </select>
         <button type="submit" disabled={pending} className="h-11 rounded-md bg-fg px-4 text-sm font-medium text-bg disabled:opacity-50 sm:col-span-4 sm:w-fit">Create key</button>
       </form>

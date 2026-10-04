@@ -10,6 +10,8 @@ import { syncOutlookIfStale } from "@/lib/outlook";
 import { requireSession } from "@/lib/auth";
 import { addDays, fmtDayLong, hourOf, startOfDay, ymd } from "@/lib/dates";
 import { fmtMinutes, loadNights } from "@/lib/sleep";
+import { loadAmazon } from "@/lib/amazon";
+import { LOGIN_REQUIRED } from "@/lib/amazon-map";
 
 export const metadata: Metadata = { title: "Overview" };
 export const dynamic = "force-dynamic";
@@ -28,11 +30,12 @@ export default async function Overview() {
   const now = new Date();
   const today = ymd(now);
   const tomorrow = startOfDay(addDays(today, 1));
-  const [todayRes, soonRes, status, nights] = await Promise.all([
+  const [todayRes, soonRes, status, nights, amazon] = await Promise.all([
     loadCalendar(startOfDay(today), tomorrow),
     loadCalendar(tomorrow, startOfDay(addDays(today, 8))),
     systemStatus(),
     loadNights(1).catch(() => []),
+    loadAmazon().catch(() => ({ state: null, orders: [], cart: [] })),
   ]);
   const todayItems = todayRes.items;
   // Things already under way belong to Today; Coming up lists what starts later.
@@ -122,6 +125,58 @@ export default async function Overview() {
                   </Link>
                 </>
               )}
+            </p>
+          )}
+        </Card>
+
+        <Card
+          title="Amazon"
+          className="md:col-span-3"
+          action={
+            <Link href="/purchases" className="text-sm text-accent">
+              Purchases
+            </Link>
+          }
+        >
+          {amazon.state?.lastError === LOGIN_REQUIRED ? (
+            <p className="py-2 text-red-300">{LOGIN_REQUIRED}</p>
+          ) : amazon.cart.length || amazon.orders.length ? (
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <p className="text-sm text-muted">Cart</p>
+                {amazon.cart.length ? (
+                  <ul className="mt-1 divide-y divide-line">
+                    {amazon.cart.slice(0, 4).map((item) => (
+                      <li key={item.sourceId} className="truncate py-2">
+                        {item.title}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="py-2 text-muted">Empty</p>
+                )}
+              </div>
+              <div>
+                <p className="text-sm text-muted">Recent</p>
+                {amazon.orders.length ? (
+                  <ul className="mt-1 divide-y divide-line">
+                    {amazon.orders.slice(0, 4).map((item) => (
+                      <li key={item.sourceId} className="truncate py-2">
+                        {item.title}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="py-2 text-muted">No recent orders</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="py-2 text-muted">
+              The Amazon worker has not sent a snapshot yet.{" "}
+              <Link href="/connections" className="text-accent">
+                Connections
+              </Link>
             </p>
           )}
         </Card>

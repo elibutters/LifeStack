@@ -10,8 +10,10 @@ import { getConnection, getSyncState } from "@/lib/outlook";
 import { db } from "@/lib/db";
 import { accounts, events } from "@lifestack/db";
 import { count, eq, sql } from "drizzle-orm";
-import { disconnect, syncFinance, syncNow, unlinkFinance, connectEight, disconnectEightNow, syncEightNow } from "../settings/actions";
+import { disconnect, syncFinance, syncNow, unlinkFinance, connectEight, disconnectEightNow, syncEightNow, disconnectAmazonNow } from "../settings/actions";
 import { getEightConnection, getEightSyncState } from "@/lib/eight";
+import { loadAmazon } from "@/lib/amazon";
+import { LOGIN_REQUIRED } from "@/lib/amazon-map";
 import { loadNightCount } from "@/lib/sleep";
 
 export const metadata: Metadata = { title: "Connections" };
@@ -34,11 +36,12 @@ const button = "flex h-11 items-center rounded-md border border-line px-4 text-s
 export default async function ConnectionsPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
   await requireSession();
   const sp = await searchParams;
-  const [conn, state, eightConn, eightState, nightCount, items, perItem] = await Promise.all([
+  const [conn, state, eightConn, eightState, amazon, nightCount, items, perItem] = await Promise.all([
     getConnection().catch(() => null),
     getSyncState().catch(() => null),
     getEightConnection().catch(() => null),
     getEightSyncState().catch(() => null),
+    loadAmazon().catch(() => ({ state: null, orders: [] as { sourceId: string }[], cart: [] as { sourceId: string }[] })),
     loadNightCount().catch(() => 0),
     listItems().catch(() => []),
     db()
@@ -162,6 +165,44 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
                 Connect Eight Sleep
               </button>
             </form>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Amazon" className="max-w-2xl">
+        {amazon.state?.lastOkAt || amazon.state?.lastError || amazon.orders.length || amazon.cart.length ? (
+          <div className="space-y-4">
+            <dl className="divide-y divide-line">
+              <Row label="Recent orders" value={String(amazon.orders.length)} />
+              <Row label="Cart" value={String(amazon.cart.length)} />
+              <Row label="Last snapshot" value={amazon.state?.lastOkAt ? fmtDateTime(amazon.state.lastOkAt) : "Not yet"} />
+              {amazon.state?.lastError && <Row label="Status" value={amazon.state.lastError} bad />}
+            </dl>
+            <div className="flex flex-wrap gap-2">
+              <a href="/purchases" className={button}>
+                View purchases
+              </a>
+              <form action={disconnectAmazonNow}>
+                <button type="submit" className={`${button} text-red-300`}>
+                  Remove stored Amazon data
+                </button>
+              </form>
+            </div>
+            <p className="text-sm text-muted">
+              Amazon has no shopper API for a personal US account. A Chrome session on the worker laptop posts the last few
+              months of orders and the current cart about every 15 minutes while that laptop is awake.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-muted">
+              There is nothing to connect in the browser. Create an Amazon laptop worker key on the API keys page, then run
+              the worker on the second laptop while Chrome stays signed in to Amazon.
+            </p>
+            <a href="/api-keys" className={`${button} w-fit`}>
+              Create a worker key
+            </a>
+            {amazon.state?.lastError === LOGIN_REQUIRED && <p className="text-sm text-red-300">{LOGIN_REQUIRED}</p>}
           </div>
         )}
       </Card>

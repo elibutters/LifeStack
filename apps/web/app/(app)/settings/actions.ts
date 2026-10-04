@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
+import { disconnectAmazon } from "@/lib/amazon";
 import { disconnectEight, saveEightConnection, syncEight } from "@/lib/eight";
 import { syncItem, unlinkItem } from "@/lib/finance";
 import { disconnectOutlook, syncOutlook } from "@/lib/outlook";
@@ -83,5 +84,11 @@ export async function syncEightNow(): Promise<void> {
 export async function disconnectEightNow(): Promise<void> {
   await requireSession();
   await disconnectEight();
+  revalidatePath("/", "layout");
+}
+
+export async function disconnectAmazonNow(): Promise<void> {
+  await requireSession();
+  await disconnectAmazon();
   revalidatePath("/", "layout");
 }
