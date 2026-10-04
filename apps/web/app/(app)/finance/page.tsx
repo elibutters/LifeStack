@@ -11,6 +11,7 @@ export const metadata: Metadata = { title: "Finance" };
 export const dynamic = "force-dynamic";
 
 const TONE = { good: "bg-emerald-400", warn: "bg-amber-400", info: "bg-accent" } as const;
+const moneyTone = (n: number) => (n > 0 ? "text-emerald-300" : n < 0 ? "text-red-300" : "");
 
 export default async function FinanceOverview() {
   await requireSession();
@@ -44,14 +45,27 @@ export default async function FinanceOverview() {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       <Card title="Net worth" className="md:col-span-2">
-        <p className="text-4xl font-semibold tabular-nums">{fmtMoney(nw.net)}</p>
+        <p className={`text-4xl font-semibold tabular-nums ${moneyTone(nw.net)}`}>{fmtMoney(nw.net)}</p>
         <p className="mt-1 text-sm text-muted">
-          Assets {fmtMoney(nw.assets)} &middot; Debts {fmtMoney(nw.liabilities)}
+          Assets <span className={moneyTone(nw.assets)}>{fmtMoney(nw.assets)}</span>
+          {" · "}
+          Debts <span className={nw.liabilities > 0 ? "text-red-300" : ""}>{fmtMoney(nw.liabilities)}</span>
         </p>
         <div className="mt-4">
           <p className="mb-1 text-sm text-muted">
-            Cash and cards{nowCash != null ? `: ${fmtMoney(nowCash)}` : ""}
-            {change != null && Math.abs(change) >= 1 ? ` (${change >= 0 ? "up" : "down"} ${fmtMoney(Math.abs(change))} in 30 days)` : ""}
+            Cash and cards
+            {nowCash != null && (
+              <>
+                {": "}
+                <span className={moneyTone(nowCash)}>{fmtMoney(nowCash)}</span>
+              </>
+            )}
+            {change != null && Math.abs(change) >= 1 && (
+              <>
+                {" ("}
+                {change > 0 ? "up" : "down"} <span className={moneyTone(change)}>{fmtMoney(Math.abs(change))}</span> in 30 days)
+              </>
+            )}
           </p>
           <AreaChart points={history} label="Cash and cards over the last year" />
           <p className="mt-2 text-xs text-muted">Rebuilt from your transactions. Investment balances are tracked from the day they were linked.</p>
@@ -78,37 +92,43 @@ export default async function FinanceOverview() {
 
       <Card title="Accounts" className="md:col-span-2">
         <div className="space-y-5">
-          {nw.groups.map((g) => (
-            <div key={g.key}>
-              <div className="mb-1 flex items-baseline justify-between">
-                <h3 className="text-sm font-medium">{g.label}</h3>
-                <span className="tabular-nums">{fmtMoney(g.key === "credit" || g.key === "loans" ? -g.total : g.total)}</span>
+          {nw.groups.map((g) => {
+            const total = g.key === "credit" || g.key === "loans" ? -g.total : g.total;
+            return (
+              <div key={g.key}>
+                <div className="mb-1 flex items-baseline justify-between">
+                  <h3 className="text-sm font-medium">{g.label}</h3>
+                  <span className={`tabular-nums ${moneyTone(total)}`}>{fmtMoney(total)}</span>
+                </div>
+                <ul className="divide-y divide-line">
+                  {g.accounts.map((a) => {
+                    const balance = a.current == null ? null : isLiability(a) ? -a.current : a.current;
+                    return (
+                      <li key={a.id} className="flex items-baseline justify-between gap-4 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate">{a.name}</p>
+                          <p className="truncate text-sm text-muted">
+                            {a.institution ?? "Linked account"}
+                            {a.balanceAt ? ` · updated ${fmtDayShort(a.balanceAt.toISOString().slice(0, 10))}` : ""}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 tabular-nums ${balance == null ? "" : moneyTone(balance)}`}>{balance == null ? "n/a" : fmtMoney(balance, true)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-              <ul className="divide-y divide-line">
-                {g.accounts.map((a) => (
-                  <li key={a.id} className="flex items-baseline justify-between gap-4 py-2">
-                    <div className="min-w-0">
-                      <p className="truncate">{a.name}</p>
-                      <p className="truncate text-sm text-muted">
-                        {a.institution ?? "Linked account"}
-                        {a.balanceAt ? ` · updated ${fmtDayShort(a.balanceAt.toISOString().slice(0, 10))}` : ""}
-                      </p>
-                    </div>
-                    <span className="shrink-0 tabular-nums">{a.current == null ? "n/a" : fmtMoney(isLiability(a) ? -a.current : a.current, true)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
 
       <div className="space-y-4">
         <Card title="This month" action={<Link href="/finance/spending" className="text-sm text-accent">Details</Link>}>
           <dl className="mb-4 grid grid-cols-3 gap-2 text-center">
-            <div><dt className="text-xs text-muted">In</dt><dd className="tabular-nums text-emerald-300">{fmtMoney(month.income)}</dd></div>
-            <div><dt className="text-xs text-muted">Out</dt><dd className="tabular-nums">{fmtMoney(month.spending)}</dd></div>
-            <div><dt className="text-xs text-muted">Net</dt><dd className="tabular-nums">{fmtMoney(month.net)}</dd></div>
+            <div><dt className="text-xs text-muted">In</dt><dd className={`tabular-nums ${moneyTone(month.income)}`}>{fmtMoney(month.income)}</dd></div>
+            <div><dt className="text-xs text-muted">Out</dt><dd className={`tabular-nums ${month.spending > 0 ? "text-red-300" : ""}`}>{fmtMoney(month.spending)}</dd></div>
+            <div><dt className="text-xs text-muted">Net</dt><dd className={`tabular-nums ${moneyTone(month.net)}`}>{fmtMoney(month.net)}</dd></div>
           </dl>
           {month.byCategory.length ? (
             <BarRows items={month.byCategory.slice(0, 5).map((c) => ({ label: c.label, amount: c.amount, href: `/finance/transactions?cat=${c.category ?? ""}&m=${month.month}&kind=spending` }))} total={month.spending} />
