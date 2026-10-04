@@ -67,17 +67,25 @@ export type TokenState = { error?: string; token?: string; name?: string };
 const TokenForm = z.object({
   name: z.string().trim().min(1, "Give it a name.").max(60),
   kind: z.enum(TOKEN_KINDS as [TokenKind, ...TokenKind[]]),
-  access: z.enum(["write", "readwrite", "agent"]),
+  access: z.enum(["write", "readwrite", "agent", "amazon"]),
 });
 
 export async function createTokenAction(_prev: TokenState, form: FormData): Promise<TokenState> {
   await requireSession();
   const parsed = TokenForm.safeParse({ name: form.get("name"), kind: form.get("kind"), access: form.get("access") });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
-  const scopes: Scope[] = parsed.data.access === "write" ? ["log:write"] : parsed.data.access === "agent" ? AGENT_SCOPES : ["log:write", "log:read"];
+  const scopes: Scope[] =
+    parsed.data.access === "write"
+      ? ["log:write"]
+      : parsed.data.access === "agent"
+        ? AGENT_SCOPES
+        : parsed.data.access === "amazon"
+          ? ["amazon:write"]
+          : ["log:write", "log:read"];
   try {
     const { token } = await createToken(parsed.data.name, parsed.data.kind, scopes.filter((s) => SCOPES.includes(s)));
     revalidatePath("/log", "layout");
+    revalidatePath("/api-keys");
     return { token, name: parsed.data.name }; // shown once; only a hash is kept
   } catch (e) {
     return { error: e instanceof Error && e.message === "too many active tokens" ? "Revoke an old token first (10 active at most)." : "Could not create the token." };
@@ -88,4 +96,5 @@ export async function revokeTokenAction(id: number): Promise<void> {
   await requireSession();
   await revokeToken(id);
   revalidatePath("/log", "layout");
+  revalidatePath("/api-keys");
 }

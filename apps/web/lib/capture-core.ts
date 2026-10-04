@@ -29,7 +29,7 @@ export const EventInput = z.discriminatedUnion("type", [
 export type EventInputT = z.infer<typeof EventInput>;
 
 // log:* are for shortcuts and widgets; the :read scopes below let an agent read each area through MCP.
-export const SCOPES = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read"] as const;
+export const SCOPES = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "amazon:write"] as const;
 export const AGENT_SCOPES: Scope[] = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read"];
 export type Scope = (typeof SCOPES)[number];
 

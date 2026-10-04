@@ -1,0 +1,11 @@
+{
+  "name": "lifestack-amazon-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "node sync.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.56.1"
+  }
+}

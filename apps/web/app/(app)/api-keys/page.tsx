@@ -27,7 +27,7 @@ export default async function ApiKeys() {
       <div className="max-w-3xl space-y-4">
       <Card title="Keys">
         <p className="mb-3 text-sm text-muted">
-          A key lets one Shortcut, widget or agent add logs without your password. Each has its own, so you can cancel one without touching the others. Only a fingerprint is stored, so a lost key cannot be recovered, only replaced.
+          A key lets one Shortcut, widget, agent or the Amazon laptop worker talk to the API without your password. Each has its own, so you can cancel one without touching the others. Only a fingerprint is stored, so a lost key cannot be recovered, only replaced.
         </p>
         {active.length > 0 && (
           <ul className="mb-4 divide-y divide-line">
@@ -36,7 +36,15 @@ export default async function ApiKeys() {
                 <div className="min-w-0">
                   <p className="truncate">{t.name}</p>
                   <p className="text-sm text-muted">
-                    {KIND[t.kind] ?? t.kind} &middot; {t.scopes.includes("finance:read") ? "agent: reads everything" : t.scopes.includes("log:read") ? "add and read today" : "only adds logs"} &middot; {t.prefix}&hellip; &middot;{" "}
+                    {KIND[t.kind] ?? t.kind} &middot;{" "}
+                    {t.scopes.includes("amazon:write")
+                      ? "Amazon snapshots"
+                      : t.scopes.includes("finance:read")
+                        ? "agent: reads everything"
+                        : t.scopes.includes("log:read")
+                          ? "add and read today"
+                          : "only adds logs"}{" "}
+                    &middot; {t.prefix}&hellip; &middot;{" "}
                     {t.lastUsedAt ? `last used ${fmtDateTime(t.lastUsedAt)}` : "never used"}
                   </p>
                 </div>
@@ -75,6 +83,14 @@ export default async function ApiKeys() {
         <p className="mt-4 text-sm text-muted">
           Add <code className="rounded bg-surface px-1.5 py-0.5">"at": "2026-10-04T08:00:00-04:00"</code> to log something that already happened (up to 30 days back). Add an <code className="rounded bg-surface px-1.5 py-0.5">"id"</code> of 8 to 64 letters and numbers if a request might be retried, and it will never be logged twice.
         </p>
+      </Card>
+
+      <Card title="Amazon laptop worker">
+        <p className="mb-3 text-sm text-muted">
+          Create a key above with access set to Amazon laptop worker. The second laptop posts snapshots to this URL. The key
+          stays in a gitignored env file on that machine, never in the repo.
+        </p>
+        <code className={code}>{`${origin}/api/v1/amazon/snapshot`}</code>
       </Card>
       </div>
     </div>

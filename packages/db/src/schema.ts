@@ -22,7 +22,7 @@ export const events = pgTable(
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
     ts: timestamp("ts", { withTimezone: true }).notNull(),
-    domain: text("domain").notNull(), // sleep | finance | supplement | calendar | email | location | log | work
+    domain: text("domain").notNull(), // sleep | finance | supplement | calendar | email | location | log | work | commerce
     key: text("key").notNull(), // e.g. sleep.duration_min, supplement.taken, mood
     valueNum: doublePrecision("value_num"),
     valueText: text("value_text"),
