@@ -47,11 +47,8 @@ struct OverviewView: View {
                     }
                 } else if loader.loading { Section { ProgressView() } }
             }
-            .navigationTitle(greeting)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAccount = true } label: { Image(systemName: "person.crop.circle") }.accessibilityLabel("Account")
-                }
+            .screenHeader(greeting) {
+                Button { showAccount = true } label: { Image(systemName: "person.crop.circle").font(.title2) }.accessibilityLabel("Account").accessibilityIdentifier("account-button")
             }
             .sheet(isPresented: $showAccount) { AccountView(dismiss: { showAccount = false }) }
             .refreshable { await load() }

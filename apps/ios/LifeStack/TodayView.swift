@@ -18,13 +18,10 @@ struct TodayView: View {
                 caffeineSection
                 supplementSection
             }
-            .navigationTitle("Log")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Sign out", role: .destructive) { model.signOut() }
-                    } label: { Image(systemName: "person.crop.circle") }
-                }
+            .screenHeader("Log") {
+                Menu {
+                    Button("Sign out", role: .destructive) { model.signOut() }
+                } label: { Image(systemName: "person.crop.circle").font(.title2) }
             }
             .refreshable { await model.refresh() }
             .sensoryFeedback(.success, trigger: tapped)

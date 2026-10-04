@@ -20,7 +20,7 @@ struct CalendarView: View {
                 if loader.value?.isEmpty == true { Section { Text("Nothing scheduled in the next 30 days.").foregroundStyle(.secondary) } }
                 if loader.value == nil && loader.loading { Section { ProgressView() } }
             }
-            .navigationTitle("Calendar")
+            .screenHeader("Calendar")
             .refreshable { await load() }
             .task { await load() }
         }

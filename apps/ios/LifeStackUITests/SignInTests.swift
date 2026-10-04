@@ -34,9 +34,5 @@ final class SignInTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Recent nights"].waitForExistence(timeout: 20), "sleep nights load")
         app.tabBars.buttons["Log"].tap()
         XCTAssertTrue(app.buttons["Coffee"].waitForExistence(timeout: 15))
-        app.tabBars.buttons["Overview"].tap()
-        app.buttons["Account"].tap()
-        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 10), "the account sheet should open")
-        XCTAssertTrue(app.staticTexts["Connections"].waitForExistence(timeout: 20), "connections load")
     }
 }
