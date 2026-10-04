@@ -10,6 +10,10 @@ final class AppModel {
     var address: String = AppModel.bundledAddress ?? UserDefaults.standard.string(forKey: "server-address") ?? ""
     var signedIn: Bool
     var today: TodaySummary?
+    var history: [HistoryEntry] = []
+    var toast: Logged?
+    var pending = false
+    private var toastTask: Task<Void, Never>?
     var supplements: [String] = []
     var message: String?
     var busy = false
@@ -53,20 +57,43 @@ final class AppModel {
         guard let client else { return }
         // The supplement list is a nicety: if it cannot load, the rest of the screen still works.
         async let names = try? client.supplementNames()
+        async let feed = try? client.history()
         do {
             today = try await client.today()
             message = nil
         } catch { handle(error) }
         if let names = await names { supplements = names }
+        if let feed = await feed { history = feed }
     }
 
-    func log(_ event: [String: Any]) async -> Bool {
-        guard let client else { return false }
+    // One tap logs. The confirmation stays for a few seconds with Undo, like the web app, and more taps are
+    // ignored while a request is in flight so a double tap cannot log twice.
+    func log(_ event: [String: Any], label: String) async -> Bool {
+        guard let client, !pending else { return false }
+        pending = true; defer { pending = false }
         do {
-            try await client.log(event)
+            let id = try await client.log(event)
+            show(Logged(id: id, label: label))
             await refresh()
             return true
         } catch { handle(error); return false }
+    }
+
+    func undo(_ entry: Logged) async {
+        guard let client else { return }
+        toastTask?.cancel(); toast = nil
+        do { try await client.deleteEntry(entry.id); await refresh() } catch { handle(error) }
+    }
+
+    func remove(_ entry: HistoryEntry) async {
+        guard let client else { return }
+        do { try await client.deleteEntry(entry.id); await refresh() } catch { handle(error) }
+    }
+
+    private func show(_ entry: Logged) {
+        toastTask?.cancel()
+        toast = entry
+        toastTask = Task { try? await Task.sleep(for: .seconds(6)); if !Task.isCancelled { toast = nil } }
     }
 
     // A rejected key means this device was revoked or the password changed: go back to sign in.

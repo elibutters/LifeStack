@@ -1,6 +1,6 @@
 import "server-only";
-import { EventInput, type Scope } from "./capture-core";
-import { insertLog, listSupplements, loadToday } from "./capture";
+import { describeEntry, EventInput, type Scope } from "./capture-core";
+import { deleteLog, insertLog, listSupplements, loadFeed, loadToday } from "./capture";
 import { describeError } from "./errors";
 import { verifyBearer, type VerifiedToken } from "./tokens";
 
@@ -68,6 +68,35 @@ export async function handleSupplements(req: Request): Promise<Response> {
     return json({ supplements: (await listSupplements()).map((s) => ({ name: s.name })) });
   } catch (e) {
     console.error("capture: could not list supplements", describeError(e));
+    return json({ error: "server_error" }, 500);
+  }
+}
+
+// Recent entries with their ids, so a client can show what was logged and let the person remove a mistake.
+export async function handleHistory(req: Request): Promise<Response> {
+  const token = await authenticate(req, "log:read");
+  if (token instanceof Response) return token;
+  const n = Number(new URL(req.url).searchParams.get("limit") ?? 50);
+  const limit = Number.isInteger(n) && n >= 1 && n <= 200 ? n : 50;
+  try {
+    const rows = await loadFeed(limit);
+    return json({ entries: rows.map((e) => ({ id: e.id, at: e.ts.toISOString(), key: e.key, label: describeEntry(e), source: e.source })) });
+  } catch (e) {
+    console.error("capture: could not read history", describeError(e));
+    return json({ error: "server_error" }, 500);
+  }
+}
+
+// Removes one logged entry (mood, caffeine or supplement only; nothing else in the events table).
+export async function handleDeleteEntry(req: Request, rawId: string): Promise<Response> {
+  const token = await authenticate(req, "log:write");
+  if (token instanceof Response) return token;
+  const id = Number(rawId);
+  if (!Number.isSafeInteger(id) || id < 1) return json({ error: "invalid" }, 400);
+  try {
+    return (await deleteLog(id)) ? json({ deleted: true }) : json({ error: "not_found" }, 404);
+  } catch (e) {
+    console.error("capture: could not delete", describeError(e));
     return json({ error: "server_error" }, 500);
   }
 }

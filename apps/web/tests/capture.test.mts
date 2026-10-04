@@ -103,6 +103,20 @@ assert.equal(await cap.addSupplement("Morning stack"), true); assert.equal(await
 const list = await cap.listSupplements(); assert.equal(list.length, 2); assert.equal(list[1]!.name.length, 60);
 await cap.archiveSupplement(list[0]!.id); assert.equal((await cap.listSupplements()).length, 1); assert.equal(await cap.addSupplement("Morning stack"), true, "an archived name can come back");
 
+// ---- history and delete (used by the iPhone app)
+const hist = async (token: string | null, q = "") => { const res = await api.handleHistory(call("/api/v1/log/history" + q, { method: "GET", token })); return { status: res.status, json: await res.json() }; };
+assert.equal((await hist(null)).status, 401); assert.equal((await hist(W)).status, 403, "a write-only key cannot read history");
+await cap.insertLog({ type: "mood", value: 3 }, "manual"); await db().insert(events).values({ ts: new Date(), domain: "calendar", key: "calendar.event", source: "outlook", sourceId: "keep-me", payload: {} } as any);
+const h = await hist(t2.token); assert.equal(h.status, 200); assert.ok(h.json.entries.length >= 1); assert.deepEqual(Object.keys(h.json.entries[0]).sort(), ["at", "id", "key", "label", "source"]);
+assert.ok(h.json.entries.every((e: any) => ["mood", "caffeine", "supplement.taken"].includes(e.key)), "only capture entries are listed");
+assert.equal((await hist(t2.token, "?limit=1")).json.entries.length, 1); assert.equal((await hist(t2.token, "?limit=9999")).status, 200);
+const del = async (token: string | null, id: string) => { const res = await api.handleDeleteEntry(call("/api/v1/events/" + id, { method: "DELETE", token }), id); return res.status; };
+const victim = h.json.entries[0].id as number;
+assert.equal(await del(null, String(victim)), 401); assert.equal(await del(ro.token, String(victim)), 403, "a read-only key cannot delete"); assert.equal(await del(W, "abc"), 400);
+assert.equal(await del(W, String(victim)), 200); assert.equal(await del(W, String(victim)), 404, "already gone");
+const calRow = (await db().select().from(events).where(eq(events.sourceId, "keep-me")))[0]!; assert.equal(await del(W, String(calRow.id)), 404, "other kinds of events cannot be deleted through the app API");
+assert.equal((await db().select().from(events).where(eq(events.sourceId, "keep-me"))).length, 1);
+
 const suppCall = async (token: string | null) => { const res = await api.handleSupplements(call("/api/v1/log/supplements", { method: "GET", token })); return { status: res.status, json: await res.json() }; };
 assert.equal((await suppCall(null)).status, 401); assert.equal((await suppCall(W)).status, 403, "a write-only key cannot list supplements");
 await cap.addSupplement("Magnesium"); const sl = await suppCall(t2.token); assert.equal(sl.status, 200); assert.ok(sl.json.supplements.some((x: { name: string }) => x.name === "Magnesium")); assert.deepEqual(Object.keys(sl.json.supplements[0]), ["name"], "only names are returned");
