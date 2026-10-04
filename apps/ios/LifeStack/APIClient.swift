@@ -20,7 +20,7 @@ enum APIError: LocalizedError {
         case .needsReadAccess: "This key can only add logs. Make one with read access too."
         case .offline: "Could not reach the server. Check your connection."
         case .server: "The server had a problem. Try again shortly."
-        case .wrongPassword: "That password was not accepted."
+        case .wrongPassword: "Wrong email or password."
         case .tooManyAttempts: "Too many attempts. Try again in 15 minutes."
         }
     }
@@ -65,11 +65,11 @@ struct APIClient {
     }
 
     // The one time the password is sent: it is traded for this device's own key and never stored.
-    static func login(base: URL, password: String, device: String) async throws -> String {
+    static func login(base: URL, email: String, password: String, device: String) async throws -> String {
         var req = URLRequest(url: base.appending(path: "api/v1/auth/login"), timeoutInterval: 20)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["password": password, "device": device])
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["email": email, "password": password, "device": device])
         let data: Data, response: URLResponse
         do { (data, response) = try await URLSession.shared.data(for: req) } catch { throw APIError.offline }
         guard let http = response as? HTTPURLResponse else { throw APIError.server }

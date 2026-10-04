@@ -44,7 +44,8 @@ scripts/        privacy check
    | --- | --- |
    | `DATABASE_URL` | pooled connection string |
    | `DATABASE_URL_UNPOOLED` | direct connection string, used for migrations (optional) |
-   | `APP_PASSWORD` | your login; at least 16 characters, long and random |
+   | `APP_PASSWORD` | your password; at least 16 characters, long and random. Also the first password of the owner account |
+   | `OWNER_EMAIL` | your email. With it set, you sign in with email and password; the first sign-in creates your account |
    | `SESSION_SECRET` | output of `openssl rand -hex 32` |
    | `APP_TZ` | your IANA timezone, e.g. `UTC` |
    | `APP_URL` | the deployment's public address, e.g. `https://your-app.vercel.app` |
@@ -142,7 +143,7 @@ and each is limited to a scope: `GET /api/v1/overview` (sections follow the key'
 (`from`, `to`, 90 days at most), `sleep` (`nights`), `finance`, `finance/transactions`, `finance/holdings`,
 `profile`, and `connections` (`account:read`).
 
-The app signs in with the owner password at `POST /api/v1/auth/login` (`{ "password", "device" }`), which returns
+The app signs in with email and password at `POST /api/v1/auth/login` (`{ "email", "password", "device" }`), which returns
 a revocable key for that device. It has the same attempt limit as the web form, refuses browser (Origin)
 requests, and signing in again on the same device replaces that device's key. Revoke it any time on the
 **API keys** page.
@@ -197,7 +198,9 @@ the world and your data. Keep it in a password manager.
 - Sign-in is rate limited: 5 failed attempts per address and 300 overall per 15
   minutes. If you are ever locked out, wait 15 minutes or run
   `delete from auth_attempts` in your database console.
-- Changing `APP_PASSWORD` or `SESSION_SECRET` signs out every device immediately.
+- Changing `APP_PASSWORD` or `SESSION_SECRET` signs out every device immediately. Accounts live in the `users` table
+  (email and a scrypt hash); every key and session names its user. Data is still owned by the one owner: separating
+  data per user is the next step and means adding `user_id` to the data tables and scoping each query.
 - Nothing from signed-in pages is cached on the device; offline shows a blank shell.
 - Pages are served with `noindex` and cannot be framed.
 

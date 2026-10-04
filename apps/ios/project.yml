@@ -23,6 +23,7 @@ targets:
         CFBundleDisplayName: Life Stack
         UILaunchScreen: {}
         UIUserInterfaceStyle: Dark
+        LSBaseURL: $(API_BASE_URL)
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

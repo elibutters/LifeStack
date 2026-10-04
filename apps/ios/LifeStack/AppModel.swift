@@ -7,15 +7,21 @@ import UIKit
 final class AppModel {
     private static let addressKey = "server-address"
 
-    var address: String = UserDefaults.standard.string(forKey: addressKey) ?? ""
+    var address: String = AppModel.bundledAddress ?? UserDefaults.standard.string(forKey: "server-address") ?? ""
     var signedIn: Bool
     var today: TodaySummary?
     var supplements: [String] = []
     var message: String?
     var busy = false
 
+    // The deployment address baked in at build time (Local.xcconfig), so people never have to type one.
+    static var bundledAddress: String? {
+        let raw = (Bundle.main.object(forInfoDictionaryKey: "LSBaseURL") as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+        return raw.isEmpty || raw.contains("$(") ? nil : raw
+    }
+
     init() {
-        signedIn = Keychain.read() != nil && !(UserDefaults.standard.string(forKey: Self.addressKey) ?? "").isEmpty
+        signedIn = Keychain.read() != nil && !(Self.bundledAddress ?? UserDefaults.standard.string(forKey: Self.addressKey) ?? "").isEmpty
     }
 
     var client: APIClient? {
@@ -23,13 +29,13 @@ final class AppModel {
         return APIClient(base: url, key: key)
     }
 
-    // The password is sent once, to trade for this device's own key; only the key is kept (in the Keychain).
-    func signIn(address: String, password: String) async {
+    // The email and password are sent once, to trade for this device's own key; only the key is kept (in the Keychain).
+    func signIn(address: String, email: String, password: String) async {
         message = nil
-        guard let url = APIClient.parse(address: address) else { message = APIError.badAddress.localizedDescription; return }
+        guard let url = APIClient.parse(address: Self.bundledAddress ?? address) else { message = APIError.badAddress.localizedDescription; return }
         busy = true; defer { busy = false }
         do {
-            let key = try await APIClient.login(base: url, password: password, device: UIDevice.current.name)
+            let key = try await APIClient.login(base: url, email: email, password: password, device: UIDevice.current.name)
             guard Keychain.save(key) else { message = "Could not store the key on this device."; return }
             self.address = url.absoluteString
             UserDefaults.standard.set(self.address, forKey: Self.addressKey)

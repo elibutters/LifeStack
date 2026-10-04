@@ -39,6 +39,9 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Third-party tokens are stored only encrypted (`lib/crypto.ts`, key in `ENCRYPTION_KEY`).
   Outlook is linked through Microsoft Graph for personal accounts only, with read-only scope.
   Work or employer calendars are never connected.
+- Accounts: sign-in is email plus password through `lib/login-guard.ts` (throttled, scrypt hashes in `users`).
+  `OWNER_EMAIL` + `APP_PASSWORD` create the owner on first sign-in; with no `OWNER_EMAIL` the original password-only login
+  still works. Build features as if there could be several users: take the user from the session or key, never assume one.
 - App API: `lib/app-api.ts` + `lib/app-data.ts` serve the iPhone app under `/api/v1/*`. The password login
   (`lib/app-login.ts`) shares `lib/login-guard.ts` with the web form, so throttling is identical; never add a
   second password check elsewhere.

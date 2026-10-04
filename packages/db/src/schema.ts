@@ -173,6 +173,15 @@ export const ownerProfile = pgTable(
   (t) => [check("owner_profile_singleton", sql`${t.id} = 1`)],
 );
 
+// People who can sign in. Today one person owns all the data; every key and session already names its user,
+// so scoping data per user later is a matter of adding user_id to the data tables.
+export const users = pgTable("users", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  email: text("email").notNull().unique(), // stored lowercase
+  passwordHash: text("password_hash").notNull(), // scrypt, never the password
+  createdAt,
+});
+
 // Access keys for clients that cannot hold a login session (iPhone Shortcuts, widgets, agents).
 // Only a SHA-256 hash is stored; the key itself is shown once, when it is created.
 export const apiTokens = pgTable("api_tokens", {
@@ -181,6 +190,7 @@ export const apiTokens = pgTable("api_tokens", {
   kind: text("kind").notNull().default("shortcut"), // shortcut | widget | agent; becomes the source label on what it writes
   prefix: text("prefix").notNull(), // first characters of the key, so it can be recognised in a list
   tokenHash: text("token_hash").notNull().unique(),
+  userId: bigint("user_id", { mode: "number" }).references(() => users.id), // null on keys made before users existed: they belong to the owner
   scopes: text("scopes").array().notNull(), // log:write | log:read
   createdAt,
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
