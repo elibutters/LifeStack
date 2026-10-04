@@ -10,7 +10,6 @@ final class SignInTests: XCTestCase {
         guard let address = env["LS_ADDRESS"], let password = env["LS_PASSWORD"] else { throw XCTSkip("LS_ADDRESS and LS_PASSWORD not set") }
 
         let app = XCUIApplication()
-        app.launchArguments = ["-uitest-no-lock"]
         app.launch()
 
         let addressField = app.textFields.firstMatch

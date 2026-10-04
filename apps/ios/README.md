@@ -1,7 +1,7 @@
 # Life Stack for iPhone
 
 A small SwiftUI app that talks to your Life Stack deployment over HTTPS with an API key. Version 0.1 does
-password sign-in with Face ID, plus an Overview, Calendar, Sleep, Finance, Log and Account screen. Widgets come next.
+password sign-in, plus an Overview, Calendar, Sleep, Finance, Log and Account screen. Widgets come next.
 
 Nothing personal is stored in this folder. You type your deployment address and key into the app on first
 launch; the key is kept in the iOS Keychain on the device.
@@ -20,8 +20,7 @@ Run on a simulator with no setup. To run on your own iPhone, copy `Local.xcconfi
 
 Enter your deployment address and the same password as the web app. You sign in once: the password is sent over
 HTTPS to `POST /api/v1/auth/login`, never stored, and traded for a key made for this phone that lives in the iOS
-Keychain. Face ID (or the device passcode) unlocks the app each time it opens or returns from the background, and
-the app switcher shows nothing while it is locked. Revoke the phone's key any time on the web app's **API keys**
+Keychain. The app has no Face ID lock for now. Revoke the phone's key any time on the web app's **API keys**
 page, and the app signs itself out.
 
 ## Screens
