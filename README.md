@@ -108,7 +108,7 @@ Once accounts are linked, the **Finance** tab shows net worth, accounts, spendin
 merchant, a searchable transaction list, recurring charges and investment holdings, plus a few
 plain-language insights (spending changes, upcoming card payments, savings rate). Run `pnpm test`
 to check the logic; `pnpm db:seed-finance` fills a local database with clearly fake data to look at.
-Investment holdings need the brokerage's permission: in Settings use **Allow investment data**.
+Investment holdings need the brokerage's permission: in Connections use **Allow investment data**.
 
 ### Quick capture
 
@@ -124,6 +124,15 @@ POST /api/v1/events        Authorization: Bearer ls_...       (key with log:writ
   optional: "at" (ISO time, up to 30 days back) and "id" (8-64 letters/numbers; a retry with the same id never logs twice)
 GET  /api/v1/log/today     Authorization: Bearer ls_...       (key with log:read)
 ```
+
+### Connect Eight Sleep
+
+Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep account. Eight Sleep has no public developer API, so this uses the same private app login as Home Assistant. The pod is never controlled.
+
+1. Open **Connections** and enter the Eight Sleep email and password. They are stored encrypted. Accounts with two-factor authentication cannot be linked this way.
+2. The first sync pulls the last two weeks, then walks backward through history in chunks on later cron runs and page loads until it runs out of nights.
+
+Data lands in `events` (`domain` sleep, `source` eight) and shows on the **Sleep** tab and Overview. The unofficial API can change without notice.
 
 ### Security model
 

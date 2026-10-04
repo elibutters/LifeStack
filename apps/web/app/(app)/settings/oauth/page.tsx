@@ -17,7 +17,7 @@ export default function PlaidOAuthReturn() {
       pending = JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? "null") as Pending | null;
     } catch {}
     if (!pending) {
-      setMessage("That connection expired. Go back to Settings and try again.");
+      setMessage("That connection expired. Go back to Connections and try again.");
       return;
     }
     const p = pending;
@@ -39,15 +39,15 @@ export default function PlaidOAuthReturn() {
                 if (!r.ok) throw new Error(String(r.status));
               }
               sessionStorage.removeItem(PENDING_KEY);
-              router.replace("/settings");
+              router.replace("/connections");
             } catch {
-              setMessage("Linked, but saving it failed. Go back to Settings and try again.");
+              setMessage("Linked, but saving it failed. Go back to Connections and try again.");
             }
           },
-          onExit: () => router.replace("/settings"),
+          onExit: () => router.replace("/connections"),
         }).open(),
       )
-      .catch(() => setMessage("Could not load the connection window. Go back to Settings and try again."));
+      .catch(() => setMessage("Could not load the connection window. Go back to Connections and try again."));
   }, [router]);
 
   return <p className="py-10 text-center text-muted">{message}</p>;

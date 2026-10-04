@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   if (!microsoftConfigured()) return NextResponse.json({ error: "not found" }, { status: 404 });
   const origin = appOrigin(req.nextUrl.origin);
   const done = (query: string) => {
-    const res = NextResponse.redirect(new URL(`/settings?${query}`, origin));
+    const res = NextResponse.redirect(new URL(`/connections?${query}`, origin));
     res.cookies.set(OAUTH_COOKIE, "", { path: OAUTH_COOKIE_PATH, maxAge: 0 });
     return res;
   };

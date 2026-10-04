@@ -9,6 +9,15 @@
   --color-fg: #ededf0;
   --color-accent: #7aa2ff;
   --color-holiday: #f2b24a;
+  --color-sleep-deep: #4c6fff;
+  --color-sleep-rem: #a78bfa;
+  --color-sleep-light: #7aa2ff;
+  --color-sleep-awake: #52525b;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.375rem;
+  --radius-2xl: 0.375rem;
 }
 
 html {

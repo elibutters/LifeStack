@@ -3,10 +3,13 @@ import Link from "next/link";
 import { after } from "next/server";
 import { Card } from "@/components/card";
 import { EventRow } from "@/components/event-row";
+import { StageBar } from "@/components/sleep-viz";
 import { loadCalendar, systemStatus } from "@/lib/calendar";
+import { syncEightIfStale } from "@/lib/eight";
 import { syncOutlookIfStale } from "@/lib/outlook";
 import { requireSession } from "@/lib/auth";
 import { addDays, fmtDayLong, hourOf, startOfDay, ymd } from "@/lib/dates";
+import { fmtMinutes, loadNights } from "@/lib/sleep";
 
 export const metadata: Metadata = { title: "Overview" };
 export const dynamic = "force-dynamic";
@@ -19,14 +22,17 @@ function greeting(hour: number) {
 
 export default async function Overview() {
   await requireSession();
-  after(syncOutlookIfStale);
+  after(async () => {
+    await Promise.all([syncOutlookIfStale(), syncEightIfStale()]);
+  });
   const now = new Date();
   const today = ymd(now);
   const tomorrow = startOfDay(addDays(today, 1));
-  const [todayRes, soonRes, status] = await Promise.all([
+  const [todayRes, soonRes, status, nights] = await Promise.all([
     loadCalendar(startOfDay(today), tomorrow),
     loadCalendar(tomorrow, startOfDay(addDays(today, 8))),
     systemStatus(),
+    loadNights(1).catch(() => []),
   ]);
   const todayItems = todayRes.items;
   // Things already under way belong to Today; Coming up lists what starts later.
@@ -64,7 +70,7 @@ export default async function Overview() {
               {notConnected ? (
                 <>
                   Your calendar isn't connected yet.{" "}
-                  <Link href="/settings" className="text-accent">
+                  <Link href="/connections" className="text-accent">
                     Connect Outlook
                   </Link>
                 </>
@@ -81,7 +87,43 @@ export default async function Overview() {
             <StatusRow label="Events" value={status.ok ? String(status.events) : "-"} />
             <StatusRow label="Sources" value={status.ok ? String(status.sources) : "-"} />
             <StatusRow label="Calendar" value={status.ok && status.calendarConnected ? "Syncing" : "Not connected"} />
+            <StatusRow label="Sleep" value={status.ok && status.sleepConnected ? "Syncing" : "Not connected"} />
           </dl>
+        </Card>
+
+        <Card
+          title="Last night"
+          className="md:col-span-3"
+          action={
+            <Link href="/sleep" className="text-sm text-accent">
+              Sleep
+            </Link>
+          }
+        >
+          {nights[0] ? (
+            <div className="space-y-4">
+              <dl className="grid grid-cols-2 gap-x-6 sm:grid-cols-4">
+                <Mini label="Score" value={nights[0].score != null ? String(Math.round(nights[0].score)) : "—"} />
+                <Mini label="Asleep" value={fmtMinutes(nights[0].sleepMin)} />
+                <Mini label="Deep" value={fmtMinutes(nights[0].deepMin)} />
+                <Mini label="REM" value={fmtMinutes(nights[0].remMin)} />
+              </dl>
+              <StageBar night={nights[0]} />
+            </div>
+          ) : (
+            <p className="py-2 text-muted">
+              {status.ok && status.sleepConnected ? (
+                "No nights imported yet."
+              ) : (
+                <>
+                  Eight Sleep isn't connected yet.{" "}
+                  <Link href="/connections" className="text-accent">
+                    Connect Eight Sleep
+                  </Link>
+                </>
+              )}
+            </p>
+          )}
         </Card>
 
         <Card title="Coming up" className="md:col-span-3">
@@ -98,6 +140,15 @@ export default async function Overview() {
           )}
         </Card>
       </div>
+    </div>
+  );
+}
+
+function Mini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="py-2">
+      <dt className="text-sm text-muted">{label}</dt>
+      <dd className="mt-0.5 text-lg font-medium">{value}</dd>
     </div>
   );
 }
