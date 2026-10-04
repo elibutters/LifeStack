@@ -54,6 +54,21 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Store no account numbers, credentials or email bodies.
 - After schema changes: `pnpm db:generate`, commit the migration.
 
+## Working with multiple agents
+
+Several agents and tools work on this repo. To stop work diverging:
+
+- Never edit files in the shared main folder. Start every task in your own worktree off fresh
+  origin/main: `git fetch && git worktree add ../<task> -b <task> origin/main`.
+- The shared main folder stays on `main` and clean. It only ever fast-forwards to origin/main.
+- Small PRs, merged quickly. Run `pnpm test`, typecheck and build before opening one, and wait for
+  CI to finish before merging.
+- Stage files by name, read `git diff --cached` before committing, never `git add -A` in a folder
+  other agents may have touched.
+- Production deploys come only from merges to main. No manual deploys.
+- If you find uncommitted changes in the shared folder, do not discard or commit them. Snapshot them
+  to a branch from a separate worktree and tell the owner.
+
 ## Native iOS app (the end goal)
 
 The owner wants a full native iOS app with home-screen widgets, built once the web app has
