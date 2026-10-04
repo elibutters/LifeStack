@@ -28,7 +28,7 @@ export const OverviewIcon = (p: SVGProps<SVGSVGElement>) => (
 
 export const CalendarIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
-    <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+    <rect x="3.5" y="5" width="17" height="15.5" rx="1.5" />
     <path d="M3.5 10h17M8 3v4M16 3v4" />
   </Icon>
 );
@@ -51,10 +51,9 @@ export const ChevronRightIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
-export const SettingsIcon = (p: SVGProps<SVGSVGElement>) => (
+export const UserIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
-    <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
-    <circle cx="15" cy="7" r="2" />
-    <circle cx="9" cy="17" r="2" />
+    <circle cx="12" cy="8" r="3.25" />
+    <path d="M5.5 19.5c.8-3.2 3.2-5 6.5-5s5.7 1.8 6.5 5" />
   </Icon>
 );
