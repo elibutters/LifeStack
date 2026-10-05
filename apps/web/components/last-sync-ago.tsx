@@ -21,7 +21,7 @@ export function formatAgo(ms: number): string {
   return `${d}d ago`;
 }
 
-export function LastSyncAgo({ at }: { at: string }) {
+export function LastSyncAgo({ at, phrase = "last sync" }: { at: string; phrase?: string }) {
   const [label, setLabel] = useState("");
   const [exact, setExact] = useState("");
   useEffect(() => {
@@ -37,7 +37,7 @@ export function LastSyncAgo({ at }: { at: string }) {
   if (!label) return null;
   return (
     <time dateTime={at} title={exact} className="shrink-0 font-normal text-sm text-muted">
-      (last sync {label})
+      ({phrase} {label})
     </time>
   );
 }

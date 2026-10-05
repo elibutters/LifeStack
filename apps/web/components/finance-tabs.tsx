@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { href: "/finance", label: "Overview" },
-  { href: "/finance/spending", label: "Spending" },
+  { href: "/finance/flow", label: "Flow" },
   { href: "/finance/transactions", label: "Transactions" },
   { href: "/finance/recurring", label: "Recurring" },
   { href: "/finance/investments", label: "Investments" },
@@ -14,7 +14,7 @@ const TABS = [
 export function FinanceTabs() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Finance" className="-mx-1 mb-6 flex gap-1 overflow-x-auto pb-1">
+    <nav aria-label="Finance" className="-mx-1 flex gap-1 overflow-x-auto">
       {TABS.map((t) => {
         const active = t.href === "/finance" ? pathname === "/finance" : pathname.startsWith(t.href);
         return (

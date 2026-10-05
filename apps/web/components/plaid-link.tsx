@@ -84,7 +84,7 @@ export function PlaidLinkButton({
       <button type="button" onClick={start} disabled={busy} className={className}>
         {busy ? "Opening..." : label}
       </button>
-      {error && <span className="text-sm text-red-300">{error}</span>}
+      {error && <span className="text-sm text-danger">{error}</span>}
     </span>
   );
 }

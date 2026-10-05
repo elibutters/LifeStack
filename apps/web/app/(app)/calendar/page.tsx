@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { Card } from "@/components/card";
 import { EventRow } from "@/components/event-row";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
+import { PageHeader } from "@/components/page-header";
 import { itemsOnDay, loadCalendar, systemStatus } from "@/lib/calendar";
 import { syncOutlookIfStale } from "@/lib/outlook";
 import { requireSession } from "@/lib/auth";
@@ -44,32 +45,35 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const notConnected = status.ok && !status.calendarConnected;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <h1 className="mr-auto text-xl font-semibold tracking-tight sm:text-2xl">{fmtMonth(month)}</h1>
-        <Link
-          href={href(today.slice(0, 7), today)}
-          className="flex h-11 items-center rounded-md border border-line px-3 text-sm hover:bg-raised"
-        >
-          Today
-        </Link>
-        <div className="flex">
+    <>
+      <PageHeader>
+        <div className="flex items-center gap-2">
+          <h1 className="mr-auto text-3xl font-semibold tracking-tight">{fmtMonth(month)}</h1>
           <Link
-            href={href(shiftMonth(month, -1))}
-            aria-label="Previous month"
-            className="grid h-11 w-11 place-items-center rounded-md text-muted hover:bg-raised hover:text-fg"
+            href={href(today.slice(0, 7), today)}
+            className="flex h-11 items-center rounded-md border border-line px-3 text-sm hover:bg-raised"
           >
-            <ChevronLeftIcon />
+            Today
           </Link>
-          <Link
-            href={href(shiftMonth(month, 1))}
-            aria-label="Next month"
-            className="grid h-11 w-11 place-items-center rounded-md text-muted hover:bg-raised hover:text-fg"
-          >
-            <ChevronRightIcon />
-          </Link>
+          <div className="flex">
+            <Link
+              href={href(shiftMonth(month, -1))}
+              aria-label="Previous month"
+              className="grid h-11 w-11 place-items-center rounded-md text-muted hover:bg-raised hover:text-fg"
+            >
+              <ChevronLeftIcon />
+            </Link>
+            <Link
+              href={href(shiftMonth(month, 1))}
+              aria-label="Next month"
+              className="grid h-11 w-11 place-items-center rounded-md text-muted hover:bg-raised hover:text-fg"
+            >
+              <ChevronRightIcon />
+            </Link>
+          </div>
         </div>
-      </div>
+      </PageHeader>
+      <div className="space-y-4">
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="overflow-hidden rounded-md border border-line bg-surface">
@@ -137,7 +141,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               ))}
             </ul>
           ) : failed ? (
-            <p className="py-2 text-red-400">Couldn't load events. Try again shortly.</p>
+            <p className="py-2 text-danger">Couldn't load events. Try again shortly.</p>
           ) : (
             <p className="py-2 text-muted">
               {notConnected ? (
@@ -155,5 +159,6 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         </Card>
       </div>
     </div>
+    </>
   );
 }

@@ -14,7 +14,7 @@ export function Card({
   return (
     <section className={`min-w-0 rounded-md border border-line bg-surface ${className}`}>
       <div className="flex flex-wrap items-center justify-between gap-x-2 px-4 pt-4 pb-2">
-        <h2 className="text-sm font-medium text-muted">{title}</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-fg">{title}</h2>
         {action}
       </div>
       {/* Long titles and links scroll inside the card instead of widening the page. */}

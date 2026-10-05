@@ -3,8 +3,9 @@ import Link from "next/link";
 import { after } from "next/server";
 import { Card } from "@/components/card";
 import { MiniStages, NightBars, NightLine, ScoreRing, StageBar } from "@/components/sleep-viz";
+import { PageHeader } from "@/components/page-header";
 import { requireSession } from "@/lib/auth";
-import { addDays, eachDay, fmtDayLong, fmtDayShort, fmtTime, ymd } from "@/lib/dates";
+import { addDays, eachDay, fmtDayLong, fmtTime, ymd } from "@/lib/dates";
 import { getEightConnection, syncEightIfStale } from "@/lib/eight";
 import { fmtMinutes, loadNights, mean, type Night } from "@/lib/sleep";
 
@@ -40,32 +41,30 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
   const avgLabel = range.id === "all" ? "average" : `${range.id}-day avg`;
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Sleep</h1>
-          {latest && (
-            <p className="mt-1 text-sm text-muted">
-              Last night {fmtDayShort(latest.day)}
-              {latest.processing ? " · still scoring" : ""}
-            </p>
-          )}
+    <>
+      <PageHeader>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight">Sleep</h1>
+            {latest?.processing && <p className="mt-1 text-sm text-muted">Still scoring</p>}
+          </div>
+          <nav aria-label="Time range" className="flex rounded-md border border-line p-0.5">
+            {RANGES.map((r) => (
+              <Link
+                key={r.id}
+                href={r.id === "14" ? "/sleep" : `/sleep?r=${r.id}`}
+                aria-current={r.id === range.id ? "page" : undefined}
+                className={`flex h-9 items-center px-2.5 text-sm ${
+                  r.id === range.id ? "rounded-sm bg-raised text-fg" : "text-muted hover:text-fg"
+                }`}
+              >
+                {r.label}
+              </Link>
+            ))}
+          </nav>
         </div>
-        <nav aria-label="Time range" className="flex rounded-md border border-line p-0.5">
-          {RANGES.map((r) => (
-            <Link
-              key={r.id}
-              href={r.id === "14" ? "/sleep" : `/sleep?r=${r.id}`}
-              aria-current={r.id === range.id ? "page" : undefined}
-              className={`flex h-9 items-center px-2.5 text-sm ${
-                r.id === range.id ? "rounded-sm bg-raised text-fg" : "text-muted hover:text-fg"
-              }`}
-            >
-              {r.label}
-            </Link>
-          ))}
-        </nav>
-      </header>
+      </PageHeader>
+      <div className="space-y-6">
 
       {!connected ? (
         <p className="text-muted">
@@ -136,6 +135,7 @@ export default async function SleepPage({ searchParams }: { searchParams: Promis
         </>
       )}
     </div>
+    </>
   );
 }
 

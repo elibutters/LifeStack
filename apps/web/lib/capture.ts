@@ -47,14 +47,22 @@ export async function insertLog(
   return existing ? { ok: true, id: existing.id, ts: existing.ts, created: false } : { ok: false, error: "could not save" };
 }
 
-export async function loadToday(now = new Date()) {
-  const today = todayInTz(now);
+export async function loadDay(day: string) {
   const rows = await db()
     .select()
     .from(events)
-    .where(and(isCapture, gte(events.ts, startOfDay(today)), lt(events.ts, startOfDay(addDays(today, 1)))));
+    .where(and(isCapture, gte(events.ts, startOfDay(day)), lt(events.ts, startOfDay(addDays(day, 1)))));
   const entries = rows.map(toEntry).sort((a, b) => a.ts.getTime() - b.ts.getTime() || a.id - b.id);
-  return { date: today, summary: summarizeToday(entries), entries };
+  return { date: day, summary: summarizeToday(entries), entries };
+}
+
+export async function loadToday(now = new Date()) {
+  return loadDay(todayInTz(now));
+}
+
+export async function loadCaptureSince(from: Date): Promise<Entry[]> {
+  const rows = await db().select().from(events).where(and(isCapture, gte(events.ts, from))).orderBy(desc(events.ts), desc(events.id));
+  return rows.map(toEntry);
 }
 
 export async function loadFeed(limit = 100): Promise<Entry[]> {

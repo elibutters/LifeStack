@@ -118,3 +118,27 @@ export function summarizeToday(entries: Entry[]): TodaySummary {
     supplements: [...supps.values()].sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
+
+export type LogDay = { day: string; summary: TodaySummary; entries: Entry[] };
+
+export function groupLogDays(entries: Entry[], dayOf: (ts: Date) => string): LogDay[] {
+  const by = new Map<string, Entry[]>();
+  for (const e of entries) {
+    const day = dayOf(e.ts);
+    const list = by.get(day);
+    if (list) list.push(e);
+    else by.set(day, [e]);
+  }
+  return [...by.entries()]
+    .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0))
+    .map(([day, rows]) => ({ day, summary: summarizeToday(rows), entries: rows }));
+}
+
+export function logChartPoints(days: LogDay[], span: string[]) {
+  const byDay = new Map(days.map((d) => [d.day, d.summary]));
+  return {
+    mood: span.map((day) => ({ day, value: byDay.get(day)?.mood?.value ?? 0 })),
+    caffeine: span.map((day) => ({ day, value: byDay.get(day)?.caffeine.mg ?? 0 })),
+    supplements: span.map((day) => ({ day, value: byDay.get(day)?.supplements.length ?? 0 })),
+  };
+}

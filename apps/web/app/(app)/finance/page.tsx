@@ -5,19 +5,19 @@ import { AreaChart, BarRows } from "@/components/charts";
 import { requireSession } from "@/lib/auth";
 import { fmtDayShort } from "@/lib/dates";
 import { loadFinance } from "@/lib/finance-data";
-import { cashPositionHistory, fmtMoney, insights, isLiability, monthOf, netWorth, summarizeMonth, accountLabel } from "@/lib/finance-calc";
+import { netWorthHistory, fmtMoney, insights, isLiability, monthOf, netWorth, summarizeMonth, accountLabel } from "@/lib/finance-calc";
 
 export const metadata: Metadata = { title: "Finance" };
 export const dynamic = "force-dynamic";
 
-const TONE = { good: "bg-emerald-400", warn: "bg-amber-400", info: "bg-accent" } as const;
-const moneyTone = (n: number) => (n > 0 ? "text-emerald-300" : n < 0 ? "text-red-300" : "");
+const TONE = { good: "bg-ok", warn: "bg-warn", info: "bg-accent" } as const;
+const moneyTone = (n: number) => (n > 0 ? "text-ok" : n < 0 ? "text-danger" : "");
 
 export default async function FinanceOverview() {
   await requireSession();
   const data = await loadFinance();
-  if (!data.ok) return <p className="text-red-300">Couldn't load your finance data. Try again shortly.</p>;
-  const { accounts, txns, liabilities, today } = data;
+  if (!data.ok) return <p className="text-danger">Couldn't load your finance data. Try again shortly.</p>;
+  const { accounts, txns, liabilities, snapshots, today } = data;
   if (!accounts.length) {
     return (
       <Card title="Nothing linked yet" className="max-w-2xl">
@@ -30,7 +30,7 @@ export default async function FinanceOverview() {
   }
 
   const nw = netWorth(accounts);
-  const history = cashPositionHistory(accounts, txns, today, 365);
+  const history = netWorthHistory(accounts, txns, snapshots, today, 365);
   const monthAgo = history.at(-31)?.value;
   const nowCash = history.at(-1)?.value;
   const change = monthAgo != null && nowCash != null ? nowCash - monthAgo : null;
@@ -49,11 +49,11 @@ export default async function FinanceOverview() {
         <p className="mt-1 text-sm text-muted">
           Assets <span className={moneyTone(nw.assets)}>{fmtMoney(nw.assets)}</span>
           {" · "}
-          Debts <span className={nw.liabilities > 0 ? "text-red-300" : ""}>{fmtMoney(nw.liabilities)}</span>
+          Debts <span className={nw.liabilities > 0 ? "text-danger" : ""}>{fmtMoney(nw.liabilities)}</span>
         </p>
         <div className="mt-4">
           <p className="mb-1 text-sm text-muted">
-            Cash and cards
+            Last year
             {nowCash != null && (
               <>
                 {": "}
@@ -67,8 +67,8 @@ export default async function FinanceOverview() {
               </>
             )}
           </p>
-          <AreaChart points={history} label="Cash and cards over the last year" />
-          <p className="mt-2 text-xs text-muted">Rebuilt from your transactions. Investment balances are tracked from the day they were linked.</p>
+          <AreaChart points={history} label="Net worth over the last year" />
+          <p className="mt-2 text-xs text-muted">Cash and cards are rebuilt from transactions. Investments join from the day they were linked.</p>
         </div>
       </Card>
 
@@ -124,10 +124,10 @@ export default async function FinanceOverview() {
       </Card>
 
       <div className="space-y-4">
-        <Card title="This month" action={<Link href="/finance/spending" className="text-sm text-accent">Details</Link>}>
+        <Card title="This month" action={<Link href="/finance/flow" className="text-sm text-accent">Details</Link>}>
           <dl className="mb-4 grid grid-cols-3 gap-2 text-center">
             <div><dt className="text-xs text-muted">In</dt><dd className={`tabular-nums ${moneyTone(month.income)}`}>{fmtMoney(month.income)}</dd></div>
-            <div><dt className="text-xs text-muted">Out</dt><dd className={`tabular-nums ${month.spending > 0 ? "text-red-300" : ""}`}>{fmtMoney(month.spending)}</dd></div>
+            <div><dt className="text-xs text-muted">Out</dt><dd className={`tabular-nums ${month.spending > 0 ? "text-danger" : ""}`}>{fmtMoney(month.spending)}</dd></div>
             <div><dt className="text-xs text-muted">Net</dt><dd className={`tabular-nums ${moneyTone(month.net)}`}>{fmtMoney(month.net)}</dd></div>
           </dl>
           {month.byCategory.length ? (
@@ -144,7 +144,7 @@ export default async function FinanceOverview() {
                 <li key={l.accountId} className="flex items-baseline justify-between gap-3 py-2">
                   <div className="min-w-0">
                     <p className="truncate">{accountLabel(acct!)}</p>
-                    <p className={`text-sm ${l.isOverdue ? "text-red-300" : "text-muted"}`}>Due {fmtDayShort(l.nextPaymentDue!)}</p>
+                    <p className={`text-sm ${l.isOverdue ? "text-danger" : "text-muted"}`}>Due {fmtDayShort(l.nextPaymentDue!)}</p>
                   </div>
                   <span className="shrink-0 tabular-nums">{l.minimumPayment != null ? `min ${fmtMoney(l.minimumPayment)}` : ""}</span>
                 </li>

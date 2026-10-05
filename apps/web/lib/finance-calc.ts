@@ -37,26 +37,43 @@ export type Liability = {
 
 const LABELS: Record<string, string> = {
   INCOME: "Income",
-  TRANSFER_IN: "Transfers in",
-  TRANSFER_OUT: "Transfers out",
-  LOAN_PAYMENTS: "Loan payments",
-  BANK_FEES: "Bank fees",
+  TRANSFER: "Transfer",
+  CC_PAYMENTS: "CC Payments",
+  CASHBACK: "Cashback",
   ENTERTAINMENT: "Entertainment",
-  FOOD_AND_DRINK: "Food and drink",
+  FOOD_AND_DRINK: "Food And Drink",
   GENERAL_MERCHANDISE: "Shopping",
   HOME_IMPROVEMENT: "Home",
   MEDICAL: "Health",
-  PERSONAL_CARE: "Personal care",
-  GENERAL_SERVICES: "Services",
-  GOVERNMENT_AND_NON_PROFIT: "Government and giving",
+  PERSONAL_CARE: "Personal Care",
   TRANSPORTATION: "Transportation",
   TRAVEL: "Travel",
-  RENT_AND_UTILITIES: "Rent and utilities",
+  TECH: "Tech",
+  RENT: "Rent",
+  UTILITIES: "Utilities",
   OTHER: "Other",
 };
 
-const titleCase = (s: string) => s.toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-export const categoryLabel = (c: string | null) => (c ? (LABELS[c] ?? titleCase(c)) : "Uncategorized");
+export const titleCase = (s: string) =>
+  s.toLowerCase().replace(/[_-]+/g, " ").replace(/\b([a-z])/g, (c) => c.toUpperCase());
+export const isTransferCategory = (c: string | null) =>
+  c === "TRANSFER" || c === "TRANSFER_IN" || c === "TRANSFER_OUT";
+export const isCcPayment = (t: { category: string | null; detailed?: string | null }) =>
+  t.category === "CC_PAYMENTS" || t.detailed === "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT";
+export function mapPlaidCategory(category: string | null, detailed?: string | null): string | null {
+  if (!category) return category;
+  if (isTransferCategory(category)) return "TRANSFER";
+  if (category === "CC_PAYMENTS" || detailed === "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT") return "CC_PAYMENTS";
+  if (category === "RENT_AND_UTILITIES") return detailed === "RENT_AND_UTILITIES_RENT" ? "RENT" : "UTILITIES";
+  return category;
+}
+export const categoryKey = (t: { category: string | null; detailed?: string | null } | string | null) => {
+  if (t == null) return t;
+  if (typeof t === "string") return mapPlaidCategory(t);
+  return mapPlaidCategory(t.category, t.detailed);
+};
+export const categoryLabel = (c: string | null) =>
+  c ? (isTransferCategory(c) ? "Transfer" : (LABELS[c] ?? titleCase(c))) : "Uncategorized";
 export const CATEGORY_KEYS = Object.keys(LABELS);
 
 export type Kind = "spending" | "income" | "transfer";
@@ -64,9 +81,48 @@ export type Kind = "spending" | "income" | "transfer";
 // Moving money between your own accounts and paying a credit card are not spending (the card's own
 // purchases already are), and counting them would double everything.
 export function classify(t: Pick<Txn, "amount" | "category" | "detailed">): Kind {
-  if (t.category === "TRANSFER_IN" || t.category === "TRANSFER_OUT" || t.detailed === "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT") return "transfer";
-  if (t.amount < 0 && t.category === "INCOME") return "income";
+  if (isTransferCategory(t.category) || t.category === "CC_PAYMENTS") return "transfer";
+  if (t.category === "LOAN_PAYMENTS" && t.detailed === "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT") return "transfer";
+  if (t.amount < 0 && (t.category === "INCOME" || t.category === "CASHBACK")) return "income";
   return "spending"; // outflows, and refunds (negative, non-income) which net against spending
+}
+
+const cents = (n: number) => Math.round(n * 100);
+const isSofi = (t: Pick<Txn, "name" | "merchant">) => /sofi/i.test(`${t.merchant ?? ""} ${t.name}`);
+
+// SoFi posts a card payment as two same-day legs of equal size (out of cash, into the card).
+// A leftover SoFi credit under $100 on that day is cashback.
+export function inferSofiAutoCategories(txns: Txn[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const byDay = new Map<string, Txn[]>();
+  for (const t of txns) {
+    const list = byDay.get(t.date) ?? [];
+    list.push(t);
+    byDay.set(t.date, list);
+  }
+  for (const day of byDay.values()) {
+    const sofi = day.filter(isSofi);
+    if (!sofi.length) continue;
+    const used = new Set<string>();
+    let pair = false;
+    for (const a of sofi) {
+      if (used.has(a.id) || cents(a.amount) === 0) continue;
+      const b = day.find((t) => t.id !== a.id && !used.has(t.id) && cents(t.amount) === -cents(a.amount));
+      if (!b) continue;
+      used.add(a.id);
+      used.add(b.id);
+      out.set(a.id, "CC_PAYMENTS");
+      out.set(b.id, "CC_PAYMENTS");
+      pair = true;
+    }
+    if (!pair) continue;
+    for (const t of sofi) {
+      if (used.has(t.id)) continue;
+      const n = cents(t.amount);
+      if (n < 0 && n > -10000) out.set(t.id, "CASHBACK");
+    }
+  }
+  return out;
 }
 
 export const monthOf = (date: string) => date.slice(0, 7);
@@ -92,6 +148,8 @@ export type MonthSummary = {
   savingsRate: number | null;
   byCategory: CategoryTotal[];
   topMerchants: MerchantTotal[];
+  incomeByCategory: CategoryTotal[];
+  topIncome: MerchantTotal[];
 };
 
 export const merchantName = (t: Pick<Txn, "merchant" | "name">) => (t.merchant ?? t.name).trim();
@@ -102,11 +160,24 @@ export function summarizeMonth(txns: Txn[], month: string): MonthSummary {
   let spending = 0;
   const cats = new Map<string | null, CategoryTotal>();
   const merchants = new Map<string, MerchantTotal>();
+  const inCats = new Map<string | null, CategoryTotal>();
+  const inMerchants = new Map<string, MerchantTotal>();
   for (const t of txns) {
     if (monthOf(t.date) !== month) continue;
     const kind = classify(t);
-    if (kind === "income") income += -t.amount;
-    else if (kind === "spending") {
+    if (kind === "income") {
+      const amt = -t.amount;
+      income += amt;
+      const c = inCats.get(t.category) ?? { category: t.category, label: categoryLabel(t.category), amount: 0, count: 0 };
+      c.amount += amt;
+      c.count++;
+      inCats.set(t.category, c);
+      const key = merchantName(t);
+      const m = inMerchants.get(key) ?? { name: key, amount: 0, count: 0 };
+      m.amount += amt;
+      m.count++;
+      inMerchants.set(key, m);
+    } else if (kind === "spending") {
       spending += t.amount;
       const c = cats.get(t.category) ?? { category: t.category, label: categoryLabel(t.category), amount: 0, count: 0 };
       c.amount += t.amount;
@@ -121,9 +192,11 @@ export function summarizeMonth(txns: Txn[], month: string): MonthSummary {
   }
   const byCategory = [...cats.values()].filter((c) => c.amount > 0.005).map((c) => ({ ...c, amount: round2(c.amount) })).sort((a, b) => b.amount - a.amount);
   const topMerchants = [...merchants.values()].filter((m) => m.amount > 0.005).map((m) => ({ ...m, amount: round2(m.amount) })).sort((a, b) => b.amount - a.amount).slice(0, 10);
+  const incomeByCategory = [...inCats.values()].filter((c) => c.amount > 0.005).map((c) => ({ ...c, amount: round2(c.amount) })).sort((a, b) => b.amount - a.amount);
+  const topIncome = [...inMerchants.values()].filter((m) => m.amount > 0.005).map((m) => ({ ...m, amount: round2(m.amount) })).sort((a, b) => b.amount - a.amount).slice(0, 10);
   income = round2(income);
   spending = round2(spending);
-  return { month, income, spending, net: round2(income - spending), savingsRate: income > 0 ? (income - spending) / income : null, byCategory, topMerchants };
+  return { month, income, spending, net: round2(income - spending), savingsRate: income > 0 ? (income - spending) / income : null, byCategory, topMerchants, incomeByCategory, topIncome };
 }
 
 export function cashflowSeries(txns: Txn[], months: string[]) {
@@ -196,8 +269,33 @@ export function cashPositionHistory(accounts: AccountInfo[], txns: Txn[], today:
   return totals.map((v, i) => ({ day: dayStr(start + i), value: round2(v) }));
 }
 
+export type BalanceSnap = { accountId: string; day: string; value: number; type: string };
+
+// Cash and cards rebuilt from transactions; investments and loans from daily snapshots once linked.
+export function netWorthHistory(
+  accounts: AccountInfo[],
+  txns: Txn[],
+  snapshots: BalanceSnap[],
+  today: string,
+  days: number,
+): HistoryPoint[] {
+  const cash = cashPositionHistory(accounts, txns, today, days);
+  const rest: BalanceSnap[] = snapshots.filter((s) => s.type !== "depository" && s.type !== "credit");
+  for (const a of accounts) {
+    if (a.current == null || a.type === "depository" || a.type === "credit") continue;
+    rest.push({ accountId: a.plaidAccountId, day: today, value: a.current, type: a.type });
+  }
+  const extra = snapshotNetWorth(rest);
+  if (!cash.length) return extra;
+  if (!extra.length) return cash;
+  const byDay = new Map(extra.map((p) => [p.day, p.value]));
+  const first = extra[0]!.day;
+  const last = extra.at(-1)!.value;
+  return cash.map((p) => ({ day: p.day, value: round2(p.value + (p.day < first ? 0 : (byDay.get(p.day) ?? last))) }));
+}
+
 // Daily snapshots stored over time, with each account's last known value carried forward.
-export function snapshotNetWorth(rows: { accountId: string; day: string; value: number; type: string }[]): HistoryPoint[] {
+export function snapshotNetWorth(rows: BalanceSnap[]): HistoryPoint[] {
   if (!rows.length) return [];
   const days = [...new Set(rows.map((r) => r.day))].sort();
   const last = new Map<string, { value: number; liability: boolean }>();
@@ -215,16 +313,31 @@ export function snapshotNetWorth(rows: { accountId: string; day: string; value: 
 }
 
 // ---- recurring charges
+export const CADENCE_OPTIONS = ["weekly", "every two weeks", "monthly", "quarterly", "yearly"] as const;
+export type RecurringCadence = (typeof CADENCE_OPTIONS)[number];
+export const BUCKET_OPTIONS = ["rent", "utils", "other"] as const;
+export type RecurringBucket = (typeof BUCKET_OPTIONS)[number];
+export const BUCKET_LABEL: Record<RecurringBucket, string> = { rent: "Rent", utils: "Utilities", other: "Other" };
+export function bucketFromCategory(category: string | null): RecurringBucket {
+  if (category === "RENT") return "rent";
+  if (category === "UTILITIES" || category === "RENT_AND_UTILITIES") return "utils";
+  return "other";
+}
+export type RecurringTag = { key: string; name: string; cadence: RecurringCadence; bucket: RecurringBucket };
+
 export type Recurring = {
   name: string;
+  key: string;
   amount: number;
-  cadence: "weekly" | "every two weeks" | "monthly" | "quarterly" | "yearly";
+  cadence: RecurringCadence;
+  bucket: RecurringBucket;
   gapDays: number;
   count: number;
   firstDate: string;
   lastDate: string;
   nextDate: string;
   monthlyCost: number;
+  on: string | null;
 };
 
 const median = (xs: number[]) => {
@@ -233,15 +346,52 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 };
 
-const CADENCES: { name: Recurring["cadence"]; min: number; max: number }[] = [
+export function ordinal(n: number): string {
+  const j = n % 10;
+  const k = n % 100;
+  if (k >= 11 && k <= 13) return `${n}th`;
+  if (j === 1) return `${n}st`;
+  if (j === 2) return `${n}nd`;
+  if (j === 3) return `${n}rd`;
+  return `${n}th`;
+}
+
+// Typical calendar day a monthly charge lands on. Late-month dates are "end of month"
+// because those move with the length of the month.
+export function monthOn(days: string[]): string {
+  const d = Math.round(median(days.map((day) => Number(day.slice(8)))));
+  if (d >= 28) return "end of month";
+  return ordinal(d);
+}
+
+export function yearOn(days: string[]): string {
+  const m = Math.round(median(days.map((day) => Number(day.slice(5, 7)))));
+  return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Math.min(11, Math.max(0, m - 1))]!;
+}
+
+const CADENCES: { name: RecurringCadence; min: number; max: number }[] = [
   { name: "weekly", min: 6, max: 8 },
   { name: "every two weeks", min: 13, max: 16 },
   { name: "monthly", min: 26, max: 35 },
   { name: "quarterly", min: 85, max: 95 },
-  { name: "yearly", min: 355, max: 375 },
+  { name: "yearly", min: 320, max: 400 },
 ];
 
-const normName = (t: Txn) =>
+// Weekly and similar cadences are scaled to a month. A monthly charge is already a month.
+function monthlyCost(typical: number, cadence: RecurringCadence, gap: number): number {
+  switch (cadence) {
+    case "monthly":
+      return round2(typical);
+    case "quarterly":
+      return round2(typical / 3);
+    case "yearly":
+      return round2(typical / 12);
+    default:
+      return round2((typical * 30.4) / gap);
+  }
+}
+
+export const merchantKey = (t: Pick<Txn, "merchant" | "name">) =>
   merchantName(t)
     .toLowerCase()
     .replace(/[0-9#*]+/g, " ")
@@ -249,44 +399,150 @@ const normName = (t: Txn) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const defaultGap = (cadence: RecurringCadence) =>
+  cadence === "weekly" ? 7 : cadence === "every two weeks" ? 14 : cadence === "quarterly" ? 91 : cadence === "yearly" ? 365 : 30;
+
+const fromGroup = (key: string, list: Txn[], cadence: RecurringCadence, name: string, today: string, bucket: RecurringBucket): Recurring => {
+  const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
+  const days = [...new Set(sorted.map((t) => t.date))];
+  const typical = sorted.at(-1)?.amount ?? 0;
+  const gaps = days.slice(1).map((d, i) => dayNum(d) - dayNum(days[i]!));
+  const gap = gaps.length ? median(gaps) : defaultGap(cadence);
+  const lastDate = days.at(-1) ?? today;
+  const firstDate = days[0] ?? today;
+  const on = cadence === "monthly" && days.length ? monthOn(days) : cadence === "yearly" && days.length ? yearOn(days) : null;
+  return {
+    name,
+    key,
+    amount: round2(typical),
+    cadence,
+    bucket,
+    gapDays: Math.round(gap),
+    count: days.length,
+    firstDate,
+    lastDate,
+    nextDate: dayStr(dayNum(lastDate) + Math.round(gap)),
+    monthlyCost: typical ? monthlyCost(typical, cadence, gap) : 0,
+    on,
+  };
+};
+
 export function detectRecurring(txns: Txn[], today: string): Recurring[] {
   const groups = new Map<string, Txn[]>();
   for (const t of txns) {
     if (t.pending || t.amount <= 0 || classify(t) !== "spending") continue;
-    const key = normName(t);
+    const key = merchantKey(t);
     if (key.length < 2) continue;
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(t);
   }
   const out: Recurring[] = [];
-  for (const list of groups.values()) {
+  for (const [key, list] of groups) {
     const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
-    // several charges on one day count once
     const days = [...new Set(sorted.map((t) => t.date))];
-    if (days.length < 3) continue;
-    const gaps = days.slice(1).map((d, i) => dayNum(d) - dayNum(days[i]!));
-    const gap = median(gaps);
-    const cadence = CADENCES.find((c) => gap >= c.min && gap <= c.max);
-    if (!cadence) continue;
-    const onBeat = gaps.filter((g) => g >= cadence.min && g <= cadence.max).length;
-    if (onBeat / gaps.length < 0.7) continue;
+    if (days.length < 2) continue;
     const amounts = sorted.map((t) => t.amount);
     const typical = median(amounts);
-    if (amounts.filter((a) => Math.abs(a - typical) / typical <= 0.35).length / amounts.length < 0.7) continue;
+    if (!typical || amounts.filter((a) => Math.abs(a - typical) / typical <= 0.35).length / amounts.length < 0.7) continue;
+    const gaps = days.slice(1).map((d, i) => dayNum(d) - dayNum(days[i]!));
+    const gap = median(gaps);
+    const hit = CADENCES.find((c) => gap >= c.min && gap <= c.max);
+    if (!hit) continue;
+    if (days.length < (hit.name === "yearly" ? 2 : 3)) continue;
+    const onBeat = gaps.filter((g) => g >= hit.min && g <= hit.max).length;
+    if (onBeat / gaps.length < 0.7) continue;
     const lastDate = days.at(-1)!;
-    if (dayNum(today) - dayNum(lastDate) > gap * 1.6) continue; // stopped
-    out.push({
-      name: sorted.at(-1)!.merchant ?? sorted.at(-1)!.name,
-      amount: round2(typical),
-      cadence: cadence.name,
-      gapDays: Math.round(gap),
-      count: days.length,
-      firstDate: days[0]!,
-      lastDate,
-      nextDate: dayStr(dayNum(lastDate) + Math.round(gap)),
-      monthlyCost: round2((typical * 30.4) / gap),
-    });
+    if (dayNum(today) - dayNum(lastDate) > gap * 1.6) continue;
+    const row = fromGroup(key, list, hit.name, sorted.at(-1)!.merchant ?? sorted.at(-1)!.name, today, "other");
+    out.push(row);
   }
   return out.sort((a, b) => b.monthlyCost - a.monthlyCost);
+}
+
+export function taggedRecurring(txns: Txn[], tags: RecurringTag[], today: string): Recurring[] {
+  const groups = new Map<string, Txn[]>();
+  for (const t of txns) {
+    if (t.pending || t.amount <= 0 || classify(t) !== "spending") continue;
+    const key = merchantKey(t);
+    if (!key) continue;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(t);
+  }
+  const out: Recurring[] = [];
+  for (const tag of tags) {
+    const list = groups.get(tag.key) ?? [];
+    const inferred = bucketFromCategory(list.at(-1)?.category ?? null);
+    const bucket = tag.bucket === "other" && inferred !== "other" ? inferred : tag.bucket;
+    const row = fromGroup(tag.key, list, tag.cadence, tag.name, today, bucket);
+    out.push(row);
+  }
+  return out.sort((a, b) => b.monthlyCost - a.monthlyCost);
+}
+
+export function recurringBuckets(list: Recurring[]) {
+  return BUCKET_OPTIONS.map((id) => {
+    const items = list.filter((r) => r.bucket === id);
+    return { id, label: BUCKET_LABEL[id], items, total: round2(items.reduce((s, r) => s + r.monthlyCost, 0)) };
+  });
+}
+
+export type MerchantChoice = { key: string; name: string; count: number; lastAmount: number; lastDate: string };
+
+export function merchantChoices(txns: Txn[]): MerchantChoice[] {
+  const groups = new Map<string, Txn[]>();
+  for (const t of txns) {
+    if (t.pending || t.amount <= 0 || classify(t) !== "spending") continue;
+    const key = merchantKey(t);
+    if (key.length < 2) continue;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(t);
+  }
+  return [...groups.entries()]
+    .map(([key, list]) => {
+      const last = [...list].sort((a, b) => a.date.localeCompare(b.date)).at(-1)!;
+      return { key, name: last.merchant ?? last.name, count: new Set(list.map((t) => t.date)).size, lastAmount: last.amount, lastDate: last.date };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export type MonthSubs = { month: string; budget: number; cash: number };
+
+function monthsBetween(from: string, to: string): number {
+  const [fy, fm] = from.split("-").map(Number) as [number, number];
+  const [ty, tm] = to.split("-").map(Number) as [number, number];
+  return (ty - fy) * 12 + (tm - fm);
+}
+
+// What we expect to actually post in that calendar month (not the smoothed /mo share).
+function expectedInMonth(r: Recurring, month: string): number {
+  if (monthOf(r.firstDate) > month) return 0;
+  if (r.cadence === "monthly") return r.amount;
+  if (r.cadence === "yearly") return month.slice(5) === r.lastDate.slice(5, 7) ? r.amount : 0;
+  if (r.cadence === "quarterly") return monthsBetween(monthOf(r.firstDate), month) % 3 === 0 ? r.amount : 0;
+  return r.monthlyCost;
+}
+
+// Budget is the amount expected to post that month. Cash is what actually posted.
+export function subscriptionTrack(recurring: Recurring[], txns: Txn[], months: string[]): MonthSubs[] {
+  const keys = new Set(recurring.map((r) => r.key));
+  return months.map((month) => {
+    let cash = 0;
+    for (const t of txns) {
+      if (monthOf(t.date) !== month || t.pending || t.amount <= 0 || classify(t) !== "spending") continue;
+      if (keys.has(merchantKey(t))) cash += t.amount;
+    }
+    let budget = 0;
+    for (const r of recurring) budget += expectedInMonth(r, month);
+    return { month, budget: round2(budget), cash: round2(cash) };
+  });
+}
+
+export type SubMonthHit = { key: string; name: string; posted: number; txns: { date: string; amount: number }[] };
+
+export function subscriptionMonthHits(recurring: Recurring[], txns: Txn[], month: string): SubMonthHit[] {
+  return recurring.map((r) => {
+    const hits = txns
+      .filter((t) => monthOf(t.date) === month && !t.pending && t.amount > 0 && classify(t) === "spending" && merchantKey(t) === r.key)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.amount - b.amount);
+    return { key: r.key, name: r.name, posted: round2(hits.reduce((s, t) => s + t.amount, 0)), txns: hits.map((t) => ({ date: t.date, amount: t.amount })) };
+  });
 }
 
 // ---- insights
@@ -320,14 +576,8 @@ export function insights(input: { txns: Txn[]; accounts: AccountInfo[]; liabilit
     });
   }
 
-  const cur = summarizeMonth(txns, month);
-  if (cur.byCategory[0] && cur.spending > 0) {
-    const c = cur.byCategory[0];
-    out.push({ id: "top-category", tone: "info", title: `${c.label} is your biggest category`, detail: `${fmtMoney(c.amount)} this month, ${fmtPct(c.amount / cur.spending)} of your spending.` });
-  }
-
   // Bills such as rent and loan payments are not purchases, so they are not the "largest purchase".
-  const bills = new Set(["RENT_AND_UTILITIES", "LOAN_PAYMENTS"]);
+  const bills = new Set(["RENT", "UTILITIES", "RENT_AND_UTILITIES", "LOAN_PAYMENTS", "CC_PAYMENTS"]);
   const big = txns.filter((t) => monthOf(t.date) === month && classify(t) === "spending" && !bills.has(t.category ?? "") && t.amount >= 300).sort((a, b) => b.amount - a.amount)[0];
   if (big) out.push({ id: "big", tone: "info", title: "Largest purchase this month", detail: `${fmtMoney(big.amount)} at ${merchantName(big)} on ${big.date}.` });
 

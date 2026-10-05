@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { palette } from "@/lib/theme";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -8,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     scope: "/",
     display: "standalone",
-    background_color: "#0a0a0b",
-    theme_color: "#0a0a0b",
+    background_color: palette.bg,
+    theme_color: palette.bg,
     categories: ["productivity", "lifestyle"],
     icons: [
       { src: "/icon", sizes: "512x512", type: "image/png", purpose: "any" },

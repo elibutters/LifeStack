@@ -16,7 +16,7 @@ const typeLabel = (t: string) => TYPES[t] ?? title(t);
 export default async function Investments() {
   await requireSession();
   const [accounts, holdings] = await Promise.all([loadAccounts().catch(() => null), loadHoldings().catch(() => null)]);
-  if (!accounts || !holdings) return <p className="text-red-300">Couldn't load your investments. Try again shortly.</p>;
+  if (!accounts || !holdings) return <p className="text-danger">Couldn't load your investments. Try again shortly.</p>;
   const invAccounts = accounts.filter((a) => a.type === "investment");
   if (!invAccounts.length) {
     return (
@@ -43,7 +43,7 @@ export default async function Investments() {
         <div className="rounded-md border border-line bg-surface p-4"><p className="text-sm text-muted">Cost basis</p><p className="mt-1 text-2xl font-semibold tabular-nums">{cost > 0 ? fmtMoney(cost) : "n/a"}</p></div>
         <div className="rounded-md border border-line bg-surface p-4">
           <p className="text-sm text-muted">Gain or loss</p>
-          <p className={`mt-1 text-2xl font-semibold tabular-nums ${gain < 0 ? "text-red-300" : gain > 0 ? "text-emerald-300" : ""}`}>{gainBase > 0 ? fmtMoney(gain) : "n/a"}</p>
+          <p className={`mt-1 text-2xl font-semibold tabular-nums ${gain < 0 ? "text-danger" : gain > 0 ? "text-ok" : ""}`}>{gainBase > 0 ? fmtMoney(gain) : "n/a"}</p>
           {gainBase > 0 && <p className="text-xs text-muted">{fmtPct(gain / gainBase)} on positions with a known cost</p>}
         </div>
       </div>
@@ -82,7 +82,7 @@ export default async function Investments() {
                           <td className="px-3 text-right tabular-nums">{h.quantity.toLocaleString("en-US", { maximumFractionDigits: 4 })}</td>
                           <td className="px-3 text-right tabular-nums">{fmtMoney(h.price, true)}</td>
                           <td className="px-3 text-right tabular-nums">{fmtMoney(h.value)}</td>
-                          <td className={`pl-3 text-right tabular-nums ${g == null ? "text-muted" : g < 0 ? "text-red-300" : "text-emerald-300"}`}>{g == null ? "n/a" : `${fmtMoney(g)} (${fmtPct(g / h.costBasis!)})`}</td>
+                          <td className={`pl-3 text-right tabular-nums ${g == null ? "text-muted" : g < 0 ? "text-danger" : "text-ok"}`}>{g == null ? "n/a" : `${fmtMoney(g)} (${fmtPct(g / h.costBasis!)})`}</td>
                         </tr>
                       );
                     })}

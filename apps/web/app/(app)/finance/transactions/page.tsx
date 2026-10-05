@@ -3,7 +3,9 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth";
 import { fmtDayShort, isValidMonth } from "@/lib/dates";
 import { loadFinance } from "@/lib/finance-data";
-import { CATEGORY_KEYS, categoryLabel, classify, fmtMoney, lastMonths, merchantName, monthOf, accountLabel } from "@/lib/finance-calc";
+import { CATEGORY_KEYS, categoryKey, categoryLabel, classify, fmtMoney, lastMonths, merchantKey, merchantName, monthOf, accountLabel, titleCase } from "@/lib/finance-calc";
+import { loadRecurringTags } from "@/lib/recurring";
+import { TxnTags } from "@/components/txn-tags";
 
 export const metadata: Metadata = { title: "Transactions" };
 export const dynamic = "force-dynamic";
@@ -16,18 +18,22 @@ export default async function Transactions({ searchParams }: { searchParams: Pro
   await requireSession();
   const sp = await searchParams;
   const data = await loadFinance();
-  if (!data.ok) return <p className="text-red-300">Couldn't load your finance data. Try again shortly.</p>;
+  if (!data.ok) return <p className="text-danger">Couldn't load your finance data. Try again shortly.</p>;
   const { accounts, txns, today } = data;
+  const tags = await loadRecurringTags().catch(() => []);
+  const cadenceByKey = new Map(tags.map((t) => [t.key, t.cadence]));
 
   const q = (sp.q ?? "").trim().slice(0, 80).toLowerCase();
   const kind = ["spending", "income", "transfer"].includes(sp.kind ?? "") ? sp.kind! : "all";
   const month = isValidMonth(sp.m) ? sp.m : "";
   const acct = accounts.some((a) => a.plaidAccountId === sp.acct) ? sp.acct! : "";
-  const cat = sp.cat && (CATEGORY_KEYS.includes(sp.cat) || txns.some((t) => t.category === sp.cat)) ? sp.cat : "";
+  const catRaw = sp.cat === "TRANSFER_IN" || sp.cat === "TRANSFER_OUT" ? "TRANSFER" : sp.cat;
+  const leftover = [...new Set(txns.map((t) => categoryKey(t)).filter((c): c is string => !!c && !CATEGORY_KEYS.includes(c)))].sort();
+  const cat = catRaw && (CATEGORY_KEYS.includes(catRaw) || leftover.includes(catRaw)) ? catRaw : "";
   const page = Math.max(1, Math.min(500, Number.parseInt(sp.page ?? "1", 10) || 1));
 
   const rows = txns
-    .filter((t) => (!q || `${t.name} ${t.merchant ?? ""}`.toLowerCase().includes(q)) && (!acct || t.accountId === acct) && (!cat || t.category === cat) && (!month || monthOf(t.date) === month) && (kind === "all" || classify(t) === kind))
+    .filter((t) => (!q || `${t.name} ${t.merchant ?? ""}`.toLowerCase().includes(q)) && (!acct || t.accountId === acct) && (!cat || categoryKey(t) === cat) && (!month || monthOf(t.date) === month) && (kind === "all" || classify(t) === kind))
     .sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount);
   const shown = rows.slice((page - 1) * PAGE, page * PAGE);
   const accountName = new Map(accounts.map((a) => [a.plaidAccountId, `${accountLabel(a)}${a.institution ? ` (${a.institution})` : ""}`]));
@@ -37,7 +43,7 @@ export default async function Transactions({ searchParams }: { searchParams: Pro
   const base = new URLSearchParams();
   for (const [k, v] of Object.entries({ q: sp.q?.trim(), acct, cat, kind: kind === "all" ? "" : kind, m: month })) if (v) base.set(k, v);
   const link = (p: number) => `/finance/transactions?${new URLSearchParams({ ...Object.fromEntries(base), page: String(p) })}`;
-  const categories = [...new Set([...CATEGORY_KEYS, ...txns.map((t) => t.category).filter((c): c is string => !!c)])];
+  const categories = [...CATEGORY_KEYS, ...leftover];
 
   const groups: { date: string; items: typeof shown }[] = [];
   for (const t of shown) {
@@ -72,8 +78,8 @@ export default async function Transactions({ searchParams }: { searchParams: Pro
           <button type="submit" className="h-11 rounded-md bg-fg px-4 text-sm font-medium text-bg">Apply</button>
           <Link href="/finance/transactions" className="flex h-11 items-center rounded-md border border-line px-4 text-sm hover:bg-raised">Clear</Link>
           <p className="ml-auto self-center text-sm text-muted">
-            {rows.length.toLocaleString()} found &middot; out <span className="text-red-300 tabular-nums">{fmtMoney(spent)}</span> &middot; in{" "}
-            <span className="text-emerald-300 tabular-nums">{fmtMoney(received)}</span>
+            {rows.length.toLocaleString()} found &middot; out <span className="text-danger tabular-nums">{fmtMoney(spent)}</span> &middot; in{" "}
+            <span className="text-ok tabular-nums">{fmtMoney(received)}</span>
           </p>
         </div>
       </form>
@@ -90,17 +96,16 @@ export default async function Transactions({ searchParams }: { searchParams: Pro
                   const k = classify(t);
                   const out = t.amount > 0;
                   return (
-                    <li key={t.id} className="flex items-baseline justify-between gap-4 py-3">
-                      <div className="min-w-0">
-                        <p className="truncate">{merchantName(t)}</p>
-                        <p className="truncate text-sm text-muted">
-                          {k === "transfer" ? "Transfer" : categoryLabel(t.category)} &middot; {accountName.get(t.accountId) ?? "Account"}
-                          {t.pending ? " · pending" : ""}
-                        </p>
-                      </div>
-                      <span className={`shrink-0 tabular-nums ${k === "transfer" ? "text-muted" : out ? "text-red-300" : "text-emerald-300"}`}>
+                    <li key={t.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-1 py-3">
+                      <p className="min-w-0 truncate">{titleCase(merchantName(t))}</p>
+                      <span className={`shrink-0 pt-0.5 text-right tabular-nums ${k === "transfer" ? "text-muted" : out ? "text-danger" : "text-ok"}`}>
                         {out ? "-" : "+"}{fmtMoney(Math.abs(t.amount), true)}
                       </span>
+                      <TxnTags id={t.id} name={t.name} merchant={t.merchant} category={t.category} detailed={t.detailed} cadence={cadenceByKey.get(merchantKey(t)) ?? null} />
+                      <p className="max-w-[14rem] self-end truncate text-right text-xs text-muted">
+                        {accountName.get(t.accountId) ?? "Account"}
+                        {t.pending ? " · Pending" : ""}
+                      </p>
                     </li>
                   );
                 })}

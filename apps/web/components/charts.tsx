@@ -4,20 +4,30 @@ import { fmtMoney } from "@/lib/finance-calc";
 const dayLabel = (d: string) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${d}T00:00:00Z`));
 
 // Small chart pieces drawn with plain SVG and CSS, so they cost no script and work on any screen.
-export function AreaChart({ points, label }: { points: { day: string; value: number }[]; label: string }) {
+export function AreaChart({
+  points,
+  label,
+  range,
+}: {
+  points: { day: string; value: number }[];
+  label: string;
+  range?: { min: number; max: number };
+}) {
   if (points.length < 2) return <p className="py-6 text-sm text-muted">History builds up as the days go by.</p>;
   const W = 600;
   const H = 100;
   const values = points.map((p) => p.value);
-  let min = Math.min(...values);
-  let max = Math.max(...values);
+  let min = range?.min ?? Math.min(...values);
+  let max = range?.max ?? Math.max(...values);
   if (min === max) {
     min -= 1;
     max += 1;
   }
-  const pad = (max - min) * 0.12;
-  min -= pad;
-  max += pad;
+  if (!range) {
+    const pad = (max - min) * 0.12;
+    min -= pad;
+    max += pad;
+  }
   const x = (i: number) => (i / (points.length - 1)) * W;
   const y = (v: number) => H - ((v - min) / (max - min)) * H;
   const line = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(" ");
@@ -37,9 +47,9 @@ export function AreaChart({ points, label }: { points: { day: string; value: num
 
 export type BarItem = { label: string; amount: number; sub?: string; href?: string };
 
-export function BarRows({ items, total, tone = "accent" }: { items: BarItem[]; total?: number; tone?: "accent" | "good" }) {
+export function BarRows({ items, total, tone = "accent" }: { items: BarItem[]; total?: number; tone?: "accent" | "good" | "out" }) {
   const max = Math.max(...items.map((i) => i.amount), 1);
-  const bar = tone === "good" ? "bg-emerald-400/70" : "bg-accent/70";
+  const bar = tone === "good" ? "bg-ok/80" : tone === "out" ? "bg-danger/80" : "bg-accent/70";
   return (
     <ul className="space-y-3">
       {items.map((i) => {
@@ -66,15 +76,60 @@ export function BarRows({ items, total, tone = "accent" }: { items: BarItem[]; t
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export function CashflowColumns({ data, highlight }: { data: { month: string; income: number; spending: number }[]; highlight?: string }) {
+export function CashflowColumns({
+  data,
+  highlight,
+  hrefFor,
+}: {
+  data: { month: string; income: number; spending: number }[];
+  highlight?: string;
+  hrefFor?: (month: string) => string;
+}) {
   const max = Math.max(...data.flatMap((d) => [d.income, d.spending]), 1);
+  return (
+    <div>
+      <div className="flex items-end gap-1.5 sm:gap-2">
+        {data.map((d) => {
+          const on = d.month === highlight;
+          const inner = (
+            <>
+              <div className={`flex h-40 w-full items-end justify-center gap-0.5 rounded-sm ${on ? "bg-raised/60" : ""}`}>
+                <div className="w-1/2 max-w-3 rounded-t-sm bg-ok/80" style={{ height: `${(d.income / max) * 100}%` }} />
+                <div className="w-1/2 max-w-3 rounded-t-sm bg-danger/80" style={{ height: `${(d.spending / max) * 100}%` }} />
+              </div>
+              <span className={`mt-1 text-center text-[11px] ${on ? "text-fg" : "text-muted"}`}>{MONTHS[Number(d.month.slice(5)) - 1]}</span>
+            </>
+          );
+          const cls = `flex min-w-0 flex-1 flex-col items-stretch rounded-sm ${hrefFor ? "cursor-pointer hover:bg-raised/50" : ""}`;
+          const title = `${d.month}: ${fmtMoney(d.income)} in, ${fmtMoney(d.spending)} out`;
+          return hrefFor ? (
+            <Link key={d.month} href={hrefFor(d.month)} className={cls} title={title} aria-current={on ? "true" : undefined}>
+              {inner}
+            </Link>
+          ) : (
+            <div key={d.month} className={cls} title={title}>
+              {inner}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex gap-4 text-xs text-muted">
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-ok/80" />Money in</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-danger/80" />Money out</span>
+      </div>
+    </div>
+  );
+}
+
+export function SubBudgetColumns({ data, highlight }: { data: { month: string; budget: number; cash: number }[]; highlight?: string }) {
+  const max = Math.max(...data.flatMap((d) => [d.budget, d.cash]), 1);
   return (
     <div>
       <div className="flex h-40 items-end gap-1.5 sm:gap-2">
         {data.map((d) => (
-          <div key={d.month} className={`flex h-full flex-1 items-end justify-center gap-0.5 rounded-sm ${d.month === highlight ? "bg-raised/60" : ""}`} title={`${d.month}: ${fmtMoney(d.income)} in, ${fmtMoney(d.spending)} out`}>
-            <div className="w-1/2 max-w-3 rounded-t-sm bg-emerald-400/70" style={{ height: `${(d.income / max) * 100}%` }} />
-            <div className="w-1/2 max-w-3 rounded-t-sm bg-accent/70" style={{ height: `${(d.spending / max) * 100}%` }} />
+          <div key={d.month} className={`flex h-full flex-1 items-end justify-center gap-0.5 rounded-sm ${d.month === highlight ? "bg-raised/60" : ""}`} title={`${d.month}: budget ${fmtMoney(d.budget)}, charged ${fmtMoney(d.cash)}`}>
+            <div className="w-1/2 max-w-3 rounded-t-sm bg-fg/25" style={{ height: `${(d.budget / max) * 100}%` }} />
+            <div className="w-1/2 max-w-3 rounded-t-sm bg-accent/70" style={{ height: `${(d.cash / max) * 100}%` }} />
           </div>
         ))}
       </div>
@@ -86,8 +141,8 @@ export function CashflowColumns({ data, highlight }: { data: { month: string; in
         ))}
       </div>
       <div className="mt-3 flex gap-4 text-xs text-muted">
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-emerald-400/70" />Money in</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-accent/70" />Money out</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-fg/25" />Budgeted</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-accent/70" />Charged</span>
       </div>
     </div>
   );

@@ -6,7 +6,8 @@ import { accounts, events } from "@lifestack/db";
 import { db } from "./db";
 import { addDays, startOfDay, ymd } from "./dates";
 import { describeError } from "./errors";
-import type { AccountInfo, Liability, Txn } from "./finance-calc";
+import { inferSofiAutoCategories, mapPlaidCategory, type AccountInfo, type Liability, type Txn } from "./finance-calc";
+import { loadTxnOverrides } from "./txn-overrides";
 
 // Reads the synced finance data and shapes it for the calculations in finance-calc.ts.
 export const todayDay = () => ymd(new Date());
@@ -54,11 +55,14 @@ export async function loadAccounts(): Promise<AccountInfo[]> {
 
 export async function loadTransactions(days = 430): Promise<Txn[]> {
   const since = startOfDay(addDays(todayDay(), -days));
-  const rows = await db()
-    .select()
-    .from(events)
-    .where(and(eq(events.source, "plaid"), eq(events.key, "finance.transaction"), gte(events.ts, since)))
-    .orderBy(events.ts);
+  const [rows, overrides] = await Promise.all([
+    db()
+      .select()
+      .from(events)
+      .where(and(eq(events.source, "plaid"), eq(events.key, "finance.transaction"), gte(events.ts, since)))
+      .orderBy(events.ts),
+    loadTxnOverrides().catch(() => new Map<string, string>()),
+  ]);
   const out: Txn[] = [];
   let unreadable = 0;
   for (const r of rows) {
@@ -67,19 +71,26 @@ export async function loadTransactions(days = 430): Promise<Txn[]> {
       unreadable++;
       continue;
     }
+    const id = r.sourceId ?? String(r.id);
     out.push({
-      id: r.sourceId ?? String(r.id),
+      id,
       date: ymd(r.ts),
       amount: r.valueNum,
       name: p.data.name,
       merchant: p.data.merchant ?? null,
-      category: p.data.category ?? null,
+      category: overrides.get(id) ?? mapPlaidCategory(p.data.category ?? null, p.data.categoryDetailed) ?? null,
       detailed: p.data.categoryDetailed ?? null,
       pending: !!p.data.pending,
       accountId: p.data.accountId,
     });
   }
   if (unreadable) console.error(`finance: ${unreadable} transaction row(s) could not be read`); // counts only, never contents
+  const auto = inferSofiAutoCategories(out);
+  for (const t of out) {
+    if (overrides.has(t.id)) continue;
+    const next = auto.get(t.id);
+    if (next) t.category = next;
+  }
   return out;
 }
 
@@ -154,8 +165,13 @@ export async function loadBalanceSnapshots(days = 400) {
 
 export async function loadFinance() {
   try {
-    const [accts, txns, liabilities] = await Promise.all([loadAccounts(), loadTransactions(), loadLiabilities()]);
-    return { ok: true as const, accounts: accts, txns, liabilities, today: todayDay() };
+    const [accts, txns, liabilities, snapshots] = await Promise.all([
+      loadAccounts(),
+      loadTransactions(),
+      loadLiabilities(),
+      loadBalanceSnapshots(),
+    ]);
+    return { ok: true as const, accounts: accts, txns, liabilities, snapshots, today: todayDay() };
   } catch (e) {
     console.error("finance: could not load", describeError(e));
     return { ok: false as const };

@@ -29,7 +29,7 @@ export function Sidebar() {
   return (
     <aside className={`sticky top-0 hidden h-dvh shrink-0 md:block ${width}`}>
       <div
-        className={`flex h-full ${width} flex-col border-r border-line bg-bg pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] pr-2 transition-[width] duration-150`}
+        className={`flex h-full ${width} flex-col border-r border-line bg-bg/55 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(0.5rem,env(safe-area-inset-left))] backdrop-blur transition-[width] duration-150`}
       >
         <div className={`mb-4 flex ${expanded ? "items-center gap-1 px-1" : "flex-col items-center"}`}>
           <Link href="/" className={`flex min-w-0 items-center ${expanded ? "h-11 flex-1" : "h-11 w-10 justify-center"}`}>
@@ -54,7 +54,7 @@ export function Sidebar() {
           </button>
         </div>
         <SidebarNav expanded={expanded} />
-        <div className="mt-auto px-1">
+        <div className="mt-auto">
           <ProfileMenu placement="sidebar" expanded={expanded} />
         </div>
       </div>
