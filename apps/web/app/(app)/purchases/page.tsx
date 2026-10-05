@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card } from "@/components/card";
+import { PageHeader } from "@/components/page-header";
 import { requireSession } from "@/lib/auth";
 import { loadAmazon } from "@/lib/amazon";
 import { LOGIN_REQUIRED } from "@/lib/amazon-map";
@@ -25,20 +26,23 @@ export default async function PurchasesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Purchases</h1>
-          <p className="mt-1 text-sm text-muted">
-            {state?.lastOkAt ? `Last snapshot ${fmtDateTime(state.lastOkAt)}` : "No Amazon snapshot yet."}
-          </p>
+    <>
+      <PageHeader>
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight">Purchases</h1>
+            <p className="mt-1 text-sm text-muted">
+              {state?.lastOkAt ? `Last snapshot ${fmtDateTime(state.lastOkAt)}` : "No Amazon snapshot yet."}
+            </p>
+          </div>
+          <Link href="/connections" className="text-sm text-accent">
+            Connections
+          </Link>
         </div>
-        <Link href="/connections" className="text-sm text-accent">
-          Connections
-        </Link>
-      </div>
+      </PageHeader>
+      <div className="space-y-6">
 
-      {needsLogin && <p className="rounded-md border border-red-400/30 bg-red-400/10 px-4 py-3 text-red-300">{LOGIN_REQUIRED}</p>}
+      {needsLogin && <p className="rounded-md border border-danger/30 bg-danger/10 px-4 py-3 text-danger">{LOGIN_REQUIRED}</p>}
 
       <Card title="Cart">
         {cart.length ? (
@@ -94,5 +98,6 @@ export default async function PurchasesPage() {
         )}
       </Card>
     </div>
+    </>
   );
 }

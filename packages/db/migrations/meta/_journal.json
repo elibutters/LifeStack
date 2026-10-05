@@ -71,6 +71,13 @@
       "when": 1791149461221,
       "tag": "0009_warm_the_anarchist",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791158435800,
+      "tag": "0010_bumpy_la_nuit",
+      "breakpoints": true
     }
   ]
 }

@@ -56,21 +56,21 @@ export function ProfileMenu({
   const item = (href?: string) => {
     const active = href ? pathname.startsWith(href) : false;
     if (compact) {
-      return `grid h-8 w-full place-items-center rounded-md transition-colors ${
+      return `grid w-full place-items-center rounded-md p-2 transition-colors ${
         active ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"
       }`;
     }
-    return `flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
+    return `flex w-full items-center gap-2.5 rounded-md p-2 text-left text-sm transition-colors ${
       active ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"
     }`;
   };
 
   const menuClass = compact
-    ? "mb-1 flex flex-col gap-0.5 rounded-md border border-line bg-surface p-1"
+    ? "mb-1 flex flex-col gap-0.5"
     : placement === "header"
       ? "absolute top-full right-0 z-50 mt-1 min-w-44 rounded-md border border-line bg-surface p-1"
       : keepOpen
-        ? "flex flex-col gap-0.5 pb-1"
+        ? "flex flex-col gap-0.5"
         : "absolute bottom-full left-0 right-0 z-50 mb-1 rounded-md border border-line bg-surface p-1";
 
   const menu = showing && (
@@ -91,8 +91,8 @@ export function ProfileMenu({
         }}
         className={
           placement === "sidebar"
-            ? `flex w-full items-center rounded-md py-2 text-sm transition-colors ${
-                expanded ? "gap-2.5 px-2.5" : "justify-center px-0"
+            ? `flex w-full items-center rounded-md p-2 text-sm transition-colors ${
+                expanded ? "gap-2.5" : "justify-center"
               } ${keepOpen || open ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"}`
             : `grid h-9 w-9 place-items-center rounded-md border border-line transition-colors ${
                 keepOpen || open ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"
@@ -157,8 +157,8 @@ function MenuList({
           aria-label={compact ? "Sign out" : undefined}
           className={
             compact
-              ? "grid h-8 w-full place-items-center rounded-md text-red-300 hover:bg-raised"
-              : "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-red-300 hover:bg-raised"
+              ? "grid w-full place-items-center rounded-md p-2 text-danger hover:bg-raised"
+              : "flex w-full items-center gap-2.5 rounded-md p-2 text-left text-sm text-danger hover:bg-raised"
           }
         >
           <SignOutIcon width={16} height={16} />

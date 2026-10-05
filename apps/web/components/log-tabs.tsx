@@ -11,7 +11,7 @@ const TABS = [
 export function LogTabs() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Log" className="-mx-1 mb-6 flex gap-1 overflow-x-auto pb-1">
+    <nav aria-label="Log" className="-mx-1 flex gap-1 overflow-x-auto">
       {TABS.map((t) => {
         const active = pathname === t.href;
         return (

@@ -182,6 +182,23 @@ export const users = pgTable("users", {
   createdAt,
 });
 
+// Merchant names the owner has marked as a subscription. Cadence is theirs to set; amounts
+// still come from the synced transactions.
+export const recurringTags = pgTable("recurring_tags", {
+  key: text("key").primaryKey(), // normalized merchant name
+  name: text("name").notNull(),
+  cadence: text("cadence").notNull(), // weekly | every two weeks | monthly | quarterly | yearly
+  bucket: text("bucket").notNull().default("other"), // rent | utils | other
+  createdAt,
+});
+
+// Owner-set category on a Plaid transaction. source_id matches events.source_id.
+export const txnOverrides = pgTable("txn_overrides", {
+  sourceId: text("source_id").primaryKey(),
+  category: text("category").notNull(),
+  createdAt,
+});
+
 // Access keys for clients that cannot hold a login session (iPhone Shortcuts, widgets, agents).
 // Only a SHA-256 hash is stored; the key itself is shown once, when it is created.
 export const apiTokens = pgTable("api_tokens", {

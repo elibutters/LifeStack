@@ -24,15 +24,15 @@ function useActive() {
 export function SidebarNav({ expanded }: { expanded: boolean }) {
   const active = useActive();
   return (
-    <nav aria-label="Main" className="flex flex-col gap-0.5 px-2">
+    <nav aria-label="Main" className="flex flex-col gap-0.5">
       {NAV.map(({ href, label, Icon }) => (
         <Link
           key={href}
           href={href}
           title={expanded ? undefined : label}
           aria-current={active(href) ? "page" : undefined}
-          className={`flex items-center rounded-md py-2 text-sm transition-colors ${
-            expanded ? "gap-2.5 px-2.5" : "justify-center px-0"
+          className={`flex items-center rounded-md p-2 text-sm transition-colors ${
+            expanded ? "gap-2.5" : "justify-center"
           } ${active(href) ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"}`}
         >
           <Icon width={18} height={18} />

@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { Card } from "@/components/card";
 import { EventRow } from "@/components/event-row";
 import { StageBar } from "@/components/sleep-viz";
+import { PageHeader } from "@/components/page-header";
 import { loadCalendar, systemStatus } from "@/lib/calendar";
 import { syncEightIfStale } from "@/lib/eight";
 import { syncOutlookIfStale } from "@/lib/outlook";
@@ -12,6 +13,8 @@ import { addDays, fmtDayLong, hourOf, startOfDay, ymd } from "@/lib/dates";
 import { fmtMinutes, loadNights } from "@/lib/sleep";
 import { loadAmazon } from "@/lib/amazon";
 import { LOGIN_REQUIRED } from "@/lib/amazon-map";
+import { loadOverviewForPage } from "@/lib/overview";
+import { MOOD_LABELS } from "@/lib/capture-core";
 
 export const metadata: Metadata = { title: "Overview" };
 export const dynamic = "force-dynamic";
@@ -30,12 +33,13 @@ export default async function Overview() {
   const now = new Date();
   const today = ymd(now);
   const tomorrow = startOfDay(addDays(today, 1));
-  const [todayRes, soonRes, status, nights, amazon] = await Promise.all([
+  const [todayRes, soonRes, status, nights, amazon, capture] = await Promise.all([
     loadCalendar(startOfDay(today), tomorrow),
     loadCalendar(tomorrow, startOfDay(addDays(today, 8))),
     systemStatus(),
     loadNights(1).catch(() => []),
     loadAmazon().catch(() => ({ state: null, orders: [], cart: [] })),
+    loadOverviewForPage(now),
   ]);
   const todayItems = todayRes.items;
   // Things already under way belong to Today; Coming up lists what starts later.
@@ -44,13 +48,44 @@ export default async function Overview() {
   const failed = todayRes.failed || soonRes.failed;
 
   return (
-    <div className="space-y-6">
-      <header>
+    <>
+      <PageHeader>
         <p className="text-sm text-muted">{fmtDayLong(today)}</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">{greeting(hourOf(now))}</h1>
-      </header>
+      </PageHeader>
+      <div className="space-y-6">
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card
+          title="Log"
+          action={
+            <Link href="/log" className="text-sm text-accent">
+              Quick log
+            </Link>
+          }
+        >
+          {capture.log ? (
+            <dl className="space-y-2">
+              <div className="flex justify-between gap-3">
+                <dt className="text-sm text-muted">Mood</dt>
+                <dd>{capture.log.mood ? `${capture.log.mood.value} (${MOOD_LABELS[capture.log.mood.value]})` : "Not logged"}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-sm text-muted">Caffeine</dt>
+                <dd>{capture.log.caffeine.count ? `${capture.log.caffeine.mg} mg` : "None yet"}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-sm text-muted">Supplements</dt>
+                <dd>
+                  {capture.log.supplements.length}/{capture.supplementCount}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="py-2 text-muted">Couldn't load today's log.</p>
+          )}
+        </Card>
+
         <Card
           title="Today"
           className="md:col-span-2"
@@ -67,7 +102,7 @@ export default async function Overview() {
               ))}
             </ul>
           ) : failed ? (
-            <p className="py-2 text-red-400">Couldn't load events. Try again shortly.</p>
+            <p className="py-2 text-danger">Couldn't load events. Try again shortly.</p>
           ) : (
             <p className="py-2 text-muted">
               {notConnected ? (
@@ -82,16 +117,6 @@ export default async function Overview() {
               )}
             </p>
           )}
-        </Card>
-
-        <Card title="System">
-          <dl className="divide-y divide-line">
-            <StatusRow label="Database" value={status.ok ? "Connected" : "Unreachable"} bad={!status.ok} />
-            <StatusRow label="Events" value={status.ok ? String(status.events) : "-"} />
-            <StatusRow label="Sources" value={status.ok ? String(status.sources) : "-"} />
-            <StatusRow label="Calendar" value={status.ok && status.calendarConnected ? "Syncing" : "Not connected"} />
-            <StatusRow label="Sleep" value={status.ok && status.sleepConnected ? "Syncing" : "Not connected"} />
-          </dl>
         </Card>
 
         <Card
@@ -139,7 +164,7 @@ export default async function Overview() {
           }
         >
           {amazon.state?.lastError === LOGIN_REQUIRED ? (
-            <p className="py-2 text-red-300">{LOGIN_REQUIRED}</p>
+            <p className="py-2 text-danger">{LOGIN_REQUIRED}</p>
           ) : amazon.cart.length || amazon.orders.length ? (
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
@@ -189,13 +214,14 @@ export default async function Overview() {
               ))}
             </ul>
           ) : failed ? (
-            <p className="py-2 text-red-400">Couldn't load events. Try again shortly.</p>
+            <p className="py-2 text-danger">Couldn't load events. Try again shortly.</p>
           ) : (
             <p className="py-2 text-muted">Nothing in the next seven days.</p>
           )}
         </Card>
       </div>
     </div>
+    </>
   );
 }
 
@@ -204,15 +230,6 @@ function Mini({ label, value }: { label: string; value: string }) {
     <div className="py-2">
       <dt className="text-sm text-muted">{label}</dt>
       <dd className="mt-0.5 text-lg font-medium">{value}</dd>
-    </div>
-  );
-}
-
-function StatusRow({ label, value, bad }: { label: string; value: string; bad?: boolean }) {
-  return (
-    <div className="flex items-center justify-between py-2.5">
-      <dt className="text-muted">{label}</dt>
-      <dd className={bad ? "text-red-400" : ""}>{value}</dd>
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { disconnect, syncFinance, syncNow, unlinkFinance, connectEight, disconne
 import { getEightConnection, getEightSyncState } from "@/lib/eight";
 import { loadAmazon } from "@/lib/amazon";
 import { LOGIN_REQUIRED } from "@/lib/amazon-map";
+import { PageHeader } from "@/components/page-header";
 import { loadNightCount } from "@/lib/sleep";
 
 export const metadata: Metadata = { title: "Connections" };
@@ -36,7 +37,7 @@ const MESSAGES: Record<string, string> = {
 };
 
 const button = "flex h-9 cursor-pointer items-center rounded-md border border-line px-3 text-sm hover:bg-raised";
-const moneyTone = (n: number) => (n > 0 ? "text-emerald-300" : n < 0 ? "text-red-300" : "");
+const moneyTone = (n: number) => (n > 0 ? "text-ok" : n < 0 ? "text-danger" : "");
 const accountKind = (type: string | null, subtype: string | null) => {
   if (subtype) return subtype.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
   if (type === "depository") return "Cash";
@@ -45,7 +46,7 @@ const accountKind = (type: string | null, subtype: string | null) => {
   if (type === "loan") return "Loan";
   return "Account";
 };
-const danger = `${button} text-red-300`;
+const danger = `${button} text-danger`;
 const field = "h-9 rounded-md border border-line bg-bg px-3 text-sm outline-none focus:border-accent";
 
 export default async function ConnectionsPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
@@ -89,10 +90,13 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
   }
 
   return (
-    <div className="space-y-3">
-      <h1 className="text-3xl font-semibold tracking-tight">Connections</h1>
+    <>
+      <PageHeader>
+        <h1 className="text-3xl font-semibold tracking-tight">Connections</h1>
+      </PageHeader>
+      <div className="space-y-3">
 
-      {error && <p className="rounded-md border border-red-400/30 bg-red-400/10 px-4 py-3 text-red-300">{error}</p>}
+      {error && <p className="rounded-md border border-danger/30 bg-danger/10 px-4 py-3 text-danger">{error}</p>}
       {sp.connected === "eight" && !error && (
         <p className="rounded-md border border-accent/30 bg-accent/10 px-4 py-3 text-accent">
           Eight Sleep connected. Past nights are importing and will show up on the Sleep tab.
@@ -151,7 +155,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
               Link a personal Outlook account (outlook.com, hotmail.com or live.com). The app only reads the calendar; it can never change
               it.
             </p>
-            {!microsoftConfigured() && <p className="text-sm text-red-300">{MESSAGES.not_configured}</p>}
+            {!microsoftConfigured() && <p className="text-sm text-danger">{MESSAGES.not_configured}</p>}
           </>
         )}
       </ConnectionPanel>
@@ -246,7 +250,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
               Nothing to connect in the browser. Create an Amazon laptop worker key, then run the worker on the second laptop while Chrome
               stays signed in to Amazon.
             </p>
-            {amazonLogin && <p className="text-sm text-red-300">{LOGIN_REQUIRED}</p>}
+            {amazonLogin && <p className="text-sm text-danger">{LOGIN_REQUIRED}</p>}
           </>
         )}
       </ConnectionPanel>
@@ -266,11 +270,11 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
         }
       >
         {!plaidConfigured() ? (
-          <p className="text-sm text-red-300">Plaid is not set up on this deployment yet.</p>
+          <p className="text-sm text-danger">Plaid is not set up on this deployment yet.</p>
         ) : (
           <>
             {plaidKeys === "rejected" && (
-              <p className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-300">
+              <p className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
                 Plaid rejected this app's keys. Check that the client ID is right and that the secret matches the environment (production
                 secret on the live site).
               </p>
@@ -293,7 +297,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
                             <span className="truncate font-medium">{it.institutionName}</span>
                             {it.lastSyncedAt ? <LastSyncAgo at={it.lastSyncedAt.toISOString()} /> : <span className="shrink-0 text-sm font-normal text-muted">(not synced yet)</span>}
                           </p>
-                          {it.lastError && <p className="text-sm text-red-300">{it.lastError}</p>}
+                          {it.lastError && <p className="text-sm text-danger">{it.lastError}</p>}
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {needsInvestmentAccess(it.id) && (
@@ -340,6 +344,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
         )}
       </ConnectionPanel>
     </div>
+    </>
   );
 }
 
@@ -347,7 +352,7 @@ function Row({ label, value, bad }: { label: string; value: ReactNode; bad?: boo
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
       <dt className="text-sm text-muted">{label}</dt>
-      <dd className={`text-right text-sm ${bad ? "text-red-300" : ""}`}>{value}</dd>
+      <dd className={`text-right text-sm ${bad ? "text-danger" : ""}`}>{value}</dd>
     </div>
   );
 }

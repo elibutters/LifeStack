@@ -104,7 +104,7 @@ are never committed, so nothing personal enters the repo. What that means now:
 
 ## Finance pages
 
-`/finance` (overview, spending, transactions, recurring, investments) reads the synced `finance.*`
+`/finance` (overview, flow, transactions, recurring, investments) reads the synced `finance.*`
 events. All the maths lives in `apps/web/lib/finance-calc.ts` (pure, no database, fully tested);
 `lib/finance-data.ts` only loads and shapes rows. Plaid's sign convention holds throughout (positive
 = money out), transfers and credit card payments are never counted as spending or income, and

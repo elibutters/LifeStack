@@ -1,18 +1,33 @@
 @import "tailwindcss";
 
+/* Semantic palette. Hexes must match lib/theme.ts. Change both when retheming. */
 @theme {
-  --color-bg: #0a0a0b;
-  --color-surface: #111113;
-  --color-raised: #18181b;
-  --color-line: #26262b;
-  --color-muted: #8b8b94;
-  --color-fg: #ededf0;
-  --color-accent: #7aa2ff;
-  --color-holiday: #f2b24a;
-  --color-sleep-deep: #4c6fff;
-  --color-sleep-rem: #a78bfa;
-  --color-sleep-light: #7aa2ff;
-  --color-sleep-awake: #52525b;
+  --color-bg: #0c1018;
+  --color-surface: #161b24;
+  --color-raised: #1e2532;
+  --color-line: #2a3344;
+  --color-muted: #8b97ad;
+  --color-fg: #f4f6fb;
+  --color-wash: #37559d;
+  --color-accent: #5289fe;
+  --color-accent-soft: #77a2ff;
+  --color-accent-mid: #4d6fd6;
+  --color-accent-deep: #2a4c93;
+  --color-holiday: #c4b08a;
+  --color-ok: #3dcc5a;
+  --color-ok-fg: #06210a;
+  --color-danger: #e85d5d;
+  --color-warn: #e0b05a;
+  --color-idle: #2a3344;
+  --color-sleep-deep: #2a4c93;
+  --color-sleep-rem: #4d6fd6;
+  --color-sleep-light: #77a2ff;
+  --color-sleep-awake: #6f85b7;
+  --color-mood-1: #e07090;
+  --color-mood-2: #e09070;
+  --color-mood-3: #e0b05a;
+  --color-mood-4: #7dcc8a;
+  --color-mood-5: #3dcc5a;
   --radius-sm: 0.125rem;
   --radius-md: 0.25rem;
   --radius-lg: 0.25rem;
@@ -24,13 +39,17 @@ html {
   color-scheme: dark;
   /* Reserve the scrollbar space so the page does not shift when a day has more or fewer items. */
   scrollbar-gutter: stable;
-  background: var(--color-bg);
+  background-color: var(--color-bg);
+  background-image:
+    radial-gradient(90rem 36rem at 50% -12%, color-mix(in srgb, var(--color-wash) 55%, transparent) 0%, transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-wash) 38%, var(--color-bg)) 0%, var(--color-bg) 42%);
+  background-attachment: fixed;
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--color-bg);
+  background: transparent;
   color: var(--color-fg);
 }
 

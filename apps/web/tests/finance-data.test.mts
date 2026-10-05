@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 if (!process.env.DATABASE_URL?.endsWith("/lifestack_test")) { console.error("refusing to run: not the test database"); process.exit(2); }
 process.env.APP_TZ = "UTC";
 const data = await import("../lib/finance-data.ts"); const { db } = await import("../lib/db.ts");
-const { events, accounts, plaidItems } = await import("@lifestack/db");
+const { events, accounts, plaidItems, txnOverrides } = await import("@lifestack/db");
 
 const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
 const ts = (d: string) => new Date(`${d}T00:00:00Z`);
@@ -44,6 +44,9 @@ const logs: string[] = []; const orig = console.error; console.error = (...a: un
 const txns = await data.loadTransactions(); console.error = orig;
 assert.equal(txns.length, 3, "unreadable and out-of-window rows are left out");
 const coffee = txns.find((t: any) => t.name === "Coffee")!; assert.equal(coffee.date, day(1)); assert.equal(coffee.amount, 12.34); assert.equal(coffee.merchant, "Example Coffee"); assert.equal(coffee.category, "FOOD_AND_DRINK"); assert.equal(coffee.detailed, "FOOD_AND_DRINK_COFFEE"); assert.equal(coffee.pending, false); assert.equal(coffee.accountId, "chk");
+await db().insert(txnOverrides).values({ sourceId: coffee.id, category: "RENT" });
+assert.equal((await data.loadTransactions()).find((t: { name: string }) => t.name === "Coffee")!.category, "RENT");
+await db().delete(txnOverrides);
 assert.equal(txns.find((t: any) => t.name === "Pending thing")!.pending, true); assert.equal(txns.find((t: any) => t.name === "Payroll")!.merchant, null);
 assert.ok(logs.some((l) => /2 transaction row\(s\) could not be read/.test(l)) && !logs.join(" ").match(/Coffee|Payroll|12\.34/), "the log reports a count, never contents");
 assert.deepEqual(txns.map((t: any) => t.date), [...txns.map((t: any) => t.date)].sort(), "oldest first");

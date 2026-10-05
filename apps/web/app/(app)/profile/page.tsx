@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import { Card } from "@/components/card";
+import { PageHeader } from "@/components/page-header";
 import { requireSession } from "@/lib/auth";
-import { TZ } from "@/lib/dates";
 import { fieldValue, PROFILE_SECTIONS, type Profile, type ProfileField } from "@/lib/profile-core";
 import { loadProfile } from "@/lib/profile";
 import { saveProfile } from "./actions";
+import { ContactList } from "./contact-list";
 
 export const metadata: Metadata = { title: "Profile" };
 export const dynamic = "force-dynamic";
 
-const input = "h-11 w-full rounded-md border border-line bg-bg px-3 text-sm outline-none focus:border-accent";
-const area = "min-h-24 w-full rounded-md border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent";
+const input = "h-9 w-full min-w-0 rounded-md border border-line bg-bg px-2.5 text-sm outline-none focus:border-accent";
+const area = "min-h-16 w-full min-w-0 rounded-md border border-line bg-bg px-2.5 py-1.5 text-sm outline-none focus:border-accent";
 
 export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
   await requireSession();
@@ -18,67 +19,52 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
   const profile = await loadProfile().catch(() => ({}) as Profile);
 
   return (
-    <div className="space-y-6">
-      <div>
+    <>
+      <PageHeader>
         <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted">
-          This is what a new agent reads first. Values live only in the database. Fill in what is useful; blank fields are
-          omitted from the API.
-        </p>
-      </div>
+      </PageHeader>
+      <div className="space-y-6">
 
       {sp.saved === "1" && (
-        <p className="max-w-2xl rounded-md border border-accent/30 bg-accent/10 px-4 py-3 text-accent">Saved. Agents will see the filled-in fields.</p>
+        <p className="max-w-4xl rounded-md border border-accent/30 bg-accent/10 px-4 py-3 text-accent">Saved. Agents will see the filled-in fields.</p>
       )}
       {sp.error === "invalid" && (
-        <p className="max-w-2xl rounded-md border border-red-400/30 bg-red-400/10 px-4 py-3 text-red-300">
-          That did not look right. Check dates and numbers (height in cm, weight in kg).
+        <p className="max-w-4xl rounded-md border border-danger/30 bg-danger/10 px-4 py-3 text-danger">
+          That did not look right. Check dates and numbers (height in feet and inches, weight in pounds).
         </p>
       )}
 
-      <Card title="Account" className="max-w-2xl">
-        <dl className="divide-y divide-line">
-          <div className="flex items-center justify-between gap-4 py-2.5">
-            <dt className="text-muted">Status</dt>
-            <dd>Signed in</dd>
-          </div>
-          <div className="flex items-center justify-between gap-4 py-2.5">
-            <dt className="text-muted">Timezone</dt>
-            <dd className="tabular-nums">{TZ}</dd>
-          </div>
-        </dl>
-        <p className="mt-2 text-sm text-muted">Timezone comes from the app setting, not this form.</p>
-      </Card>
-
-      <form action={saveProfile} className="max-w-2xl space-y-6">
+      <form action={saveProfile} className="max-w-4xl space-y-4">
         {PROFILE_SECTIONS.map((section) => (
           <Card key={section.title} title={section.title}>
-            <p className="mb-4 text-sm text-muted">{section.blurb}</p>
-            <div className="space-y-3">
+            <p className="mb-2 text-sm text-muted">{section.blurb}</p>
+            {section.title === "Contact" && <ContactList items={profile.contacts ?? []} />}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               {section.fields.map((field) => (
                 <Field key={field.key} field={field} value={fieldValue(profile, field.key)} />
               ))}
             </div>
           </Card>
         ))}
-        <button type="submit" className="h-11 rounded-md bg-fg px-4 text-sm font-medium text-bg">
+        <button type="submit" className="h-9 rounded-md bg-fg px-4 text-sm font-medium text-bg">
           Save profile
         </button>
       </form>
     </div>
+    </>
   );
 }
 
 function Field({ field, value }: { field: ProfileField; value: string }) {
   const id = `profile-${field.key}`;
   return (
-    <div>
-      <label htmlFor={id} className="mb-1 block text-sm">
+    <div className="min-w-0">
+      <label htmlFor={id} className="mb-0.5 block text-xs text-muted">
         {field.label}
       </label>
-      {field.hint && <p className="mb-1 text-xs text-muted">{field.hint}</p>}
+      {field.hint && <p className="mb-0.5 text-xs text-muted">{field.hint}</p>}
       {field.kind === "textarea" ? (
-        <textarea id={id} name={field.key} maxLength={field.max} defaultValue={value} rows={4} className={area} />
+        <textarea id={id} name={field.key} maxLength={field.max} defaultValue={value} rows={2} className={area} />
       ) : field.kind === "select" ? (
         <select id={id} name={field.key} defaultValue={value} className={input}>
           <option value="">Not set</option>

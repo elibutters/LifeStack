@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { EventInput, type Scope } from "./capture-core";
 import { insertLog, loadToday } from "./capture";
+import { loadOverview, loadWeekSummary } from "./overview";
 import { calendarItems } from "./calendar";
 import { addDays, isValidDay, startOfDay, ymd } from "./dates";
 import { describeError } from "./errors";
@@ -32,6 +33,19 @@ const MAX_RANGE_DAYS = 90;
 export function buildServer(token: VerifiedToken): McpServer {
   const server = new McpServer({ name: "life-stack", version: "1.0.0" });
   const has = (s: Scope) => token.scopes.includes(s);
+
+  if (has("log:read") || has("calendar:read") || has("sleep:read") || has("finance:read")) {
+    server.registerTool(
+      "get_overview",
+      { description: "A compact digest of today: log, calendar, last night's sleep and a finance snapshot, including only the areas this key can read." },
+      guard(async () => ok(await loadOverview(token.scopes))),
+    );
+    server.registerTool(
+      "get_week_summary",
+      { description: "The last seven local calendar days: mood average, caffeine, supplement days, sleep, event count and spending. Fields the key cannot read are empty or zero." },
+      guard(async () => ok(await loadWeekSummary(token.scopes))),
+    );
+  }
 
   if (has("log:read")) {
     server.registerTool(

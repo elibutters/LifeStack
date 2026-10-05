@@ -45,7 +45,7 @@ export function CreateTokenForm() {
         </select>
         <button type="submit" disabled={pending} className="h-11 rounded-md bg-fg px-4 text-sm font-medium text-bg disabled:opacity-50 sm:col-span-4 sm:w-fit">Create key</button>
       </form>
-      {state.error && <p className="text-sm text-red-300">{state.error}</p>}
+      {state.error && <p className="text-sm text-danger">{state.error}</p>}
     </div>
   );
 }
@@ -53,7 +53,7 @@ export function CreateTokenForm() {
 export function RevokeButton({ id, name }: { id: number; name: string }) {
   return (
     <form action={revokeTokenAction.bind(null, id)}>
-      <button type="submit" aria-label={`Revoke ${name}`} className="h-9 rounded-md border border-line px-3 text-sm text-red-300 hover:bg-raised">Revoke</button>
+      <button type="submit" aria-label={`Revoke ${name}`} className="h-9 rounded-md border border-line px-3 text-sm text-danger hover:bg-raised">Revoke</button>
     </form>
   );
 }

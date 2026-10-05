@@ -66,6 +66,11 @@ export function startOfDay(day: string, tz = TZ): Date {
   return new Date(t);
 }
 
+// Last instant that still belongs to the calendar day. Used when backdating a log.
+export function endOfDay(day: string, tz = TZ): Date {
+  return new Date(startOfDay(addDays(day, 1), tz).getTime() - 1);
+}
+
 export function addDays(day: string, n: number): string {
   const [y, m, d] = parseYmd(day);
   const dt = new Date(Date.UTC(y, m - 1, d + n));

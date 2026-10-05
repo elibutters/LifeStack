@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Card } from "@/components/card";
+import { PageHeader } from "@/components/page-header";
 import { CreateTokenForm, RevokeButton } from "@/components/token-manager";
 import { requireSession } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/dates";
@@ -15,15 +16,18 @@ const code = "block overflow-x-auto rounded-md bg-surface px-3 py-2 text-sm whit
 export default async function ApiKeys() {
   await requireSession();
   const tokens = await listTokens().catch(() => null);
-  if (!tokens) return <p className="text-red-300">Couldn't load your keys. Try again shortly.</p>;
+  if (!tokens) return <p className="text-danger">Couldn't load your keys. Try again shortly.</p>;
   const host = (await headers()).get("host") ?? "your-app.example";
   const origin = process.env.APP_URL || `https://${host}`;
   const active = tokens.filter((t) => !t.revokedAt);
   const revoked = tokens.filter((t) => t.revokedAt);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-semibold tracking-tight">API keys</h1>
+    <>
+      <PageHeader>
+        <h1 className="text-3xl font-semibold tracking-tight">API keys</h1>
+      </PageHeader>
+      <div className="space-y-6">
       <div className="max-w-3xl space-y-4">
       <Card title="Keys">
         <p className="mb-3 text-sm text-muted">
@@ -63,6 +67,9 @@ export default async function ApiKeys() {
           <li>In Claude Code, run the command below with your key in place of <code className="rounded bg-surface px-1.5 py-0.5">ls_...</code>.</li>
         </ol>
         <code className={`${code} mt-3`}>{`claude mcp add --transport http life-stack ${origin}/api/v1/mcp \\\n  --header "Authorization: Bearer ls_..."`}</code>
+        <p className="mt-3 text-sm text-muted">
+          The same key can <code className="rounded bg-surface px-1.5 py-0.5">GET {origin}/api/v1/overview</code> for a compact today digest (log, calendar, last night, spending) sized for a widget.
+        </p>
       </Card>
 
       <Card title="Set up an iPhone Shortcut">
@@ -77,7 +84,7 @@ export default async function ApiKeys() {
         <p className="mt-4 mb-1 text-sm text-muted">Mood (value 1 to 5; <em>note</em> is optional):</p>
         <code className={code}>{`{ "type": "mood", "value": 4, "note": "calm" }`}</code>
         <p className="mt-3 mb-1 text-sm text-muted">Caffeine (<em>mg</em> is optional, a typical amount is used if left out):</p>
-        <code className={code}>{`{ "type": "caffeine", "drink": "Coffee", "mg": 95 }`}</code>
+        <code className={code}>{`{ "type": "caffeine", "drink": "Coffee", "mg": 75 }`}</code>
         <p className="mt-3 mb-1 text-sm text-muted">Supplement (use the same name as on the Quick log page):</p>
         <code className={code}>{`{ "type": "supplement", "name": "Morning stack" }`}</code>
         <p className="mt-4 text-sm text-muted">
@@ -94,5 +101,6 @@ export default async function ApiKeys() {
       </Card>
       </div>
     </div>
+    </>
   );
 }
