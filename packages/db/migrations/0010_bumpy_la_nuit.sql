@@ -1,4 +1,4 @@
-CREATE TABLE "recurring_tags" (
+CREATE TABLE IF NOT EXISTS "recurring_tags" (
 	"key" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"cadence" text NOT NULL,
@@ -6,7 +6,7 @@ CREATE TABLE "recurring_tags" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "txn_overrides" (
+CREATE TABLE IF NOT EXISTS "txn_overrides" (
 	"source_id" text PRIMARY KEY NOT NULL,
 	"category" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
