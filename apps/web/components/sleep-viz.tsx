@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { fmtDayShort } from "@/lib/dates";
+import { HoverTip, useHoverTip } from "./hover-tip";
 import { fmtMinutes, mean, type NightPayload } from "@/lib/eight-map";
 
 type Night = NightPayload;
@@ -24,28 +24,6 @@ const FIELDS: Record<Field, { label: string; format: (n: number) => string; read
 
 function tipText(day: string, value: string) {
   return `${fmtDayShort(day)} · ${value}`;
-}
-
-function HoverTip({ text, x, y }: { text: string; x: number; y: number }) {
-  return (
-    <div
-      role="tooltip"
-      className="pointer-events-none fixed z-50 rounded-md border border-line bg-raised px-2 py-1 text-xs text-fg shadow-lg"
-      style={{ left: x + 12, top: y + 12 }}
-    >
-      {text}
-    </div>
-  );
-}
-
-function useHoverTip() {
-  const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
-  return {
-    tip,
-    show: (text: string, e: { clientX: number; clientY: number }) => setTip({ text, x: e.clientX, y: e.clientY }),
-    move: (e: { clientX: number; clientY: number }) => setTip((t) => (t ? { ...t, x: e.clientX, y: e.clientY } : t)),
-    hide: () => setTip(null),
-  };
 }
 
 export function ScoreRing({ score, day }: { score: number; day: string }) {

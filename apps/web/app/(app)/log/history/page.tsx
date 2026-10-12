@@ -31,7 +31,7 @@ export default async function History() {
         <AreaChart points={charts.mood} label="Mood over time" range={{ min: 1, max: 5 }} />
       </Card>
       <Card title="Caffeine" action={<span className="text-xs text-muted">mg per day</span>}>
-        <AreaChart points={charts.caffeine} label="Caffeine over time" />
+        <AreaChart points={charts.caffeine} label="Caffeine over time" format={(v) => `${Math.round(v)} mg`} />
       </Card>
       <Card title="Supplements" action={<span className="text-xs text-muted">{listedN ? `kinds taken / ${listedN}` : "kinds taken per day"}</span>}>
         <AreaChart points={charts.supplements} label="Supplements over time" range={listedN ? { min: 0, max: listedN } : undefined} />

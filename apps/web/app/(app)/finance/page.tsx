@@ -67,7 +67,7 @@ export default async function FinanceOverview() {
               </>
             )}
           </p>
-          <AreaChart points={history} label="Net worth over the last year" />
+          <AreaChart points={history} label="Net worth over the last year" format={fmtMoney} />
           <p className="mt-2 text-xs text-muted">Cash and cards are rebuilt from transactions. Investments join from the day they were linked.</p>
         </div>
       </Card>

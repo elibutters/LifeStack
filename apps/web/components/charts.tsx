@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { fmtMoney } from "@/lib/finance-calc";
+import { Tips } from "./hover-tip";
 
 const dayLabel = (d: string) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${d}T00:00:00Z`));
 
@@ -8,10 +9,12 @@ export function AreaChart({
   points,
   label,
   range,
+  format,
 }: {
   points: { day: string; value: number }[];
   label: string;
   range?: { min: number; max: number };
+  format?: (v: number) => string;
 }) {
   if (points.length < 2) return <p className="py-6 text-sm text-muted">History builds up as the days go by.</p>;
   const W = 600;
@@ -31,17 +34,22 @@ export function AreaChart({
   const x = (i: number) => (i / (points.length - 1)) * W;
   const y = (v: number) => H - ((v - min) / (max - min)) * H;
   const line = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(" ");
+  const fmt = format ?? ((v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1)));
+  const step = W / (points.length - 1);
   return (
-    <div>
+    <Tips>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-40 w-full text-accent" role="img" aria-label={label}>
         <path d={`${line} L${W} ${H} L0 ${H} Z`} fill="currentColor" opacity="0.12" />
         <path d={line} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <rect key={p.day} x={Math.max(0, x(i) - step / 2)} y={0} width={step} height={H} fill="transparent" className="hover:fill-current hover:opacity-10" data-tip={`${dayLabel(p.day)} · ${fmt(p.value)}`} />
+        ))}
       </svg>
       <div className="mt-1 flex justify-between text-xs text-muted">
         <span>{dayLabel(points[0]!.day)}</span>
         <span>{dayLabel(points.at(-1)!.day)}</span>
       </div>
-    </div>
+    </Tips>
   );
 }
 
@@ -51,10 +59,12 @@ export function BarRows({ items, total, tone = "accent" }: { items: BarItem[]; t
   const max = Math.max(...items.map((i) => i.amount), 1);
   const bar = tone === "good" ? "bg-ok/80" : tone === "out" ? "bg-danger/80" : "bg-accent/70";
   return (
+    <Tips>
     <ul className="space-y-3">
       {items.map((i) => {
+        const tip = `${i.label}: ${fmtMoney(i.amount)}${total ? ` (${Math.round((i.amount / total) * 100)}%)` : ""}${i.sub ? ` · ${i.sub}` : ""}`;
         const row = (
-          <div>
+          <div data-tip={tip}>
             <div className="flex items-baseline justify-between gap-3">
               <span className="truncate">{i.label}</span>
               <span className="shrink-0 tabular-nums">
@@ -71,6 +81,7 @@ export function BarRows({ items, total, tone = "accent" }: { items: BarItem[]; t
         return <li key={i.label}>{i.href ? <Link href={i.href} className="block rounded-md hover:bg-raised/60">{row}</Link> : row}</li>;
       })}
     </ul>
+    </Tips>
   );
 }
 
@@ -87,7 +98,7 @@ export function CashflowColumns({
 }) {
   const max = Math.max(...data.flatMap((d) => [d.income, d.spending]), 1);
   return (
-    <div>
+    <Tips>
       <div className="flex items-end gap-1.5 sm:gap-2">
         {data.map((d) => {
           const on = d.month === highlight;
@@ -103,11 +114,11 @@ export function CashflowColumns({
           const cls = `flex min-w-0 flex-1 flex-col items-stretch rounded-sm ${hrefFor ? "cursor-pointer hover:bg-raised/50" : ""}`;
           const title = `${d.month}: ${fmtMoney(d.income)} in, ${fmtMoney(d.spending)} out`;
           return hrefFor ? (
-            <Link key={d.month} href={hrefFor(d.month)} className={cls} title={title} aria-current={on ? "true" : undefined}>
+            <Link key={d.month} href={hrefFor(d.month)} className={cls} data-tip={title} aria-current={on ? "true" : undefined}>
               {inner}
             </Link>
           ) : (
-            <div key={d.month} className={cls} title={title}>
+            <div key={d.month} className={cls} data-tip={title}>
               {inner}
             </div>
           );
@@ -117,17 +128,17 @@ export function CashflowColumns({
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-ok/80" />Money in</span>
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-danger/80" />Money out</span>
       </div>
-    </div>
+    </Tips>
   );
 }
 
 export function SubBudgetColumns({ data, highlight }: { data: { month: string; budget: number; cash: number }[]; highlight?: string }) {
   const max = Math.max(...data.flatMap((d) => [d.budget, d.cash]), 1);
   return (
-    <div>
+    <Tips>
       <div className="flex h-40 items-end gap-1.5 sm:gap-2">
         {data.map((d) => (
-          <div key={d.month} className={`flex h-full flex-1 items-end justify-center gap-0.5 rounded-sm ${d.month === highlight ? "bg-raised/60" : ""}`} title={`${d.month}: budget ${fmtMoney(d.budget)}, charged ${fmtMoney(d.cash)}`}>
+          <div key={d.month} className={`flex h-full flex-1 items-end justify-center gap-0.5 rounded-sm ${d.month === highlight ? "bg-raised/60" : ""}`} data-tip={`${d.month}: budget ${fmtMoney(d.budget)}, charged ${fmtMoney(d.cash)}`}>
             <div className="w-1/2 max-w-3 rounded-t-sm bg-fg/25" style={{ height: `${(d.budget / max) * 100}%` }} />
             <div className="w-1/2 max-w-3 rounded-t-sm bg-accent/70" style={{ height: `${(d.cash / max) * 100}%` }} />
           </div>
@@ -144,6 +155,6 @@ export function SubBudgetColumns({ data, highlight }: { data: { month: string; b
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-fg/25" />Budgeted</span>
         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-accent/70" />Charged</span>
       </div>
-    </div>
+    </Tips>
   );
 }
