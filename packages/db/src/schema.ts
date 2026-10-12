@@ -214,14 +214,31 @@ export const apiTokens = pgTable("api_tokens", {
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 });
 
-// Things the owner is thinking about buying, kept written down.
+// Things the owner is on the lookout for. A want is the need ("a jacket"); its options are the
+// candidates ("this one at that store"). Only one option is ever bought. A want may have a single option.
 export const wants = pgTable("wants", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   title: text("title").notNull(),
   note: text("note"),
-  url: text("url"),
-  priceCents: integer("price_cents"),
+  budgetCents: integer("budget_cents"), // most the owner would pay for any option
   status: text("status").notNull().default("want"), // want | bought | dropped
   createdAt,
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const wantOptions = pgTable(
+  "want_options",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    wantId: bigint("want_id", { mode: "number" }).notNull().references(() => wants.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    url: text("url"),
+    priceCents: integer("price_cents"), // latest price seen
+    priceCheckedAt: timestamp("price_checked_at", { withTimezone: true }),
+    targetCents: integer("target_cents"), // buy at or below this
+    note: text("note"),
+    status: text("status").notNull().default("considering"), // considering | chosen | rejected
+    createdAt,
+  },
+  (t) => [index("want_options_want_idx").on(t.wantId)],
+);

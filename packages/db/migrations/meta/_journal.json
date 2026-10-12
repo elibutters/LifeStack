@@ -85,6 +85,20 @@
       "when": 1791845703850,
       "tag": "0011_faithful_loners",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791847379194,
+      "tag": "0012_deep_swordsman",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791847383801,
+      "tag": "0013_sad_piledriver",
+      "breakpoints": true
     }
   ]
 }
