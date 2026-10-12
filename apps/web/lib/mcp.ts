@@ -12,7 +12,7 @@ import { loadFinance, loadHoldings } from "./finance-data";
 import { loadProfile, profileForAgents } from "./profile";
 import { loadNights } from "./sleep";
 import { loadActivities, totals } from "./activities";
-import { addWant, listWants } from "./wants";
+import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
 
 // MCP tools for agents. A tool is only offered to a key that carries its scope, so a key made for
@@ -69,8 +69,8 @@ export function buildServer(token: VerifiedToken): McpServer {
   if (has("log:read")) {
     server.registerTool(
       "get_wants",
-      { description: "The owner's Wants list: things they have been thinking about buying (title, note, link, price in cents, status want/bought/dropped), newest first." },
-      guard(async () => ok((await listWants()).map(({ createdAt, ...w }) => ({ ...w, added: createdAt })))),
+      { description: "The owner's Wants list for deal hunting. Each want (a thing or a kind of thing, e.g. a jacket) has candidate options with link, latest price and target price in cents, atTarget (price at or under target) and status; only one option per want is ever bought. Newest first." },
+      guard(async () => ok(await listWants())),
     );
   }
 
@@ -78,15 +78,49 @@ export function buildServer(token: VerifiedToken): McpServer {
     server.registerTool(
       "add_want",
       {
-        description: "Add something to the owner's Wants list. Price is in dollars and optional.",
-        inputSchema: { title: z.string(), note: z.string().optional(), url: z.string().optional(), price: z.number().optional() },
+        description: "Add something to the owner's Wants list. Optionally include one first option (link, price in dollars, target price in dollars). Returns the want id.",
+        inputSchema: { title: z.string(), note: z.string().optional(), budget: z.number().optional(), option: z.object({ url: z.string().optional(), price: z.number().optional(), target: z.number().optional() }).optional() },
       },
-      async (args) => {
+      async ({ option, ...rest }) => {
         try {
-          const r = await addWant(args);
-          return r.ok ? ok({ id: r.want.id }) : fail(`Invalid: ${r.issues.map((i) => `${i.path} ${i.message}`).join("; ")}`);
+          const r = await addWant({ ...rest, first: option });
+          return r.ok ? ok({ id: r.id }) : fail(`Invalid: ${r.issues.map((i) => `${i.path} ${i.message}`).join("; ")}`);
         } catch (e) {
           console.error("mcp: add_want failed", describeError(e));
+          return fail("The tool could not save that.");
+        }
+      },
+    );
+    server.registerTool(
+      "add_want_option",
+      {
+        description: "Add a candidate option (title, optional link, price and target price in dollars) to an existing want.",
+        inputSchema: { wantId: z.number().int(), title: z.string(), url: z.string().optional(), price: z.number().optional(), target: z.number().optional(), note: z.string().optional() },
+      },
+      async ({ wantId, ...rest }) => {
+        try {
+          const r = await addOption(wantId, rest);
+          if (r.ok) return ok({ id: r.id });
+          return fail("notFound" in r ? "No such want." : `Invalid: ${r.issues.map((i) => `${i.path} ${i.message}`).join("; ")}`);
+        } catch (e) {
+          console.error("mcp: add_want_option failed", describeError(e));
+          return fail("The tool could not save that.");
+        }
+      },
+    );
+    server.registerTool(
+      "update_want_option",
+      {
+        description: "Record a price seen for a want option (dollars; stamps the check time), change its target, or set status considering/rejected. Use this when you find a deal. Never marks something bought; the owner does that.",
+        inputSchema: { optionId: z.number().int(), price: z.number().optional(), target: z.number().optional(), status: z.enum(["considering", "rejected"]).optional(), note: z.string().optional() },
+      },
+      async ({ optionId, ...rest }) => {
+        try {
+          const r = await updateOption(optionId, rest);
+          if (!r.ok) return fail(`Invalid: ${r.issues.map((i) => `${i.path} ${i.message}`).join("; ")}`);
+          return r.found ? ok({ ok: true }) : fail("No such option.");
+        } catch (e) {
+          console.error("mcp: update_want_option failed", describeError(e));
           return fail("The tool could not save that.");
         }
       },
