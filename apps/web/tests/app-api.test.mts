@@ -40,7 +40,7 @@ for (const [h, p] of [[api.handleOverview, "/api/v1/overview"], [api.handleCalen
 assert.equal((await get(api.handleCalendar, "/api/v1/calendar", logOnly)).status, 403); assert.equal((await get(api.handleFinance, "/api/v1/finance", calOnly)).status, 403); assert.equal((await get(api.handleConnections, "/api/v1/connections", calOnly)).status, 403);
 
 const ov = await (await get(api.handleOverview, "/api/v1/overview", app)).json() as any;
-assert.deepEqual(Object.keys(ov).sort(), ["calendar", "date", "finance", "log", "sleep"]); assert.ok(ov.calendar && ov.sleep && ov.finance && ov.log);
+assert.deepEqual(Object.keys(ov).sort(), ["calendar", "date", "finance", "fitness", "log", "sleep"]); assert.ok(ov.calendar && ov.sleep && ov.finance && ov.log);
 const ovLog = await (await get(api.handleOverview, "/api/v1/overview", logOnly)).json() as any;
 assert.equal(ovLog.calendar, null); assert.equal(ovLog.sleep, null); assert.equal(ovLog.finance, null); assert.ok(ovLog.log, "a log-only key sees only its own section");
 

@@ -11,6 +11,7 @@ import { disconnectAmazon } from "@/lib/amazon";
 import { disconnectEight, saveEightConnection, syncEight } from "@/lib/eight";
 import { syncItem, unlinkItem } from "@/lib/finance";
 import { disconnectOutlook, syncOutlook } from "@/lib/outlook";
+import { disconnectStrava, syncStrava } from "@/lib/strava-sync";
 
 // Server actions are POSTs to their page, so each one checks the session itself.
 export async function syncNow(): Promise<void> {
@@ -87,6 +88,22 @@ export async function syncEightNow(): Promise<void> {
 export async function disconnectEightNow(): Promise<void> {
   await requireSession();
   await disconnectEight();
+  revalidatePath("/", "layout");
+}
+
+export async function syncStravaNow(): Promise<void> {
+  await requireSession();
+  try {
+    await syncStrava();
+  } catch {
+    // Recorded on the Connections page.
+  }
+  revalidatePath("/", "layout");
+}
+
+export async function disconnectStravaNow(): Promise<void> {
+  await requireSession();
+  await disconnectStrava();
   revalidatePath("/", "layout");
 }
 

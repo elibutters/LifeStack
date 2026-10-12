@@ -4,6 +4,7 @@ import type { Scope } from "./capture-core";
 import { addDays, isValidDay, ymd } from "./dates";
 import { describeError } from "./errors";
 import { verifyBearer } from "./tokens";
+import { loadActivities, totals } from "./activities";
 import { calendarRange, connectionsStatus, financeSummary, holdingsList, MAX_RANGE_DAYS, overview, searchTransactions, sleepNights } from "./app-data";
 
 // Read-only JSON endpoints for the iPhone app (and any other client). /api/v1/ skips the session gate
@@ -77,3 +78,15 @@ export const handleTransactions = (req: Request) =>
 export const handleHoldings = (req: Request) => run(req, "finance:read", async () => json({ holdings: await holdingsList() }));
 
 export const handleConnections = (req: Request) => run(req, "account:read", async () => json(await connectionsStatus()));
+
+export const handleActivities = (req: Request) =>
+  run(req, "fitness:read", async (url) => {
+    const p = url.searchParams;
+    const from = p.get("from") ?? undefined;
+    const to = p.get("to") ?? undefined;
+    const limit = int(p.get("limit"), 1, 200, 50);
+    if (limit == null || (from && !Day.safeParse(from).success) || (to && !Day.safeParse(to).success)) return bad("invalid filter");
+    if (from && to && to < from) return bad("to is before from");
+    const list = await loadActivities({ from: from ? new Date(`${from}T00:00:00Z`) : undefined, to: to ? new Date(`${addDays(to, 1)}T00:00:00Z`) : undefined, sport: p.get("sport")?.slice(0, 40) ?? undefined, limit });
+    return json({ activities: list, totals: totals(list) });
+  });

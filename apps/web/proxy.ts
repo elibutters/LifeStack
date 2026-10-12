@@ -14,6 +14,7 @@ const PUBLIC = new Set([
   "/sw.js",
   "/offline.html",
   "/api/webhooks/plaid", // checks Plaid's signature itself
+  "/api/webhooks/strava", // proves itself with a verify token and trusts nothing in an event; see lib/strava-sync.ts
 ]);
 
 export async function proxy(req: NextRequest) {
