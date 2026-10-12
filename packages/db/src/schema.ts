@@ -213,3 +213,15 @@ export const apiTokens = pgTable("api_tokens", {
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 });
+
+// Things the owner is thinking about buying, kept written down.
+export const wants = pgTable("wants", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  title: text("title").notNull(),
+  note: text("note"),
+  url: text("url"),
+  priceCents: integer("price_cents"),
+  status: text("status").notNull().default("want"), // want | bought | dropped
+  createdAt,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
