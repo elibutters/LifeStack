@@ -52,6 +52,18 @@ assert.equal((await get(api.handleSleep, "/api/v1/sleep?nights=999", app)).statu
 assert.deepEqual((await (await get(api.handleHoldings, "/api/v1/finance/holdings", app)).json() as any).holdings, []);
 const conns = await (await get(api.handleConnections, "/api/v1/connections", app)).json() as any; assert.deepEqual(Object.keys(conns).sort(), ["banks", "calendar", "sleep"]);
 
+// ---- a phone's key follows the app's current permissions, so features added later work without signing in again
+{
+  const stale = await tok.createToken("Old phone", "app", ["log:read"]); // issued before newer scopes existed
+  const v = await tok.verifyBearer(`Bearer ${stale.token}`, "fitness:read");
+  assert.ok(v.ok && v.token.scopes.includes("fitness:read") && v.token.scopes.includes("account:read"), "an app key gets the current app scopes");
+  assert.equal((await tok.verifyBearer(`Bearer ${stale.token}`, "log:write")).ok, true);
+  const shortcut = await tok.createToken("Narrow shortcut", "shortcut", ["log:write"]);
+  assert.equal((await tok.verifyBearer(`Bearer ${shortcut.token}`, "fitness:read")).ok, false, "other kinds of key keep exactly the permissions they were given");
+  assert.equal((await tok.verifyBearer(`Bearer ${shortcut.token}`, "log:write")).ok, true);
+  await tok.revokeToken(stale.id); await tok.revokeToken(shortcut.id);
+}
+
 // ---- accounts: email and password
 await db().delete(apiTokens); await db().delete(authAttempts);
 const legacy = (await tok.createToken("old key", "shortcut", ["log:read"])).token; // made before accounts existed

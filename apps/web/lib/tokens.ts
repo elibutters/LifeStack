@@ -47,14 +47,17 @@ export async function verifyBearer(header: string | null, scope?: Scope): Promis
     .from(apiTokens)
     .where(and(eq(apiTokens.tokenHash, hash(m[1]!)), isNull(apiTokens.revokedAt)));
   if (!row) return { ok: false, status: 401 };
-  if (scope && !row.scopes.includes(scope)) return { ok: false, status: 403 };
+  // A phone's key is only ever issued by the password login, which grants the app's full permission set. Use the current
+  // set rather than what was stored when it signed in, so a feature added later works without signing in again.
+  const scopes = row.kind === "app" ? [...APP_SCOPES] : row.scopes;
+  if (scope && !scopes.includes(scope)) return { ok: false, status: 403 };
   // Remember when it was last used, at most once a minute.
   await db()
     .update(apiTokens)
     .set({ lastUsedAt: sql`now()` })
     .where(and(eq(apiTokens.id, row.id), sql`(${apiTokens.lastUsedAt} is null or ${apiTokens.lastUsedAt} < now() - interval '1 minute')`))
     .catch(() => {});
-  return { ok: true, token: { id: row.id, kind: row.kind as TokenKind, scopes: row.scopes, userId: row.userId } };
+  return { ok: true, token: { id: row.id, kind: row.kind as TokenKind, scopes, userId: row.userId } };
 }
 
 // Never includes the hash.
