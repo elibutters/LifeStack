@@ -109,6 +109,7 @@ final class AppModel {
 
     // A rejected key means this device was revoked or the password changed: go back to sign in.
     func handle(_ error: Error) {
+        if error is CancellationError { return } // a replaced or abandoned request is not an error to show
         if case APIError.unauthorized = error { signOut(); message = error.localizedDescription } else { message = error.localizedDescription }
     }
 }
@@ -125,6 +126,7 @@ final class Loader<T> {
         guard let client = model.client else { return }
         loading = true; defer { loading = false }
         do { value = try await fetch(client); error = nil }
+        catch is CancellationError { return }
         catch { self.error = error.localizedDescription; model.handle(error) }
     }
 }

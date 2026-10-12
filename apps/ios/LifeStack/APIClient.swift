@@ -49,7 +49,10 @@ struct APIClient {
         req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         if let body { req.httpBody = body; req.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         let data: Data, response: URLResponse
-        do { (data, response) = try await URLSession.shared.data(for: req) } catch { throw APIError.offline }
+        do { (data, response) = try await URLSession.shared.data(for: req) }
+        // A request cancelled because the screen went away or a refresh was replaced is not a network failure.
+        catch let e as URLError where e.code == .cancelled { throw CancellationError() }
+        catch { throw APIError.offline }
         guard let http = response as? HTTPURLResponse else { throw APIError.server }
         switch http.statusCode {
         case 200, 201: return data
@@ -61,7 +64,7 @@ struct APIClient {
 
     private func get<T: Decodable>(_ path: String, _ query: [URLQueryItem] = []) async throws -> T {
         do { return try JSONDecoder().decode(T.self, from: try await request(path, query: query)) }
-        catch let e as APIError { throw e } catch { throw APIError.server }
+        catch let e as APIError { throw e } catch is CancellationError { throw CancellationError() } catch { throw APIError.server }
     }
 
     // The one time the password is sent: it is traded for this device's own key and never stored.
@@ -71,7 +74,10 @@ struct APIClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: ["email": email, "password": password, "device": device])
         let data: Data, response: URLResponse
-        do { (data, response) = try await URLSession.shared.data(for: req) } catch { throw APIError.offline }
+        do { (data, response) = try await URLSession.shared.data(for: req) }
+        // A request cancelled because the screen went away or a refresh was replaced is not a network failure.
+        catch let e as URLError where e.code == .cancelled { throw CancellationError() }
+        catch { throw APIError.offline }
         guard let http = response as? HTTPURLResponse else { throw APIError.server }
         switch http.statusCode {
         case 200:
@@ -122,13 +128,13 @@ struct APIClient {
 
     func today() async throws -> TodaySummary {
         do { return try JSONDecoder().decode(TodaySummary.self, from: try await request("api/v1/log/today")) }
-        catch let e as APIError { throw e } catch { throw APIError.server }
+        catch let e as APIError { throw e } catch is CancellationError { throw CancellationError() } catch { throw APIError.server }
     }
 
     func supplementNames() async throws -> [String] {
         struct R: Decodable { struct S: Decodable { let name: String }; let supplements: [S] }
         do { return try JSONDecoder().decode(R.self, from: try await request("api/v1/log/supplements")).supplements.map(\.name) }
-        catch let e as APIError { throw e } catch { throw APIError.server }
+        catch let e as APIError { throw e } catch is CancellationError { throw CancellationError() } catch { throw APIError.server }
     }
 
     // A fresh id on every tap makes a retried request safe: the server never logs the same id twice.
