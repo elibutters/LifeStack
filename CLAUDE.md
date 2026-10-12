@@ -53,6 +53,9 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   stateless, rejects browser (Origin) requests, and the body is capped.
 - Backups: `/api/cron/backup` writes an encrypted full dump to private Vercel Blob daily. New tables are
   included automatically; a new table that must not be backed up goes in `SKIP` in `lib/backup-db.ts`.
+- Strava (`lib/strava*.ts`): OAuth with a rotating refresh token stored encrypted in `connections`; activities are `events`
+  rows (domain `activity`, source `strava`, `source_id` `act:<id>`) and no GPS is stored. The public `/api/webhooks/strava`
+  trusts nothing in an event: it only checks the athlete id and runs the normal sync. Scope `fitness:read` guards reads.
 - Never cache authenticated responses in the service worker.
 - Scheduled work: Vercel's free plan allows daily cron only. Sources sync on a daily
   cron and on demand when the app is opened or an agent asks; do not assume a

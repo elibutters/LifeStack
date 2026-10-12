@@ -29,8 +29,8 @@ export const EventInput = z.discriminatedUnion("type", [
 export type EventInputT = z.infer<typeof EventInput>;
 
 // log:* are for shortcuts and widgets; the :read scopes below let an agent read each area through MCP.
-export const SCOPES = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "amazon:write", "account:read"] as const;
-export const AGENT_SCOPES: Scope[] = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read"];
+export const SCOPES = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read", "amazon:write", "account:read"] as const;
+export const AGENT_SCOPES: Scope[] = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read"];
 export type Scope = (typeof SCOPES)[number];
 // What the iPhone app's key carries: everything an agent reads, plus the account section.
 export const APP_SCOPES: Scope[] = [...AGENT_SCOPES, "account:read"];

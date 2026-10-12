@@ -14,7 +14,9 @@ import { getConnection, getSyncState } from "@/lib/outlook";
 import { db } from "@/lib/db";
 import { accounts, events } from "@lifestack/db";
 import { eq, sql } from "drizzle-orm";
-import { disconnect, syncFinance, syncNow, unlinkFinance, connectEight, disconnectEightNow, syncEightNow, disconnectAmazonNow } from "../settings/actions";
+import { disconnect, syncFinance, syncNow, unlinkFinance, connectEight, disconnectEightNow, syncEightNow, disconnectAmazonNow, syncStravaNow, disconnectStravaNow } from "../settings/actions";
+import { getConnection as getStravaConnection, getSyncState as getStravaState, stravaActivityCount } from "@/lib/strava-sync";
+import { stravaConfigured } from "@/lib/strava";
 import { getEightConnection, getEightSyncState } from "@/lib/eight";
 import { loadAmazon } from "@/lib/amazon";
 import { LOGIN_REQUIRED } from "@/lib/amazon-map";
@@ -32,6 +34,10 @@ const MESSAGES: Record<string, string> = {
   denied: "Microsoft sign-in was cancelled.",
   state: "That sign-in attempt expired or did not match. Try again.",
   exchange: "Microsoft sign-in could not be completed. Try again.",
+  strava_denied: "Strava connection was cancelled.",
+  strava_state: "That Strava sign-in attempt expired or did not match. Try again.",
+  strava_exchange: "Strava sign-in could not be completed. Try again.",
+  strava_scope: "Strava needs permission to read your activities. Connect again and leave the activity access ticked.",
   eight_auth:
     "Could not sign in to Eight Sleep. Check the email and password. Accounts with two-factor authentication are not supported.",
 };
@@ -76,6 +82,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
     (accountsByItem.get(id) ?? []).some((a) => a.type === "investment") && !(holdingCount.get(id) ?? 0);
   const plaidKeys = plaidConfigured() ? await keyStatus() : null;
   // "not configured" is already explained inside the card, so it gets no banner.
+  const [stravaConn, stravaState, stravaCount] = await Promise.all([getStravaConnection().catch(() => null), getStravaState().catch(() => null), stravaActivityCount().catch(() => 0)]);
   const error = sp.error && sp.error !== "not_configured" ? (MESSAGES[sp.error] ?? "Something went wrong.") : null;
 
   const amazonLive = Boolean(amazon.state?.lastOkAt || amazon.state?.lastError || amazon.orders.length || amazon.cart.length);
@@ -97,6 +104,9 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
       <div className="space-y-3">
 
       {error && <p className="rounded-md border border-danger/30 bg-danger/10 px-4 py-3 text-danger">{error}</p>}
+      {sp.connected === "strava" && !error && (
+        <p className="rounded-md border border-ok/40 bg-ok/10 px-4 py-3 text-ok">Strava connected. Your history is importing and will show up in a minute.</p>
+      )}
       {sp.connected === "eight" && !error && (
         <p className="rounded-md border border-accent/30 bg-accent/10 px-4 py-3 text-accent">
           Eight Sleep connected. Past nights are importing and will show up on the Sleep tab.
@@ -206,6 +216,51 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
           </>
         )}
       </ConnectionPanel>
+
+      <ConnectionPanel
+        title="Strava"
+        status={stravaConn ? (stravaState?.lastError ? "Sync problem" : "Connected") : "Not linked"}
+        tone={stravaConn ? (stravaState?.lastError ? "bad" : "ok") : "muted"}
+        defaultOpen={!stravaConn || Boolean(stravaState?.lastError)}
+        meta={stravaConn && stravaState?.lastOkAt ? <LastSyncAgo at={stravaState.lastOkAt.toISOString()} /> : undefined}
+        actions={
+          stravaConn ? (
+            <>
+              <form action={syncStravaNow}>
+                <button type="submit" className={button}>
+                  Sync
+                </button>
+              </form>
+              <form action={disconnectStravaNow}>
+                <button type="submit" className={danger}>
+                  Disconnect
+                </button>
+              </form>
+            </>
+          ) : undefined
+        }
+      >
+        {stravaConn ? (
+          <dl>
+            <Row label="Athlete" value={stravaConn.account ?? "Connected"} />
+            <Row label="Activities stored" value={String(stravaCount)} />
+            {stravaState?.lastError && <Row label="Status" value={stravaState.lastError} bad />}
+          </dl>
+        ) : stravaConfigured() ? (
+          <>
+            <p className="text-sm text-muted">
+              Copies your runs, rides, swims and other activities: distance, time, pace, heart rate, power and Relative Effort. New activities arrive
+              within seconds of finishing. GPS tracks are not stored.
+            </p>
+            <a href="/api/connections/strava/start" className={`${button} w-fit`}>
+              Connect Strava
+            </a>
+          </>
+        ) : (
+          <p className="text-sm text-danger">Strava is not set up on this deployment yet. See the README for the two settings it needs.</p>
+        )}
+      </ConnectionPanel>
+
 
       <ConnectionPanel
         title="Amazon"

@@ -6,6 +6,7 @@ import { accountLabel, cashflowSeries, classify, insights, lastMonths, merchantN
 import { loadFinance, loadHoldings } from "./finance-data";
 import { listItems } from "./finance";
 import { loadNights } from "./sleep";
+import { loadActivities, totals } from "./activities";
 
 // What the JSON API (and so the iPhone app) returns for each area. All-day items carry a plain
 // YYYY-MM-DD; everything else is an ISO 8601 time. Nothing here is a secret: account numbers and
@@ -82,12 +83,13 @@ export async function todayLog() {
 export async function overview(has: (scope: string) => boolean, now = new Date()) {
   const today = ymd(now);
   const tomorrow = startOfDay(addDays(today, 1));
-  const [todayRes, soonRes, nights, fin, log] = await Promise.all([
+  const [todayRes, soonRes, nights, fin, log, fitness] = await Promise.all([
     has("calendar:read") ? loadCalendar(startOfDay(today), tomorrow) : null,
     has("calendar:read") ? loadCalendar(tomorrow, startOfDay(addDays(today, 8))) : null,
     has("sleep:read") ? sleepNights(1).catch(() => []) : null,
     has("finance:read") ? financeSummary().catch(() => null) : null,
     has("log:read") ? todayLog().catch(() => null) : null,
+    has("fitness:read") ? fitnessSummary().catch(() => null) : null,
   ]);
   const status = has("calendar:read") || has("sleep:read") ? await systemStatus() : null;
   return {
@@ -102,7 +104,14 @@ export async function overview(has: (scope: string) => boolean, now = new Date()
     sleep: nights && { connected: status?.ok ? status.sleepConnected : false, lastNight: nights[0] ?? null },
     finance: fin && { netWorth: fin.netWorth, thisMonth: { income: fin.thisMonth.income, spending: fin.thisMonth.spending, net: fin.thisMonth.net }, insights: fin.insights.slice(0, 3) },
     log,
+    fitness,
   };
+}
+
+export async function fitnessSummary(now = new Date()) {
+  const weekAgo = new Date(now.getTime() - 7 * 86_400_000);
+  const [recent, week] = await Promise.all([loadActivities({ limit: 1 }), loadActivities({ from: weekAgo, limit: 200 })]);
+  return { last: recent[0] ?? null, week: totals(week) };
 }
 
 export async function connectionsStatus() {

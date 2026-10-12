@@ -127,6 +127,24 @@ GET  /api/v1/log/today     Authorization: Bearer ls_...       (key with log:read
 GET  /api/v1/profile       Authorization: Bearer ls_...       (key with log:read; owner profile for agents)
 ```
 
+### Connect Strava
+
+Copies runs, rides, swims and other workouts (distance, time, pace, heart rate, power, Relative Effort if you have Strava
+Premium). GPS tracks are not stored. New activities arrive within seconds through Strava's live updates, with a daily
+sync as a backstop.
+
+1. At <https://www.strava.com/settings/api> create an application. Set **Authorization Callback Domain** to your
+   deployment's domain only (for example `your-app.vercel.app`: no `https://`, no path). Any name, category and website work.
+2. Copy the **Client ID** and **Client Secret** into `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` (Vercel environment
+   variables for production, `.env` locally), then redeploy. `APP_URL` must also be set in production.
+3. Open **Connections** and press **Connect Strava**. Approve the access (leave "View data about your private
+   activities" ticked). The whole history imports in a minute and the live-update webhook is registered automatically.
+
+A new Strava application can only be used by its owner until Strava approves it for more athletes, which is all this
+needs. Strava allows 100 requests per 15 minutes and 1000 per day; a sync uses a handful. Revoking the app on Strava
+disconnects it here and removes its data. Agents read workouts with the `get_activities` MCP tool and apps with
+`GET /api/v1/activities` (key scope `fitness:read`).
+
 ### Connect Eight Sleep
 
 Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep account. Eight Sleep has no public developer API, so this uses the same private app login as Home Assistant. The pod is never controlled.

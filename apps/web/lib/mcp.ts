@@ -11,6 +11,7 @@ import { classify, fmtMoney, insights, merchantName, monthOf, netWorth, shiftMon
 import { loadFinance, loadHoldings } from "./finance-data";
 import { loadProfile, profileForAgents } from "./profile";
 import { loadNights } from "./sleep";
+import { loadActivities, totals } from "./activities";
 import type { VerifiedToken } from "./tokens";
 
 // MCP tools for agents. A tool is only offered to a key that carries its scope, so a key made for
@@ -173,6 +174,26 @@ export function buildServer(token: VerifiedToken): McpServer {
       const rows = await loadHoldings();
       return ok(rows.map(({ accountId: _a, ...h }) => h));
     }));
+  }
+
+  if (has("fitness:read")) {
+    server.registerTool(
+      "get_activities",
+      {
+        description: "Workouts from Strava (runs, rides, swims and so on), newest first, with totals. Distances are metres, times seconds, speeds metres per second. Filters: from/to (YYYY-MM-DD), sport (for example Run), limit (max 200).",
+        inputSchema: { from: Day.optional(), to: Day.optional(), sport: z.string().max(40).optional(), limit: z.number().int().min(1).max(200).optional() },
+      },
+      async ({ from, to, sport, limit }) => {
+        if (from && to && to < from) return fail("'to' is before 'from'.");
+        try {
+          const list = await loadActivities({ from: from ? new Date(`${from}T00:00:00Z`) : undefined, to: to ? new Date(`${addDays(to, 1)}T00:00:00Z`) : undefined, sport, limit: limit ?? 30 });
+          return ok({ activities: list, totals: totals(list) });
+        } catch (e) {
+          console.error("mcp: activities failed", describeError(e));
+          return fail("The tool could not read the data.");
+        }
+      },
+    );
   }
 
   return server;
