@@ -59,6 +59,8 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Workouts: all aggregation lives in `lib/workouts-core.ts` (pure, tested); the web page and `/api/v1/workouts` both use it,
   so clients never recompute totals. US units are display-only (`lib/units.ts`, `Format` in the app).
 - Backup restore must work for tables without an `id` column (connections, sync_state); keep that case in its test.
+- A phone key (`kind` "app") always carries the app's current `APP_SCOPES`, whatever was stored when it signed in
+  (`verifyBearer`), so adding a scope never forces a re-sign-in. Every other kind keeps exactly its stored scopes.
 - Never cache authenticated responses in the service worker.
 - Scheduled work: Vercel's free plan allows daily cron only. Sources sync on a daily
   cron and on demand when the app is opened or an agent asks; do not assume a
