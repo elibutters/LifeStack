@@ -33,6 +33,10 @@ export async function restoreTables(db: Db, tables: Record<string, unknown[]>): 
       const rows = tables[t];
       if (!rows?.length) continue;
       await tx.execute(sql`insert into ${sql.identifier(t)} select * from jsonb_populate_recordset(null::${sql.identifier(t)}, ${JSON.stringify(rows)}::jsonb)`);
+      // Only tables with a generated id have a sequence to move past the restored rows; others (keyed by name, for
+      // example connections and sync_state) have none, and asking for one is an error.
+      const hasId = await tx.execute<{ c: string }>(sql`select column_name as c from information_schema.columns where table_schema = 'public' and table_name = ${t} and column_name = 'id'`);
+      if ([...hasId].length === 0) continue;
       const seq = await tx.execute<{ s: string | null }>(sql`select pg_get_serial_sequence(${"public." + t}, 'id') as s`);
       const s = [...seq][0]?.s;
       if (s) await tx.execute(sql`select setval(${s}, greatest((select coalesce(max(id), 0) from ${sql.identifier(t)}), 1))`);

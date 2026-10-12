@@ -12,8 +12,8 @@ struct MainTabs: View {
     var body: some View {
         TabView {
             OverviewView().tabItem { Label("Overview", systemImage: "square.grid.2x2") }
-            CalendarView().tabItem { Label("Calendar", systemImage: "calendar") }
             SleepView().tabItem { Label("Sleep", systemImage: "bed.double") }
+            WorkoutsView().tabItem { Label("Workouts", systemImage: "figure.run") }
             FinanceView().tabItem { Label("Finance", systemImage: "chart.bar") }
             TodayView().tabItem { Label("Log", systemImage: "checkmark.circle") }
         }

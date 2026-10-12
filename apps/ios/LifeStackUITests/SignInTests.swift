@@ -25,12 +25,15 @@ final class SignInTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Overview"].waitForExistence(timeout: 20), "should reach the home screen")
         shot("overview", env)
         // Every tab loads its screen from the server.
-        for tab in ["Calendar", "Sleep", "Finance", "Log"] {
+        for tab in ["Sleep", "Workouts", "Finance", "Log"] {
             let button = app.tabBars.buttons[tab]
             XCTAssertTrue(button.exists, "\(tab) tab")
             button.tap()
             if tab != "Log" { shot(tab.lowercased(), env) }
         }
+        app.tabBars.buttons["Workouts"].tap()
+        XCTAssertTrue(app.staticTexts["MILES PER WEEK"].waitForExistence(timeout: 20), "workouts overview loads")
+        shot("workouts", env)
         app.tabBars.buttons["Finance"].tap()
         XCTAssertTrue(app.staticTexts["NET WORTH"].waitForExistence(timeout: 20), "finance summary loads")
         app.tabBars.buttons["Sleep"].tap()

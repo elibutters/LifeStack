@@ -8,6 +8,7 @@ import { ACTIVITY_KEY, STRAVA } from "./strava-map";
 export type Activity = {
   id: number | null;
   start: string;
+  startLocal: string | null;
   sport: string;
   name: string | null;
   distanceM: number | null;
@@ -37,6 +38,7 @@ export async function loadActivities(q: { from?: Date; to?: Date; sport?: string
     return {
       id: n(p.id),
       start: r.ts.toISOString(),
+      startLocal: typeof p.startLocal === "string" ? p.startLocal : null,
       sport: r.valueText ?? "Workout",
       name: typeof p.name === "string" ? p.name : null,
       distanceM: n(p.distanceM),

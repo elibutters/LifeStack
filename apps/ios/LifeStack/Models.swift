@@ -127,7 +127,49 @@ extension LogOptions.Supplement {
     }
 }
 
+// ---- Workouts (Strava), as /api/v1/workouts returns them: metres and seconds, converted to US units for display.
+struct WorkoutTotals: Decodable, Equatable { let count: Int; let distanceM: Double; let movingS: Double; let elevationM: Double; let paceSecPerKm: Double? }
+struct WorkoutWeek: Decodable, Identifiable, Equatable { var id: String { weekStart }; let weekStart: String; let count: Int; let distanceM: Double }
+struct WorkoutCell: Decodable, Identifiable, Equatable { var id: String { date }; let date: String; let count: Int; let distanceM: Double }
+struct PacePoint: Decodable, Identifiable, Equatable { var id: String { "\(date)-\(Int(distanceM))" }; let date: String; let paceSecPerKm: Double; let distanceM: Double }
+struct WorkoutRecord: Decodable, Equatable { let id: Int?; let date: String; let name: String?; let distanceM: Double; let paceSecPerKm: Double? }
+struct WorkoutPeriod: Decodable, Equatable { let period: String; let distanceM: Double }
+struct SportTotals: Decodable, Identifiable, Equatable { var id: String { sport }; let sport: String; let count: Int; let distanceM: Double; let movingS: Double }
+struct WorkoutItem: Decodable, Identifiable, Equatable {
+    var id: String { "\(workoutId ?? 0)-\(start)" }
+    let workoutId: Int?; let date: String; let start: String; let sport: String; let name: String?
+    let distanceM: Double; let movingS: Double; let elevationM: Double; let avgHr: Double?
+    enum CodingKeys: String, CodingKey { case workoutId = "id", date, start, sport, name, distanceM, movingS, elevationM, avgHr }
+}
+struct WorkoutsOverview: Decodable, Equatable {
+    struct Windows: Decodable, Equatable { let last7: WorkoutTotals; let last28: WorkoutTotals; let ytd: WorkoutTotals; let all: WorkoutTotals }
+    struct Records: Decodable, Equatable { let longest: WorkoutRecord?; let fastest: WorkoutRecord?; let biggestWeek: WorkoutPeriod?; let biggestMonth: WorkoutPeriod? }
+    let today: String
+    let totals: Windows
+    let weeks: [WorkoutWeek]
+    let heatmap: [WorkoutCell]
+    let pace: [PacePoint]
+    let records: Records
+    let streakWeeks: Int
+    let sports: [SportTotals]
+    let recent: [WorkoutItem]
+}
+
 enum Format {
+    static let metersPerMile = 1609.344
+    static func miles(_ m: Double) -> Double { m / metersPerMile }
+    static func milesText(_ m: Double, digits: Int = 1) -> String { String(format: "%.\(digits)f mi", m / metersPerMile) }
+    static func feetText(_ m: Double) -> String { "\(Int((m * 3.28084).rounded())) ft" }
+    // Seconds per km to min:sec per mile.
+    static func paceText(_ secPerKm: Double?) -> String {
+        guard let secPerKm, secPerKm > 0 else { return "-" }
+        let s = Int((secPerKm * metersPerMile / 1000).rounded())
+        return "\(s / 60):\(String(format: "%02d", s % 60)) /mi"
+    }
+    static func duration(_ s: Double) -> String {
+        let t = Int(s.rounded()); let h = t / 3600, m = (t % 3600) / 60, sec = t % 60
+        return h > 0 ? "\(h)h \(String(format: "%02d", m))m" : "\(m):\(String(format: "%02d", sec))"
+    }
     static func money(_ v: Double, cents: Bool = false) -> String {
         let f = NumberFormatter()
         f.numberStyle = .currency; f.currencyCode = "USD"

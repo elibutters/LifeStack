@@ -119,5 +119,15 @@ const from = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10); a
 for (const bad of ["?from=nope", "?limit=0", "?limit=999", "?from=2026-05-02&to=2026-05-01"]) assert.equal((await get(reader, bad)).status, 400, bad);
 assert.equal((await acts.loadActivities({ limit: 2 })).length, 2);
 
+// ---- the Workouts overview endpoint
+const wk = (token: string | null, q = "") => api.handleWorkouts(new Request("http://x/api/v1/workouts" + q, { headers: token ? { authorization: `Bearer ${token}` } : {} }));
+assert.equal((await wk(null)).status, 401); assert.equal((await wk(noFit)).status, 403, "needs fitness:read");
+const ov = (await (await wk(reader)).json()) as any;
+assert.deepEqual(Object.keys(ov).sort(), ["heatmap", "pace", "recent", "records", "sports", "streakWeeks", "today", "totals", "weeks"]);
+assert.equal(ov.weeks.length, 26); assert.equal(ov.heatmap.length, 84); assert.equal(ov.totals.all.count, 3); assert.equal(ov.recent.length, 3, "all three fit in the default 40"); assert.equal(ov.recent[0].id, 1, "newest first");
+assert.equal(ov.records.longest.id, 3, "the ride (20 km) is not a run; the longest run is activity 3 at 5,003 m"); assert.ok(ov.totals.all.distanceM > 0 && ov.sports.length === 2);
+assert.equal(((await (await wk(reader, "?weeks=8&recent=1")).json()) as any).weeks.length, 8); assert.equal(((await (await wk(reader, "?weeks=8&recent=1")).json()) as any).recent.length, 1);
+for (const bad of ["?weeks=1", "?weeks=999", "?recent=0", "?recent=999", "?weeks=x"]) assert.equal((await wk(reader, bad)).status, 400, bad);
+
 await reset();
 console.log("STRAVA OK"); process.exit(0);
