@@ -78,6 +78,13 @@
       "when": 1791158435800,
       "tag": "0010_bumpy_la_nuit",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791845703850,
+      "tag": "0011_faithful_loners",
+      "breakpoints": true
     }
   ]
 }

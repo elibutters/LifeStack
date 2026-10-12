@@ -63,6 +63,13 @@ export const WorkoutsIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const WantsIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M6.5 8h11l-1 11.5h-9L6.5 8Z" />
+    <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
+  </Icon>
+);
+
 export const UserIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <circle cx="12" cy="8" r="3.25" />

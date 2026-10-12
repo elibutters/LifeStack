@@ -12,6 +12,7 @@ import { loadFinance, loadHoldings } from "./finance-data";
 import { loadProfile, profileForAgents } from "./profile";
 import { loadNights } from "./sleep";
 import { loadActivities, totals } from "./activities";
+import { addWant, listWants } from "./wants";
 import type { VerifiedToken } from "./tokens";
 
 // MCP tools for agents. A tool is only offered to a key that carries its scope, so a key made for
@@ -65,7 +66,31 @@ export function buildServer(token: VerifiedToken): McpServer {
     }));
   }
 
+  if (has("log:read")) {
+    server.registerTool(
+      "get_wants",
+      { description: "The owner's Wants list: things they have been thinking about buying (title, note, link, price in cents, status want/bought/dropped), newest first." },
+      guard(async () => ok((await listWants()).map(({ createdAt, ...w }) => ({ ...w, added: createdAt })))),
+    );
+  }
+
   if (has("log:write")) {
+    server.registerTool(
+      "add_want",
+      {
+        description: "Add something to the owner's Wants list. Price is in dollars and optional.",
+        inputSchema: { title: z.string(), note: z.string().optional(), url: z.string().optional(), price: z.number().optional() },
+      },
+      async (args) => {
+        try {
+          const r = await addWant(args);
+          return r.ok ? ok({ id: r.want.id }) : fail(`Invalid: ${r.issues.map((i) => `${i.path} ${i.message}`).join("; ")}`);
+        } catch (e) {
+          console.error("mcp: add_want failed", describeError(e));
+          return fail("The tool could not save that.");
+        }
+      },
+    );
     server.registerTool(
       "log_event",
       {
