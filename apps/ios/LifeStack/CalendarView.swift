@@ -3,6 +3,7 @@ import SwiftUI
 struct CalendarView: View {
     @Environment(AppModel.self) private var model
     @State private var loader = Loader<[CalendarItem]>()
+    var dismiss: (() -> Void)? = nil
 
     private var days: [(key: String, heading: String, items: [CalendarItem])] {
         var order: [String] = []; var map: [String: [CalendarItem]] = [:]
@@ -11,7 +12,9 @@ struct CalendarView: View {
     }
 
     var body: some View {
-        Screen(title: "Calendar", refresh: { await load() }) {
+        Screen(title: "Calendar", refresh: { await load() }, trailing: {
+            if let dismiss { Button("Done", action: dismiss).foregroundStyle(Theme.sky) }
+        }) {
             ErrorBanner(text: loader.error)
             ForEach(days, id: \.key) { day in
                 Card(title: day.heading) { ForEach(day.items) { EventRow(item: $0) } }

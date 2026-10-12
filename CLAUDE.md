@@ -56,6 +56,9 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Strava (`lib/strava*.ts`): OAuth with a rotating refresh token stored encrypted in `connections`; activities are `events`
   rows (domain `activity`, source `strava`, `source_id` `act:<id>`) and no GPS is stored. The public `/api/webhooks/strava`
   trusts nothing in an event: it only checks the athlete id and runs the normal sync. Scope `fitness:read` guards reads.
+- Workouts: all aggregation lives in `lib/workouts-core.ts` (pure, tested); the web page and `/api/v1/workouts` both use it,
+  so clients never recompute totals. US units are display-only (`lib/units.ts`, `Format` in the app).
+- Backup restore must work for tables without an `id` column (connections, sync_state); keep that case in its test.
 - Never cache authenticated responses in the service worker.
 - Scheduled work: Vercel's free plan allows daily cron only. Sources sync on a daily
   cron and on demand when the app is opened or an agent asks; do not assume a

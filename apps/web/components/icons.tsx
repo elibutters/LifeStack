@@ -57,6 +57,12 @@ export const SleepIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const WorkoutsIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M3 12.5h4l2.4-6 4.2 11 2.4-5H21" />
+  </Icon>
+);
+
 export const UserIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <circle cx="12" cy="8" r="3.25" />

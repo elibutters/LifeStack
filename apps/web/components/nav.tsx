@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
-import { CalendarIcon, FinanceIcon, LogIcon, OverviewIcon, SleepIcon } from "./icons";
+import { CalendarIcon, FinanceIcon, LogIcon, OverviewIcon, SleepIcon, WorkoutsIcon } from "./icons";
 
 type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
 
-// Adding a tab is one line here. The bottom bar on phones fits about five.
+// Adding a tab is one line here. The bottom bar on phones fits about six.
 const NAV: Item[] = [
   { href: "/", label: "Overview", Icon: OverviewIcon },
   { href: "/calendar", label: "Calendar", Icon: CalendarIcon },
   { href: "/sleep", label: "Sleep", Icon: SleepIcon },
+  { href: "/workouts", label: "Workouts", Icon: WorkoutsIcon },
   { href: "/finance", label: "Finance", Icon: FinanceIcon },
   { href: "/log", label: "Log", Icon: LogIcon },
 ];

@@ -105,6 +105,9 @@ struct APIClient {
         struct R: Decodable { let holdings: [Holding] }
         return (try await get("api/v1/finance/holdings") as R).holdings
     }
+    func workouts(weeks: Int = 26, recent: Int = 40) async throws -> WorkoutsOverview {
+        try await get("api/v1/workouts", [.init(name: "weeks", value: String(weeks)), .init(name: "recent", value: String(recent))])
+    }
     func connections() async throws -> ConnectionsStatus { try await get("api/v1/connections") }
     func profile() async throws -> [ProfileEntry] {
         let data = try await request("api/v1/profile")

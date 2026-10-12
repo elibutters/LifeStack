@@ -4,6 +4,7 @@ struct OverviewView: View {
     @Environment(AppModel.self) private var model
     @State private var loader = Loader<Overview>()
     @State private var showAccount = false
+    @State private var showCalendar = false
 
     private var greeting: String {
         let h = Calendar.current.component(.hour, from: Date())
@@ -12,8 +13,12 @@ struct OverviewView: View {
 
     var body: some View {
         Screen(title: greeting, refresh: { await load() }, trailing: {
-            Button { showAccount = true } label: { Image(systemName: "person.crop.circle").font(.title2).foregroundStyle(Theme.sky) }
-                .accessibilityLabel("Account").accessibilityIdentifier("account-button")
+            HStack(spacing: 14) {
+                Button { showCalendar = true } label: { Image(systemName: "calendar").font(.title2).foregroundStyle(Theme.sky) }
+                    .accessibilityLabel("Calendar").accessibilityIdentifier("calendar-button")
+                Button { showAccount = true } label: { Image(systemName: "person.crop.circle").font(.title2).foregroundStyle(Theme.sky) }
+                    .accessibilityLabel("Account").accessibilityIdentifier("account-button")
+            }
         }) {
             ErrorBanner(text: loader.error)
             if let o = loader.value {
@@ -24,6 +29,7 @@ struct OverviewView: View {
             } else if loader.loading { ProgressView().padding(.top, 60) }
         }
         .sheet(isPresented: $showAccount) { AccountView(dismiss: { showAccount = false }) }
+        .sheet(isPresented: $showCalendar) { CalendarView(dismiss: { showCalendar = false }) }
         .task { await load() }
     }
 

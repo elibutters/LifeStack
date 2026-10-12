@@ -145,6 +145,11 @@ needs. Strava allows 100 requests per 15 minutes and 1000 per day; a sync uses a
 disconnects it here and removes its data. Agents read workouts with the `get_activities` MCP tool and apps with
 `GET /api/v1/activities` (key scope `fitness:read`).
 
+The **Workouts** tab (web and iPhone) shows totals (7 days, 28 days, this year, all time), miles per week, a consistency
+calendar, pace per run, records and every activity. The numbers come from one place, `lib/workouts-core.ts`, and reach
+the app through `GET /api/v1/workouts?weeks=26&recent=40`, so the two always agree. Distances are metric in the API and
+shown in miles on screen.
+
 ### Connect Eight Sleep
 
 Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep account. Eight Sleep has no public developer API, so this uses the same private app login as Home Assistant. The pod is never controlled.
