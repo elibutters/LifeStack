@@ -90,6 +90,8 @@ struct APIClient {
         }
     }
 
+    // Raw bytes, so a widget can keep the last good answer to show when it is offline.
+    func rawGet(_ path: String, _ query: [URLQueryItem] = []) async throws -> Data { try await request(path, query: query) }
     func overview() async throws -> Overview { try await get("api/v1/overview") }
     func calendar(days: Int = 30) async throws -> [CalendarItem] {
         struct R: Decodable { let items: [CalendarItem] }

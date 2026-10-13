@@ -27,3 +27,6 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 apps/ios/LifeStack/Info.plist
+apps/ios/LifeStack/LifeStack.entitlements
+apps/ios/LifeStackWidgets/LifeStackWidgets.entitlements
+apps/ios/LifeStackWidgets/Info.plist
