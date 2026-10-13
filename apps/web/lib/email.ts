@@ -174,7 +174,9 @@ export async function syncMail(budgetMs = 40_000): Promise<MailSync> {
     return { stored, done };
   } catch (e) {
     console.error("email: sync failed", describeError(e));
-    await record({ lastError: "Mail sync failed. It will retry." }).catch(() => {});
+    // Our own short reasons (like "graph request failed: 429") are safe to show; anything else is not.
+    const why = e instanceof Error && /^(graph request failed|connection changed|refusing)/.test(e.message) ? ` (${e.message.slice(0, 80)})` : "";
+    await record({ lastError: `Mail sync failed${why}. It will retry.` }).catch(() => {});
     throw e;
   } finally {
     await db().update(syncState).set({ leaseUntil: null }).where(eq(syncState.source, SOURCE)).catch(() => {});

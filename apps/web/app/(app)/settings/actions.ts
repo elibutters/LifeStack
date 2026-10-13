@@ -17,13 +17,14 @@ import { disconnectStrava, syncStrava } from "@/lib/strava-sync";
 // Server actions are POSTs to their page, so each one checks the session itself.
 export async function syncNow(): Promise<void> {
   await requireSession();
+  const started = Date.now();
   try {
     await syncOutlook();
   } catch {
     // The failure is recorded and shown on the Connections page.
   }
   // Each press also carries the mail backfill one step further.
-  await syncMail().catch(() => {});
+  await syncMail(Math.max(0, 38_000 - (Date.now() - started))).catch(() => {});
   revalidatePath("/", "layout");
 }
 
