@@ -4,6 +4,9 @@ import SwiftUI
 struct WorkoutsView: View {
     @Environment(AppModel.self) private var model
     @State private var loader = Loader<WorkoutsOverview>()
+    @State private var pickedWeek: String?
+    @State private var pickedRun: String?
+    @State private var pickedDay: String?
 
     var body: some View {
         Screen(title: "Workouts", refresh: { await load() }) {
@@ -55,7 +58,9 @@ struct WorkoutsView: View {
                 }
                 RuleMark(y: .value("Average", avg)).foregroundStyle(Theme.muted).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     .annotation(position: .top, alignment: .trailing) { Text("avg \(Int(avg.rounded()))").font(.caption2).foregroundStyle(Theme.muted) }
+                SelectionMark(x: pickedWeek, lines: o.weeks.first { $0.weekStart == pickedWeek }.map { ["Week of " + Format.shortDay($0.weekStart), Format.milesText($0.distanceM), "\($0.count) workout\($0.count == 1 ? "" : "s")"] } ?? [])
             }
+            .chartXSelection(value: $pickedWeek)
             .chartXAxis(.hidden)
             .chartYAxis { AxisMarks(position: .leading) { _ in AxisGridLine().foregroundStyle(Theme.line); AxisValueLabel().foregroundStyle(Theme.muted) } }
             .frame(height: 150)
@@ -79,11 +84,17 @@ struct WorkoutsView: View {
                             RoundedRectangle(cornerRadius: 3, style: .continuous)
                                 .fill(c == nil ? Color.clear : (c!.count == 0 ? Theme.raised : Theme.blue.opacity(0.35 + 0.65 * min(1, c!.distanceM / top))))
                                 .frame(width: 21, height: 21)
+                                .overlay { if let c, pickedDay == c.date { RoundedRectangle(cornerRadius: 3, style: .continuous).stroke(Color.white, lineWidth: 1.5) } }
+                                .contentShape(Rectangle())
+                                .onTapGesture { if let c { pickedDay = pickedDay == c.date ? nil : c.date } }
+                                .accessibilityLabel(c.map { "\(Format.shortDay($0.date)), \($0.count == 0 ? "rest" : Format.milesText($0.distanceM))" } ?? "")
                         }
                     }
                 }
             }
             .frame(maxWidth: .infinity)
+            Text(cells.first { $0.date == pickedDay }.map { "\(Format.shortDay($0.date)): " + ($0.count == 0 ? "rest" : "\(Format.milesText($0.distanceM)), \($0.count) workout\($0.count == 1 ? "" : "s")") } ?? "Tap a day to see it")
+                .font(.caption).foregroundStyle(Theme.muted).frame(maxWidth: .infinity)
         }
     }
 
@@ -96,7 +107,9 @@ struct WorkoutsView: View {
                 Chart(Array(pts)) { p in
                     LineMark(x: .value("Date", p.date), y: .value("Pace", secPerMile(p))).foregroundStyle(Theme.blue.opacity(0.45)).interpolationMethod(.monotone)
                     PointMark(x: .value("Date", p.date), y: .value("Pace", secPerMile(p))).foregroundStyle(Theme.sky).symbolSize(30)
+                    SelectionMark(x: pickedRun, lines: pts.first { $0.date == pickedRun }.map { [Format.shortDay($0.date), Format.paceText($0.paceSecPerKm), Format.milesText($0.distanceM)] } ?? [])
                 }
+                .chartXSelection(value: $pickedRun)
                 .chartXAxis(.hidden)
                 .chartYScale(domain: .automatic(includesZero: false, reversed: true))
                 .chartYAxis { AxisMarks(position: .leading) { v in AxisGridLine().foregroundStyle(Theme.line); AxisValueLabel { if let d = v.as(Double.self) { Text("\(Int(d) / 60):\(String(format: "%02d", Int(d) % 60))").foregroundStyle(Theme.muted) } } } }

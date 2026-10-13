@@ -4,6 +4,7 @@ import SwiftUI
 struct FinanceView: View {
     @Environment(AppModel.self) private var model
     @State private var summary = Loader<FinanceSummary>()
+    @State private var pickedMonth: String?
     @State private var txns = Loader<[Transaction]>()
     @State private var holdings = Loader<[Holding]>()
 
@@ -21,7 +22,9 @@ struct FinanceView: View {
                             BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.income)).position(by: .value("Type", "In")).foregroundStyle(Theme.good).cornerRadius(4)
                             BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.spending)).position(by: .value("Type", "Out")).foregroundStyle(Theme.violet).cornerRadius(4)
                         }
+                        SelectionMark(x: pickedMonth, lines: s.cashflow.first { Format.monthShort($0.month) == pickedMonth }.map { [Format.monthShort($0.month), "In " + Format.money($0.income), "Out " + Format.money($0.spending)] } ?? [])
                     }
+                    .chartXSelection(value: $pickedMonth)
                     .chartYAxis { AxisMarks { v in AxisGridLine().foregroundStyle(Theme.line); AxisValueLabel { if let d = v.as(Double.self) { Text(Format.money(d)).foregroundStyle(Theme.muted) } } } }
                     .chartXAxis { AxisMarks { _ in AxisValueLabel().foregroundStyle(Theme.muted) } }
                     .frame(height: 170)
