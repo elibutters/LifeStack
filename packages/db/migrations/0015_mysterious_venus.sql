@@ -1,0 +1,1 @@
+ALTER TABLE "api_tokens" ADD COLUMN "scopes_custom" boolean DEFAULT false NOT NULL;

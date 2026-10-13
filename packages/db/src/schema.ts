@@ -212,6 +212,7 @@ export const apiTokens = pgTable("api_tokens", {
   createdAt,
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  scopesCustom: boolean("scopes_custom").notNull().default(false), // true once the owner edits a phone key's permissions
 });
 
 // Things the owner is on the lookout for. A want is the need ("a jacket"); its options are the

@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { and, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { apiTokens } from "@lifestack/db";
 import { db } from "./db";
 import { APP_SCOPES, SCOPES, type Scope } from "./capture-core";
@@ -48,8 +48,9 @@ export async function verifyBearer(header: string | null, scope?: Scope): Promis
     .where(and(eq(apiTokens.tokenHash, hash(m[1]!)), isNull(apiTokens.revokedAt)));
   if (!row) return { ok: false, status: 401 };
   // A phone's key is only ever issued by the password login, which grants the app's full permission set. Use the current
-  // set rather than what was stored when it signed in, so a feature added later works without signing in again.
-  const scopes = row.kind === "app" ? [...APP_SCOPES] : row.scopes;
+  // set rather than what was stored when it signed in, so a feature added later works without signing in again. Once the
+  // owner has edited that key's permissions on the web, what they chose is used instead.
+  const scopes = row.kind === "app" && !row.scopesCustom ? [...APP_SCOPES] : row.scopes;
   if (scope && !scopes.includes(scope)) return { ok: false, status: 403 };
   // Remember when it was last used, at most once a minute.
   await db()
@@ -69,6 +70,7 @@ export async function listTokens() {
       kind: apiTokens.kind,
       prefix: apiTokens.prefix,
       scopes: apiTokens.scopes,
+      scopesCustom: apiTokens.scopesCustom,
       createdAt: apiTokens.createdAt,
       lastUsedAt: apiTokens.lastUsedAt,
       revokedAt: apiTokens.revokedAt,
@@ -77,14 +79,14 @@ export async function listTokens() {
     .orderBy(desc(apiTokens.createdAt));
 }
 
-// Changes what an existing key may do. The phone app's own keys are managed by the app, so they are left alone.
+// Changes what an existing key may do. A phone key then stops following the app's defaults and keeps exactly this set.
 export async function setTokenScopes(id: number, scopes: Scope[]): Promise<boolean> {
   const unique = [...new Set(scopes)];
   if (!unique.length || unique.some((s) => !SCOPES.includes(s))) return false;
   const rows = await db()
     .update(apiTokens)
-    .set({ scopes: unique })
-    .where(and(eq(apiTokens.id, id), isNull(apiTokens.revokedAt), ne(apiTokens.kind, "app")))
+    .set({ scopes: unique, scopesCustom: sql`${apiTokens.kind} = 'app'` })
+    .where(and(eq(apiTokens.id, id), isNull(apiTokens.revokedAt)))
     .returning({ id: apiTokens.id });
   return rows.length > 0;
 }

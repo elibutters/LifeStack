@@ -33,10 +33,10 @@ export const SCOPES = ["log:write", "log:read", "calendar:read", "sleep:read", "
 export const AGENT_SCOPES: Scope[] = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read", "email:read"];
 export type Scope = (typeof SCOPES)[number];
 // What the iPhone app's key carries: everything an agent reads, plus the account section.
-// Mail stays out of the phone key: the app has no mail screen, so a lost phone key cannot read it.
+// Mail stays out of a new phone key by default: the app has no mail screen, so a lost phone key cannot read it. The owner can allow it per key.
 export const APP_SCOPES: Scope[] = [...AGENT_SCOPES.filter((s) => s !== "email:read"), "account:read"];
 
-// What each permission lets a key do, for the keys page. account:read belongs to the phone app's own key only.
+// What each permission lets a key do, for the keys page.
 export const SCOPE_LABELS: Partial<Record<Scope, string>> = {
   "log:write": "Add logs",
   "log:read": "Read today's log and profile",
@@ -46,6 +46,7 @@ export const SCOPE_LABELS: Partial<Record<Scope, string>> = {
   "fitness:read": "Read workouts",
   "email:read": "Read email",
   "amazon:write": "Send Amazon snapshots",
+  "account:read": "Read account and connections (phone app)",
 };
 
 // Domain and key each kind of entry is stored under in the shared events table.
