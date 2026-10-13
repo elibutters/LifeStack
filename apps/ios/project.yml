@@ -31,6 +31,8 @@ targets:
         UIUserInterfaceStyle: Dark
         LSBaseURL: $(API_BASE_URL)
         LSKeychainGroup: $(AppIdentifierPrefix)app.lifestack.shared
+        NSLocationWhenInUseUsageDescription: Life Stack records the places you visit so your assistant knows where you have been.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Choose Always so places and trips are recorded even when the app is closed. Only visits and big moves are recorded, not constant GPS.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

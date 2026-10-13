@@ -186,4 +186,8 @@ struct APIClient {
     func deleteWant(_ id: Int) async throws { try await send("api/v1/wants/\(id)", "DELETE") }
     func updateOption(_ id: Int, _ fields: [String: Any]) async throws { try await send("api/v1/want-options/\(id)", "PATCH", fields) }
     func deleteOption(_ id: Int) async throws { try await send("api/v1/want-options/\(id)", "DELETE") }
+
+    func sendLocations(_ points: [[String: Any]]) async throws {
+        _ = try await request("api/v1/location", method: "POST", body: try JSONSerialization.data(withJSONObject: ["points": points]))
+    }
 }
