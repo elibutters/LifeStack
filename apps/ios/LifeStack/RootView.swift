@@ -15,7 +15,7 @@ struct MainTabs: View {
             SleepView().tabItem { Label("Sleep", systemImage: "bed.double") }
             WorkoutsView().tabItem { Label("Workouts", systemImage: "figure.run") }
             FinanceView().tabItem { Label("Finance", systemImage: "chart.bar") }
-            TodayView().tabItem { Label("Log", systemImage: "checkmark.circle") }
+            MoreView().tabItem { Label("More", systemImage: "line.3.horizontal") }
         }
     }
 }

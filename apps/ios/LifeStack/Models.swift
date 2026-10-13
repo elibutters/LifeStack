@@ -209,3 +209,26 @@ enum Format {
     static func isToday(_ iso: String) -> Bool { date(iso).map { Calendar.current.isDateInToday($0) } ?? false }
     static func shortDay(_ s: String) -> String { dayDate(s)?.formatted(.dateTime.weekday(.abbreviated).month().day()) ?? s }
 }
+
+struct WantOption: Decodable, Identifiable, Equatable {
+    let id: Int
+    let wantId: Int
+    let title: String
+    let url: String?
+    let priceCents: Int?
+    let priceCheckedAt: String?
+    let targetCents: Int?
+    let note: String?
+    let status: String   // considering | chosen | rejected
+    let atTarget: Bool
+}
+
+struct Want: Decodable, Identifiable, Equatable {
+    let id: Int
+    let title: String
+    let note: String?
+    let budgetCents: Int?
+    let status: String   // want | bought | dropped
+    let bestPriceCents: Int?
+    let options: [WantOption]
+}

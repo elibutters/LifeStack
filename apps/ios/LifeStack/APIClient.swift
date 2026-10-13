@@ -161,4 +161,27 @@ struct APIClient {
     }
 
     func deleteEntry(_ id: Int) async throws { _ = try await request("api/v1/events/\(id)", method: "DELETE") }
+
+    // MARK: Wants
+
+    func wants() async throws -> [Want] {
+        struct R: Decodable { let wants: [Want] }
+        return (try await get("api/v1/wants") as R).wants
+    }
+    private func send(_ path: String, _ method: String, _ body: [String: Any]? = nil) async throws {
+        _ = try await request(path, method: method, body: try body.map { try JSONSerialization.data(withJSONObject: $0) })
+    }
+    // `first` is an optional first option (price, target, url as typed text); the server turns dollars into cents.
+    func addWant(title: String, note: String, budget: String, first: [String: String]?) async throws {
+        var body: [String: Any] = ["title": title, "note": note, "budget": budget]
+        if let first { body["first"] = first }
+        try await send("api/v1/wants", "POST", body)
+    }
+    func addOption(wantId: Int, title: String, price: String, target: String, url: String) async throws {
+        try await send("api/v1/wants/\(wantId)/options", "POST", ["title": title, "price": price, "target": target, "url": url])
+    }
+    func setWantStatus(_ id: Int, _ status: String) async throws { try await send("api/v1/wants/\(id)", "PATCH", ["status": status]) }
+    func deleteWant(_ id: Int) async throws { try await send("api/v1/wants/\(id)", "DELETE") }
+    func updateOption(_ id: Int, _ fields: [String: Any]) async throws { try await send("api/v1/want-options/\(id)", "PATCH", fields) }
+    func deleteOption(_ id: Int) async throws { try await send("api/v1/want-options/\(id)", "DELETE") }
 }
