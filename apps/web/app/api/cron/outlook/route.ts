@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { syncMail } from "@/lib/email";
 import { syncOutlook } from "@/lib/outlook";
 import { cronAuthorized } from "@/lib/request";
 
@@ -9,7 +10,10 @@ export async function GET(req: NextRequest) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const result = await syncOutlook();
+    // Mail rides along on the same daily run; a mail failure never fails the calendar sync.
+    const mail = await syncMail().catch(() => null);
     return NextResponse.json({
+      mail: mail && "stored" in mail ? { stored: mail.stored, done: mail.done } : null,
       ok: true,
       connected: !!result,
       skipped: !!result && "skipped" in result,

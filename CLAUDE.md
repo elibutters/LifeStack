@@ -37,7 +37,9 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   `source_id` is unique per source across all kinds, so snapshots are prefixed (`bal:`, `liab:`,
   `hold:`, `inv:`). The Plaid webhook is a public path and must verify Plaid's signature.
 - Third-party tokens are stored only encrypted (`lib/crypto.ts`, key in `ENCRYPTION_KEY`).
-  Outlook is linked through Microsoft Graph for personal accounts only, with read-only scope.
+  Outlook is linked through Microsoft Graph for personal accounts only, with read-only scopes (calendar and mail).
+  Mail is copied into the `emails` table (plain text, capped, classified by `lib/email-core.ts`) so agents have context;
+  the owner chose this. It is read through `email:read` (agent keys only, never the phone key) and is never backed up.
   Work or employer calendars are never connected.
 - Accounts: sign-in is email plus password through `lib/login-guard.ts` (throttled, scrypt hashes in `users`).
   `OWNER_EMAIL` + `APP_PASSWORD` create the owner on first sign-in; with no `OWNER_EMAIL` the original password-only login
@@ -73,7 +75,7 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Keep it lean: no auth library, no state-management library, no extra services.
 - Every ingested row carries `source` + `source_id` and is written with
   `ON CONFLICT DO UPDATE`.
-- Store no account numbers, credentials or email bodies.
+- Store no account numbers or credentials. Email text is allowed only in the `emails` table, never in the repo.
 - After schema changes: `pnpm db:generate`, commit the migration.
 
 ## Working with multiple agents

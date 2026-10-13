@@ -2,7 +2,8 @@ import { sql } from "drizzle-orm";
 import type { Db } from "@lifestack/db";
 
 // Tables left out: migration bookkeeping and the login attempt counter (noise, not data).
-const SKIP = new Set(["__drizzle_migrations", "auth_attempts"]);
+// emails can be re-synced from Outlook and are large, so they are not part of the backup.
+const SKIP = new Set(["__drizzle_migrations", "auth_attempts", "emails"]);
 
 async function tableNames(db: Db): Promise<string[]> {
   const rows = await db.execute<{ t: string }>(sql`select table_name as t from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by 1`);

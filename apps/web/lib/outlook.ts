@@ -2,7 +2,7 @@ import "server-only";
 import { describeError } from "./errors";
 import { and, count, eq, gte, isNull, lt, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { connections, events, syncState } from "@lifestack/db";
+import { connections, emails, events, syncState } from "@lifestack/db";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./db";
 import { addDays, startOfDay, ymd } from "./dates";
@@ -40,6 +40,8 @@ export async function disconnectOutlook() {
   // Deleting the connection first also makes any sync that is mid-flight abandon its writes.
   await db().delete(connections).where(eq(connections.provider, OUTLOOK));
   await db().delete(syncState).where(eq(syncState.source, OUTLOOK));
+  await db().delete(syncState).where(eq(syncState.source, "outlook-mail"));
+  await db().delete(emails);
   await db().delete(events).where(eq(events.source, OUTLOOK));
 }
 

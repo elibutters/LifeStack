@@ -242,3 +242,25 @@ export const wantOptions = pgTable(
   },
   (t) => [index("want_options_want_idx").on(t.wantId)],
 );
+
+// Mail pulled from the owner's Outlook mailbox so agents have context. Re-syncable, so never backed up.
+export const emails = pgTable(
+  "emails",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    sourceId: text("source_id").notNull().unique(), // Graph immutable message id
+    folder: text("folder").notNull(), // inbox | archive | sentitems
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+    fromName: text("from_name"),
+    fromAddress: text("from_address"),
+    subject: text("subject").notNull().default(""),
+    bodyText: text("body_text").notNull().default(""), // plain text, capped
+    isRead: boolean("is_read").notNull().default(false),
+    hasAttachments: boolean("has_attachments").notNull().default(false),
+    conversationId: text("conversation_id"),
+    category: text("category").notNull().default("other"), // receipt | shipping | bill | appointment | deal | other
+    extracted: jsonb("extracted").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt,
+  },
+  (t) => [index("emails_received_idx").on(t.receivedAt), index("emails_category_idx").on(t.category, t.receivedAt)],
+);
