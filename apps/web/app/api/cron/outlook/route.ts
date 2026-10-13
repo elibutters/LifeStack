@@ -8,10 +8,12 @@ export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   if (!cronAuthorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const started = Date.now();
   try {
     const result = await syncOutlook();
     // Mail rides along on the same daily run; a mail failure never fails the calendar sync.
-    const mail = await syncMail().catch(() => null);
+    // The function is capped at 60s, so mail only gets what the calendar left, stopping well before the cap.
+    const mail = await syncMail(Math.max(0, 38_000 - (Date.now() - started))).catch(() => null);
     return NextResponse.json({
       mail: mail && "stored" in mail ? { stored: mail.stored, done: mail.done } : null,
       ok: true,
