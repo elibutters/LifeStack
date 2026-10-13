@@ -13,6 +13,7 @@ import { loadProfile, profileForAgents } from "./profile";
 import { loadNights } from "./sleep";
 import { loadActivities, totals } from "./activities";
 import { getEmail, loadAgenda, searchEmails } from "./email";
+import { addPlace, loadHistory } from "./location";
 import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
 
@@ -212,6 +213,43 @@ export function buildServer(token: VerifiedToken): McpServer {
       "get_agenda",
       { description: "Upcoming bills (due dates), appointments and deliveries found in the last 90 days of mail, soonest first." },
       guard(async () => ok(await loadAgenda())),
+    );
+  }
+
+  if (has("location:read")) {
+    server.registerTool(
+      "get_location_history",
+      {
+        description: "Where the owner has been: stays (arrival, departure, minutes, coordinates, and the name of a saved place when one matches), the latest reported point, and the saved places. Newest stays first.",
+        inputSchema: { days: z.number().int().min(1).max(365).optional() },
+      },
+      async ({ days }) => {
+        try {
+          return ok(await loadHistory(days ?? 7));
+        } catch (e) {
+          console.error("mcp: location failed", describeError(e));
+          return fail("The tool could not read the data.");
+        }
+      },
+    );
+  }
+
+  if (has("location:write")) {
+    server.registerTool(
+      "name_place",
+      {
+        description: "Save a named place (for example home or the gym) at coordinates, so stays there are labelled. Radius in metres, 20 to 2000, default 100.",
+        inputSchema: { label: z.string(), lat: z.number(), lon: z.number(), radiusM: z.number().int().optional() },
+      },
+      async (args) => {
+        try {
+          const r = await addPlace(args);
+          return r.ok ? ok({ id: r.id }) : fail("Invalid place.");
+        } catch (e) {
+          console.error("mcp: name_place failed", describeError(e));
+          return fail("The tool could not save that.");
+        }
+      },
     );
   }
 

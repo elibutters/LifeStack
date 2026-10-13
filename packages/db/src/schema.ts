@@ -265,3 +265,19 @@ export const emails = pgTable(
   },
   (t) => [index("emails_received_idx").on(t.receivedAt), index("emails_category_idx").on(t.category, t.receivedAt)],
 );
+
+// Where the owner's phone reported being: visit arrivals and departures plus significant moves. Exact coordinates, kept.
+export const locationPoints = pgTable(
+  "location_points",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    clientId: text("client_id").notNull().unique(), // chosen by the phone, so a retried upload never stores twice
+    ts: timestamp("ts", { withTimezone: true }).notNull(),
+    lat: doublePrecision("lat").notNull(),
+    lon: doublePrecision("lon").notNull(),
+    accuracyM: doublePrecision("accuracy_m"),
+    source: text("source").notNull(), // visit-arrival | visit-departure | significant | manual
+    createdAt,
+  },
+  (t) => [index("location_points_ts_idx").on(t.ts)],
+);
