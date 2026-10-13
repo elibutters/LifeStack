@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { disconnectAmazon } from "@/lib/amazon";
 import { disconnectEight, saveEightConnection, syncEight } from "@/lib/eight";
 import { syncItem, unlinkItem } from "@/lib/finance";
+import { syncMail } from "@/lib/email";
 import { disconnectOutlook, syncOutlook } from "@/lib/outlook";
 import { disconnectStrava, syncStrava } from "@/lib/strava-sync";
 
@@ -21,6 +22,8 @@ export async function syncNow(): Promise<void> {
   } catch {
     // The failure is recorded and shown on the Connections page.
   }
+  // Each press also carries the mail backfill one step further.
+  await syncMail().catch(() => {});
   revalidatePath("/", "layout");
 }
 

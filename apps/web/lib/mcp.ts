@@ -12,6 +12,7 @@ import { loadFinance, loadHoldings } from "./finance-data";
 import { loadProfile, profileForAgents } from "./profile";
 import { loadNights } from "./sleep";
 import { loadActivities, totals } from "./activities";
+import { getEmail, loadAgenda, searchEmails } from "./email";
 import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
 
@@ -175,6 +176,42 @@ export function buildServer(token: VerifiedToken): McpServer {
           return fail("The tool could not read the data.");
         }
       },
+    );
+  }
+
+  if (has("email:read")) {
+    server.registerTool(
+      "search_email",
+      {
+        description: "Search the owner's Outlook mail (inbox, archive, sent), newest first. Filters: q (subject or body text), from (name or address), category (receipt, shipping, bill, appointment, deal, other), since and until (YYYY-MM-DD). Returns a snippet per message and any extracted facts (merchant, amountCents, tracking, dueDate, eventDate); use get_email for the full text.",
+        inputSchema: { q: z.string().optional(), from: z.string().optional(), category: z.enum(["receipt", "shipping", "bill", "appointment", "deal", "other"]).optional(), since: Day.optional(), until: Day.optional(), limit: z.number().int().min(1).max(50).optional() },
+      },
+      async (args) => {
+        try {
+          return ok(await searchEmails(args));
+        } catch (e) {
+          console.error("mcp: search_email failed", describeError(e));
+          return fail("The tool could not read the data.");
+        }
+      },
+    );
+    server.registerTool(
+      "get_email",
+      { description: "The full plain text of one message by id (from search_email).", inputSchema: { id: z.number().int() } },
+      async ({ id }) => {
+        try {
+          const e = await getEmail(id);
+          return e ? ok(e) : fail("No such message.");
+        } catch (e) {
+          console.error("mcp: get_email failed", describeError(e));
+          return fail("The tool could not read the data.");
+        }
+      },
+    );
+    server.registerTool(
+      "get_agenda",
+      { description: "Upcoming bills (due dates), appointments and deliveries found in the last 90 days of mail, soonest first." },
+      guard(async () => ok(await loadAgenda())),
     );
   }
 

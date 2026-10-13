@@ -8,6 +8,7 @@ import { PlaidLinkButton } from "@/components/plaid-link";
 import { requireSession } from "@/lib/auth";
 import { fmtMoney, isLiability } from "@/lib/finance-calc";
 import { listItems } from "@/lib/finance";
+import { mailStatus } from "@/lib/email";
 import { microsoftConfigured } from "@/lib/microsoft";
 import { keyStatus, plaidConfigured, plaidEnv } from "@/lib/plaid";
 import { getConnection, getSyncState } from "@/lib/outlook";
@@ -58,9 +59,10 @@ const field = "h-9 rounded-md border border-line bg-bg px-3 text-sm outline-none
 export default async function ConnectionsPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
   await requireSession();
   const sp = await searchParams;
-  const [conn, state, eightConn, eightState, amazon, nightCount, items, acctRows, holdingRows] = await Promise.all([
+  const [conn, state, mail, eightConn, eightState, amazon, nightCount, items, acctRows, holdingRows] = await Promise.all([
     getConnection().catch(() => null),
     getSyncState().catch(() => null),
+    mailStatus().catch(() => ({ stored: 0, lastOkAt: null, lastError: null as string | null })),
     getEightConnection().catch(() => null),
     getEightSyncState().catch(() => null),
     loadAmazon().catch(() => ({ state: null, orders: [] as { sourceId: string }[], cart: [] as { sourceId: string }[] })),
@@ -119,7 +121,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
       )}
 
       <ConnectionPanel
-        title="Outlook calendar"
+        title="Outlook calendar and mail"
         status={conn ? (state?.lastError ? "Sync problem" : "Connected") : "Not linked"}
         tone={conn ? (state?.lastError ? "bad" : "ok") : "muted"}
         defaultOpen={!conn || Boolean(state?.lastError)}
@@ -153,17 +155,20 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
             <dl>
               <Row label="Account" value={conn.account ?? "Connected"} />
               {state?.lastError && <Row label="Status" value={state.lastError} bad />}
+              <Row label="Mail" value={`${mail.stored.toLocaleString("en-US")} messages copied`} />
+              {mail.lastError && <Row label="Mail status" value={mail.lastError} bad />}
             </dl>
             <p className="text-sm text-muted">
-              Disconnecting stops syncing and deletes the copied events. To also withdraw Life Stack's access at Microsoft, remove it at
+              Mail is read only and copied to your database so agents can search it. Press Sync to bring in more of your history.
+              Disconnecting stops syncing and deletes the copied events and mail. To also withdraw Life Stack's access at Microsoft, remove it at
               account.live.com/consent/Manage.
             </p>
           </>
         ) : (
           <>
             <p className="text-sm text-muted">
-              Link a personal Outlook account (outlook.com, hotmail.com or live.com). The app only reads the calendar; it can never change
-              it.
+              Link a personal Outlook account (outlook.com, hotmail.com or live.com). The app only reads your calendar and mail; it can never change
+              either.
             </p>
             {!microsoftConfigured() && <p className="text-sm text-danger">{MESSAGES.not_configured}</p>}
           </>

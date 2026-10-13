@@ -5,7 +5,11 @@ import { z } from "zod";
 // Personal Microsoft accounts only ("consumers"), so work and school accounts cannot be linked.
 const AUTHORITY = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
 export const GRAPH = "https://graph.microsoft.com/v1.0";
-const SCOPES = "offline_access Calendars.Read User.Read";
+// Mail is read-only. The calendar sync keeps refreshing with the narrower set, so it still works before
+// the owner has re-linked Outlook to allow mail.
+export const CALENDAR_SCOPES = "offline_access Calendars.Read User.Read";
+export const MAIL_SCOPES = "offline_access Calendars.Read Mail.Read User.Read";
+const SCOPES = MAIL_SCOPES;
 
 export const OAUTH_COOKIE = "ls_oauth";
 export const OAUTH_COOKIE_PATH = "/api/connections/outlook";
@@ -49,14 +53,14 @@ export class TokenError extends Error {
 
 const Tokens = z.object({ access_token: z.string(), refresh_token: z.string().optional() });
 
-async function tokenRequest(params: Record<string, string>) {
+async function tokenRequest(params: Record<string, string>, scope = SCOPES) {
   const res = await fetch(`${AUTHORITY}/token`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: process.env.MICROSOFT_CLIENT_ID!,
       client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-      scope: SCOPES,
+      scope,
       ...params,
     }),
     cache: "no-store",
@@ -69,14 +73,14 @@ async function tokenRequest(params: Record<string, string>) {
 export const exchangeCode = (origin: string, code: string, verifier: string) =>
   tokenRequest({ grant_type: "authorization_code", code, code_verifier: verifier, redirect_uri: redirectUri(origin) });
 
-export const refreshTokens = (refreshToken: string) =>
-  tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken });
+export const refreshTokens = (refreshToken: string, scope = CALENDAR_SCOPES) =>
+  tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken }, scope);
 
 // Only ever sends the access token to Microsoft Graph, including when following paging links.
-export async function graphGet(url: string, accessToken: string): Promise<unknown> {
+export async function graphGet(url: string, accessToken: string, extraPrefer?: string): Promise<unknown> {
   if (new URL(url).origin !== "https://graph.microsoft.com") throw new Error("refusing non-Graph URL");
   const res = await fetch(url, {
-    headers: { authorization: `Bearer ${accessToken}`, prefer: 'outlook.timezone="UTC", IdType="ImmutableId"' },
+    headers: { authorization: `Bearer ${accessToken}`, prefer: ['outlook.timezone="UTC"', 'IdType="ImmutableId"', extraPrefer].filter(Boolean).join(", ") },
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`graph request failed: ${res.status}`);
