@@ -47,6 +47,8 @@ final class AppModel {
     }
 
     func signOut() {
+        LocationTracker.shared.enabled = false
+        LocationTracker.shared.clearQueue()
         Keychain.delete()
         today = nil; options = nil; history = []; message = nil; signedIn = false
     }

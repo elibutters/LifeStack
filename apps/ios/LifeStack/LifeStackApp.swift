@@ -4,6 +4,8 @@ import SwiftUI
 struct LifeStackApp: App {
     @State private var model = AppModel()
 
+    init() { LocationTracker.shared.startIfEnabled() }
+
     var body: some Scene {
         WindowGroup {
             RootView()

@@ -24,6 +24,15 @@ struct AccountView: View {
                     } else if let e = conns.error { Text(e).foregroundStyle(.red) } else { ProgressView() }
                     Text("Add or fix connections on the web app's Connections page.").font(.caption).foregroundStyle(.secondary)
                 }
+                Section("Location") {
+                    @Bindable var tracker = LocationTracker.shared
+                    Toggle("Record places and trips", isOn: $tracker.enabled).accessibilityIdentifier("location-toggle")
+                    LabeledContent("Status", value: tracker.summary)
+                    if tracker.status == .denied || tracker.status == .authorizedWhenInUse {
+                        Button("Open Settings") { if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) } }
+                    }
+                    Text("Uses iOS's low-power visit and significant-change tracking, not constant GPS. Choose Always in Settings so it works with the app closed. Stored in your own database.").font(.caption).foregroundStyle(.secondary)
+                }
                 Section("This device") {
                     LabeledContent("Server", value: model.address)
                     Button("Sign out", role: .destructive) { model.signOut() }
