@@ -102,6 +102,18 @@ assert.equal((await mail.handleEmailOne(req("/1", withScope.token), "abc")).stat
 assert.equal((await mail.handleEmailOne(req("/1", without.token), String(all[0]!.id))).status, 403);
 assert.equal((await mail.handleEmailOne(req("/1", withScope.token), String(all[0]!.id))).status, 200);
 assert.equal((await mail.handleEmailAgenda(req("/agenda", withScope.token))).status, 200);
+// ---- editing an existing key's permissions
+const edit = await tok.createToken("c", "agent", ["log:read"]);
+assert.equal((await mail.handleEmailSearch(req("", edit.token))).status, 403);
+assert.equal(await tok.setTokenScopes(edit.id, ["log:read", "email:read"]), true);
+assert.equal((await mail.handleEmailSearch(req("", edit.token))).status, 200, "a new permission works on the same key straight away");
+assert.equal(await tok.setTokenScopes(edit.id, ["log:read"]), true);
+assert.equal((await mail.handleEmailSearch(req("", edit.token))).status, 403, "and can be taken away again");
+assert.equal(await tok.setTokenScopes(edit.id, []), false, "a key keeps at least one permission");
+assert.equal(await tok.setTokenScopes(edit.id, ["nope" as never]), false);
+assert.equal(await tok.setTokenScopes(999999, ["log:read"]), false);
+const appKey = await tok.createAppToken("test phone", null);
+assert.equal(await tok.setTokenScopes(appKey.id, ["email:read"]), false, "phone app keys are managed by the app");
 assert.ok(!(await import("../lib/capture-core.ts")).APP_SCOPES.includes("email:read"), "the phone key never reads mail");
 
 await reset();

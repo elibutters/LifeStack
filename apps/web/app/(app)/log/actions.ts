@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { addSupplement, archiveSupplement, deleteLog, deleteTodaySupplement, insertLog, setSupplementDose } from "@/lib/capture";
-import { AGENT_SCOPES, describeEntry, EventInput, SCOPES, type Scope } from "@/lib/capture-core";
-import { createToken, revokeToken, TOKEN_KINDS, type TokenKind } from "@/lib/tokens";
+import { AGENT_SCOPES, describeEntry, EventInput, SCOPE_LABELS, SCOPES, type Scope } from "@/lib/capture-core";
+import { createToken, revokeToken, setTokenScopes, TOKEN_KINDS, type TokenKind } from "@/lib/tokens";
 
 // Server actions are POSTs to their page, so each one checks the session itself.
 export type LogResult = { ok: true; id: number; label: string } | { ok: false; error: string };
@@ -104,6 +104,14 @@ export async function createTokenAction(_prev: TokenState, form: FormData): Prom
   } catch (e) {
     return { error: e instanceof Error && e.message === "too many active tokens" ? "Revoke an old token first (10 active at most)." : "Could not create the token." };
   }
+}
+
+// Saves the ticked permissions for an existing key. At least one must stay ticked; to stop a key, revoke it.
+export async function setTokenScopesAction(id: number, form: FormData): Promise<void> {
+  await requireSession();
+  const scopes = form.getAll("scope").map(String).filter((s): s is Scope => s in SCOPE_LABELS);
+  if (scopes.length) await setTokenScopes(id, scopes);
+  revalidatePath("/api-keys");
 }
 
 export async function revokeTokenAction(id: number): Promise<void> {
