@@ -24,10 +24,13 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     private(set) var pending = 0
     private(set) var lastUpload: Date?
     private(set) var error: String?
+    private(set) var last: (lat: Double, lon: Double, at: Date)?
+    private(set) var refreshing = false
 
     @ObservationIgnored private let manager = CLLocationManager()
     @ObservationIgnored private var queue: [Point] = []
     @ObservationIgnored private var flushing = false
+    @ObservationIgnored private var manualPending = false
     @ObservationIgnored private let iso = ISO8601DateFormatter()
 
     private override init() {
@@ -50,6 +53,21 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         case .denied, .restricted: return "Blocked in Settings"
         default: return "Waiting for permission"
         }
+    }
+
+    // One exact fix right now (not the passive tracking), uploaded as a manual point. Used by the button and when the app opens.
+    func refreshNow(ifOlderThan minutes: Double = 0) {
+        guard enabled, status == .authorizedAlways || status == .authorizedWhenInUse, !refreshing else { return }
+        if let last, Date.now.timeIntervalSince(last.at) < minutes * 60 { return }
+        refreshing = true; manualPending = true
+        manager.requestLocation()
+    }
+
+    // Saves where the phone last was as a named place, so stays there are labelled.
+    func nameCurrentPlace(_ label: String) async -> Bool {
+        guard let last, let client = Self.client else { return false }
+        do { try await client.addPlace(label: label, lat: last.lat, lon: last.lon); error = nil; return true }
+        catch { self.error = error.localizedDescription; return false }
     }
 
     private func begin() {
@@ -88,12 +106,19 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         let list = locations.map { ($0.timestamp, $0.coordinate, $0.horizontalAccuracy) }
         Task { @MainActor in
-            for (t, c, a) in list { self.add("sc", t, c, a, "significant") }
+            let manual = self.manualPending
+            self.manualPending = false; self.refreshing = false
+            for (t, c, a) in list {
+                self.add(manual ? "mn" : "sc", t, c, a, manual ? "manual" : "significant")
+                self.last = (c.latitude, c.longitude, t)
+            }
             self.flush()
         }
     }
 
-    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor in self.refreshing = false; self.manualPending = false }
+    }
 
     // MARK: Queue
 

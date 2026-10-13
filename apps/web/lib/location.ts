@@ -45,7 +45,10 @@ export async function loadHistory(days = 7, now = new Date()) {
     listPlaces(),
   ]);
   const points = pts.map((r) => ({ ts: r.ts, lat: r.lat, lon: r.lon, source: r.source }));
-  const latest = pts[0] ? { at: pts[0].ts.toISOString(), lat: pts[0].lat, lon: pts[0].lon, accuracyM: pts[0].accuracyM, source: pts[0].source } : null;
+  // ageMinutes says how stale the newest report is: the phone only reports on arrival, a big move, or when asked.
+  const latest = pts[0]
+    ? { at: pts[0].ts.toISOString(), ageMinutes: Math.max(0, Math.round((now.getTime() - pts[0].ts.getTime()) / 60_000)), lat: pts[0].lat, lon: pts[0].lon, accuracyM: pts[0].accuracyM, source: pts[0].source }
+    : null;
   return { latest, stays: staysOf(points, pl, now), places: pl };
 }
 

@@ -48,7 +48,7 @@ assert.equal((await loc.handleLocation(req("POST", "/location", writer.token, { 
 const up = await loc.handleLocation(req("POST", "/location", writer.token, body([{ id: "api-point-1", source: "visit-arrival", at: new Date().toISOString() }]))); assert.equal(up.status, 201);
 assert.equal((await loc.handleLocation(req("GET", "/location", writer.token))).status, 403);
 const hist = (await (await loc.handleLocation(req("GET", "/location?days=2", reader.token))).json()) as { stays: { place: string | null }[]; latest: { lat: number } | null };
-assert.equal(hist.stays.length, 1); assert.equal(hist.latest?.lat, 40.7);
+assert.equal(hist.stays.length, 1); assert.equal(hist.latest?.lat, 40.7); assert.ok((hist.latest as unknown as { ageMinutes: number }).ageMinutes <= 1, "the report says how old the newest point is");
 assert.equal((await loc.handleLocation(req("GET", "/location?days=0", reader.token))).status, 400);
 const placed = await loc.handlePlaces(req("POST", "/places", writer.token, { label: "Home", lat: 40.7, lon: -74 })); assert.equal(placed.status, 201);
 const pid = ((await placed.json()) as { id: number }).id;

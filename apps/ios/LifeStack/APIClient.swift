@@ -190,4 +190,8 @@ struct APIClient {
     func sendLocations(_ points: [[String: Any]]) async throws {
         _ = try await request("api/v1/location", method: "POST", body: try JSONSerialization.data(withJSONObject: ["points": points]))
     }
+
+    func addPlace(label: String, lat: Double, lon: Double) async throws {
+        _ = try await request("api/v1/places", method: "POST", body: try JSONSerialization.data(withJSONObject: ["label": label, "lat": lat, "lon": lon]))
+    }
 }
