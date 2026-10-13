@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { apiTokens } from "@lifestack/db";
 import { db } from "./db";
 import { APP_SCOPES, SCOPES, type Scope } from "./capture-core";
@@ -75,6 +75,18 @@ export async function listTokens() {
     })
     .from(apiTokens)
     .orderBy(desc(apiTokens.createdAt));
+}
+
+// Changes what an existing key may do. The phone app's own keys are managed by the app, so they are left alone.
+export async function setTokenScopes(id: number, scopes: Scope[]): Promise<boolean> {
+  const unique = [...new Set(scopes)];
+  if (!unique.length || unique.some((s) => !SCOPES.includes(s))) return false;
+  const rows = await db()
+    .update(apiTokens)
+    .set({ scopes: unique })
+    .where(and(eq(apiTokens.id, id), isNull(apiTokens.revokedAt), ne(apiTokens.kind, "app")))
+    .returning({ id: apiTokens.id });
+  return rows.length > 0;
 }
 
 export async function revokeToken(id: number) {

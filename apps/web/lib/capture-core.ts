@@ -36,6 +36,18 @@ export type Scope = (typeof SCOPES)[number];
 // Mail stays out of the phone key: the app has no mail screen, so a lost phone key cannot read it.
 export const APP_SCOPES: Scope[] = [...AGENT_SCOPES.filter((s) => s !== "email:read"), "account:read"];
 
+// What each permission lets a key do, for the keys page. account:read belongs to the phone app's own key only.
+export const SCOPE_LABELS: Partial<Record<Scope, string>> = {
+  "log:write": "Add logs",
+  "log:read": "Read today's log and profile",
+  "calendar:read": "Read calendar",
+  "sleep:read": "Read sleep",
+  "finance:read": "Read finances",
+  "fitness:read": "Read workouts",
+  "email:read": "Read email",
+  "amazon:write": "Send Amazon snapshots",
+};
+
 // Domain and key each kind of entry is stored under in the shared events table.
 export const KEYS = { mood: ["log", "mood"], caffeine: ["log", "caffeine"], supplement: ["supplement", "supplement.taken"] } as const;
 export const CAPTURE_KEYS = ["mood", "caffeine", "supplement.taken"] as const;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Card } from "@/components/card";
 import { PageHeader } from "@/components/page-header";
+import { ScopeEditor } from "@/components/scope-editor";
 import { CreateTokenForm, RevokeButton } from "@/components/token-manager";
 import { requireSession } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/dates";
@@ -36,7 +37,8 @@ export default async function ApiKeys() {
         {active.length > 0 && (
           <ul className="mb-4 divide-y divide-line">
             {active.map((t) => (
-              <li key={t.id} className="flex items-center justify-between gap-3 py-3">
+              <li key={t.id} className="py-3">
+                <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate">{t.name}</p>
                   <p className="text-sm text-muted">
@@ -53,6 +55,12 @@ export default async function ApiKeys() {
                   </p>
                 </div>
                 <RevokeButton id={t.id} name={t.name} />
+                </div>
+                {t.kind === "app" ? (
+                  <p className="mt-1 text-xs text-muted">This phone key's permissions are set by the app.</p>
+                ) : (
+                  <ScopeEditor id={t.id} name={t.name} scopes={t.scopes} />
+                )}
               </li>
             ))}
           </ul>
