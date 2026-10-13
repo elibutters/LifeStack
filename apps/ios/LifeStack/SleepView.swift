@@ -4,6 +4,7 @@ import SwiftUI
 struct SleepView: View {
     @Environment(AppModel.self) private var model
     @State private var loader = Loader<[Night]>()
+    @State private var pickedNight: String?
 
     var body: some View {
         Screen(title: "Sleep", refresh: { await load() }) {
@@ -24,7 +25,9 @@ struct SleepView: View {
                         Chart(nights.reversed()) { x in
                             BarMark(x: .value("Night", x.day), y: .value("Score", x.score ?? 0), width: .fixed(14))
                                 .foregroundStyle(Theme.accent).cornerRadius(5)
+                            SelectionMark(x: pickedNight, lines: nights.first { $0.day == pickedNight }.map { n in [Format.shortDay(n.day), "Score " + (n.score.map { String(Int($0.rounded())) } ?? "-"), Format.minutes(n.sleepMin) + " asleep"] + (n.hrv.map { ["HRV \(Int($0.rounded())) ms"] } ?? []) } ?? [])
                         }
+                        .chartXSelection(value: $pickedNight)
                         .chartXAxis(.hidden)
                         .chartYScale(domain: 0...100)
                         .chartYAxis { AxisMarks(values: [0, 50, 100]) { _ in AxisGridLine().foregroundStyle(Theme.line); AxisValueLabel().foregroundStyle(Theme.muted) } }
