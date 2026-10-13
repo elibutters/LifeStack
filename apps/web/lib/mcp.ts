@@ -220,7 +220,7 @@ export function buildServer(token: VerifiedToken): McpServer {
     server.registerTool(
       "get_location_history",
       {
-        description: "Where the owner has been: stays (arrival, departure, minutes, coordinates, and the name of a saved place when one matches), the latest reported point, and the saved places. Newest stays first.",
+        description: "Where the owner has been: stays (arrival, departure, minutes, coordinates, and the name of a saved place when one matches), the latest reported point (with ageMinutes: it is not live, the phone reports on arrival, a big move, or when the app opens), and the saved places. Newest stays first.",
         inputSchema: { days: z.number().int().min(1).max(365).optional() },
       },
       async ({ days }) => {

@@ -4,6 +4,9 @@ struct AccountView: View {
     @Environment(AppModel.self) private var model
     @State private var profile = Loader<[ProfileEntry]>()
     @State private var conns = Loader<ConnectionsStatus>()
+    @State private var naming = false
+    @State private var placeName = ""
+    @State private var nameMessage: String?
     var dismiss: (() -> Void)? = nil
 
     var body: some View {
@@ -28,6 +31,15 @@ struct AccountView: View {
                     @Bindable var tracker = LocationTracker.shared
                     Toggle("Record places and trips", isOn: $tracker.enabled).accessibilityIdentifier("location-toggle")
                     LabeledContent("Status", value: tracker.summary)
+                    if tracker.enabled {
+                        Button(tracker.refreshing ? "Locating..." : "Update my location now") { tracker.refreshNow() }.disabled(tracker.refreshing)
+                            .accessibilityIdentifier("location-refresh")
+                        if let l = tracker.last {
+                            LabeledContent("Last fix", value: l.at.formatted(date: .omitted, time: .shortened))
+                            Button("Name this place") { placeName = ""; naming = true }
+                        }
+                        if let m = nameMessage { Text(m).font(.caption).foregroundStyle(.secondary) }
+                    }
                     if tracker.status == .denied || tracker.status == .authorizedWhenInUse {
                         Button("Open Settings") { if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) } }
                     }
@@ -45,6 +57,15 @@ struct AccountView: View {
             .toolbar { if let dismiss { ToolbarItem(placement: .topBarTrailing) { Button("Done", action: dismiss) } } }
             .refreshable { await load() }
             .task { await load() }
+            .alert("Name this place", isPresented: $naming) {
+                TextField("Home, Gym, Office", text: $placeName)
+                Button("Save") {
+                    let name = placeName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    Task { nameMessage = await LocationTracker.shared.nameCurrentPlace(name) ? "Saved \(name)." : "Could not save that place." }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("Visits near here will be labelled with this name.") }
         }
     }
 
