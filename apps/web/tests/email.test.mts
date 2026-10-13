@@ -113,7 +113,11 @@ assert.equal(await tok.setTokenScopes(edit.id, []), false, "a key keeps at least
 assert.equal(await tok.setTokenScopes(edit.id, ["nope" as never]), false);
 assert.equal(await tok.setTokenScopes(999999, ["log:read"]), false);
 const appKey = await tok.createAppToken("test phone", null);
-assert.equal(await tok.setTokenScopes(appKey.id, ["email:read"]), false, "phone app keys are managed by the app");
+assert.equal((await mail.handleEmailSearch(req("", appKey.token))).status, 403, "a phone key has no mail access by default");
+assert.equal(await tok.setTokenScopes(appKey.id, [...(await import("../lib/capture-core.ts")).APP_SCOPES, "email:read"]), true, "the owner can allow it");
+assert.equal((await mail.handleEmailSearch(req("", appKey.token))).status, 200, "and the key then reads mail");
+assert.equal(await tok.setTokenScopes(appKey.id, ["log:read"]), true);
+assert.equal((await tok.verifyBearer(`Bearer ${appKey.token}`, "log:write")).ok, false, "an edited phone key keeps exactly the chosen set");
 assert.ok(!(await import("../lib/capture-core.ts")).APP_SCOPES.includes("email:read"), "the phone key never reads mail");
 
 await reset();

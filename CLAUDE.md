@@ -39,7 +39,7 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Third-party tokens are stored only encrypted (`lib/crypto.ts`, key in `ENCRYPTION_KEY`).
   Outlook is linked through Microsoft Graph for personal accounts only, with read-only scopes (calendar and mail).
   Mail is copied into the `emails` table (plain text, capped, classified by `lib/email-core.ts`) so agents have context;
-  the owner chose this. It is read through `email:read` (agent keys only, never the phone key) and is never backed up.
+  the owner chose this. It is read through `email:read` (agent keys; a phone key only if the owner ticks it on the keys page) and is never backed up.
   Work or employer calendars are never connected.
 - Accounts: sign-in is email plus password through `lib/login-guard.ts` (throttled, scrypt hashes in `users`).
   `OWNER_EMAIL` + `APP_PASSWORD` create the owner on first sign-in; with no `OWNER_EMAIL` the original password-only login

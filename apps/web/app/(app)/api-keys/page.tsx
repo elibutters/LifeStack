@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { ScopeEditor } from "@/components/scope-editor";
 import { CreateTokenForm, RevokeButton } from "@/components/token-manager";
 import { requireSession } from "@/lib/auth";
+import { APP_SCOPES } from "@/lib/capture-core";
 import { fmtDateTime } from "@/lib/dates";
 import { listTokens } from "@/lib/tokens";
 
@@ -56,11 +57,7 @@ export default async function ApiKeys() {
                 </div>
                 <RevokeButton id={t.id} name={t.name} />
                 </div>
-                {t.kind === "app" ? (
-                  <p className="mt-1 text-xs text-muted">This phone key's permissions are set by the app.</p>
-                ) : (
-                  <ScopeEditor id={t.id} name={t.name} scopes={t.scopes} />
-                )}
+                <ScopeEditor id={t.id} name={t.name} scopes={t.kind === "app" && !t.scopesCustom ? APP_SCOPES : t.scopes} phone={t.kind === "app"} />
               </li>
             ))}
           </ul>
