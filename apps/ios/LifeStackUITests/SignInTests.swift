@@ -25,11 +25,11 @@ final class SignInTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Overview"].waitForExistence(timeout: 20), "should reach the home screen")
         shot("overview", env)
         // Every tab loads its screen from the server.
-        for tab in ["Sleep", "Workouts", "Finance", "Log"] {
+        for tab in ["Sleep", "Workouts", "Finance", "More"] {
             let button = app.tabBars.buttons[tab]
             XCTAssertTrue(button.exists, "\(tab) tab")
             button.tap()
-            if tab != "Log" { shot(tab.lowercased(), env) }
+            if tab != "More" { shot(tab.lowercased(), env) }
         }
         app.tabBars.buttons["Workouts"].tap()
         XCTAssertTrue(app.staticTexts["MILES PER WEEK"].waitForExistence(timeout: 20), "workouts overview loads")
@@ -38,7 +38,12 @@ final class SignInTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["NET WORTH"].waitForExistence(timeout: 20), "finance summary loads")
         app.tabBars.buttons["Sleep"].tap()
         XCTAssertTrue(app.staticTexts["LAST NIGHT"].waitForExistence(timeout: 20), "sleep nights load")
-        app.tabBars.buttons["Log"].tap()
+        app.tabBars.buttons["More"].tap()
+        app.buttons["more-wants"].tap()
+        XCTAssertTrue(app.buttons["add-want"].waitForExistence(timeout: 20), "wants screen loads")
+        shot("wants", env)
+        app.buttons["back-button"].tap()
+        app.buttons["more-log"].tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Coffee'")).firstMatch.waitForExistence(timeout: 15))
         // A supplement is taken or not: one tap takes it, the next tap un-takes it, and taking it again leaves one
         // entry. The chip and the "n of 4" count show the state; there is no banner.
