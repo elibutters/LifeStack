@@ -1,7 +1,8 @@
 import "server-only";
 import { z } from "zod";
-import { CAFFEINE_PRESETS, describeEntry, EventInput, type Scope } from "./capture-core";
-import { deleteLog, insertLog, listSupplements, loadFeed, loadToday, setSupplementDose } from "./capture";
+import { CAFFEINE_PRESETS, describeEntry, EventInput, type Entry, type Scope } from "./capture-core";
+import { deleteLog, insertLog, listSupplements, loadDay, loadFeed, setSupplementDose } from "./capture";
+import { isValidDay, todayInTz } from "./dates";
 import { describeError } from "./errors";
 import { verifyBearer, type VerifiedToken } from "./tokens";
 
@@ -43,20 +44,29 @@ export async function handleEvents(req: Request): Promise<Response> {
   }
 }
 
-// A small summary built for widgets: today's mood, caffeine and supplements.
+// One logged entry as clients see it, with its id so a mistake can be removed.
+const entryJson = (e: Entry) => ({ id: e.id, at: e.ts.toISOString(), key: e.key, label: describeEntry(e), source: e.source, name: e.key === "supplement.taken" ? e.valueText : null, dose: e.key === "supplement.taken" ? e.valueNum : null, unit: e.unit ?? null });
+
+// A small summary built for widgets: one day's mood, caffeine and supplements, plus that day's entries.
+// Today by default; `?date=YYYY-MM-DD` reads any past day in the owner's timezone, so a client can log for it.
 export async function handleToday(req: Request): Promise<Response> {
   const token = await authenticate(req, "log:read");
   if (token instanceof Response) return token;
+  const today = todayInTz();
+  const asked = new URL(req.url).searchParams.get("date");
+  if (asked !== null && (!isValidDay(asked) || asked > today)) return json({ error: "invalid", issues: [{ path: "date", message: "date must be a past or current day as YYYY-MM-DD" }] }, 400);
   try {
-    const { date, summary } = await loadToday();
+    const { date, summary, entries } = await loadDay(asked ?? today);
     return json({
       date,
+      today: date === today,
       mood: summary.mood && { value: summary.mood.value, at: summary.mood.at.toISOString(), count: summary.mood.count },
       caffeine: { count: summary.caffeine.count, mg: summary.caffeine.mg, lastAt: summary.caffeine.lastAt?.toISOString() ?? null },
       supplements: summary.supplements.map((s) => ({ name: s.name, count: s.count, lastAt: s.lastAt.toISOString() })),
+      entries: entries.map(entryJson),
     });
   } catch (e) {
-    console.error("capture: could not read today", describeError(e));
+    console.error("capture: could not read the day", describeError(e));
     return json({ error: "server_error" }, 500);
   }
 }
@@ -96,7 +106,7 @@ export async function handleHistory(req: Request): Promise<Response> {
   const limit = Number.isInteger(n) && n >= 1 && n <= 200 ? n : 50;
   try {
     const rows = await loadFeed(limit);
-    return json({ entries: rows.map((e) => ({ id: e.id, at: e.ts.toISOString(), key: e.key, label: describeEntry(e), source: e.source, name: e.key === "supplement.taken" ? e.valueText : null, dose: e.key === "supplement.taken" ? e.valueNum : null, unit: e.unit ?? null })) });
+    return json({ entries: rows.map(entryJson) });
   } catch (e) {
     console.error("capture: could not read history", describeError(e));
     return json({ error: "server_error" }, 500);

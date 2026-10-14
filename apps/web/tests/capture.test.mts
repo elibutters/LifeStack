@@ -21,7 +21,7 @@ assert.ok(!("evil" in (core.EventInput.parse({ type: "mood", value: 3, evil: 1 }
 const NOW = new Date("2026-10-10T16:00:00Z");
 assert.equal(core.resolveTime(undefined, NOW).ok && (core.resolveTime(undefined, NOW) as any).ts.getTime(), NOW.getTime());
 assert.equal(core.resolveTime("2026-10-10T16:10:00Z", NOW).ok, false); assert.equal(core.resolveTime("2026-10-10T16:01:00Z", NOW).ok, true);
-assert.equal(core.resolveTime("2026-09-09T15:00:00Z", NOW).ok, false); assert.equal(core.resolveTime("2026-09-12T16:00:00Z", NOW).ok, true); assert.equal(core.resolveTime("garbage", NOW).ok, false);
+assert.equal(core.resolveTime("2026-09-09T15:00:00Z", NOW).ok, true, "older than 30 days is fine"); assert.equal(core.resolveTime("2023-02-14T16:00:00Z", NOW).ok, true, "any past day"); assert.equal(core.resolveTime("1969-12-31T12:00:00Z", NOW).ok, false); assert.equal(core.resolveTime("garbage", NOW).ok, false);
 
 // ---- rows and wording
 let r = core.toRow({ type: "mood", value: 4, note: "  good run  " }, NOW, "manual", "s1"); assert.deepEqual([r.domain, r.key, r.valueNum, r.valueText], ["log", "mood", 4, "good run"]);
@@ -91,6 +91,24 @@ await db().delete(events);
 const at = (iso: string, key: string) => db().insert(events).values({ ts: new Date(iso), domain: "log", key, valueNum: 1, source: "manual", sourceId: `b-${iso}-${key}`, payload: {} });
 await at("2026-10-10T03:59:00Z", "mood"); await at("2026-10-10T04:00:00Z", "mood"); await at("2026-10-11T03:59:00Z", "mood"); await at("2026-10-11T04:00:00Z", "mood");
 const day = await cap.loadToday(NOW); assert.equal(day.date, "2026-10-10"); assert.equal(day.summary.mood!.count, 2, "New York midnight to midnight, not UTC");
+// ---- any past day: ?date= reads that day, with its entries, and a backdated log lands on it
+{
+  const dayCall = async (q: string) => { const res = await api.handleToday(call("/api/v1/log/today" + q, { method: "GET", token: t2.token })); return { status: res.status, json: await res.json() }; };
+  await db().delete(events);
+  const old = await post(W, { type: "mood", value: 2, at: "2026-06-03T21:30:00-04:00" }); assert.equal(old.status, 201, "a log months back is accepted");
+  await post(W, { type: "supplement", name: "Zinc", at: "2026-06-03T09:00:00-04:00" }); await post(W, { type: "supplement", name: "zinc", at: "2026-06-03T20:00:00-04:00" });
+  await post(W, { type: "caffeine", drink: "Coffee", at: "2026-06-04T00:10:00-04:00" });
+  const d = await dayCall("?date=2026-06-03"); assert.equal(d.status, 200); assert.equal(d.json.date, "2026-06-03"); assert.equal(d.json.today, false);
+  assert.equal(d.json.mood.value, 2); assert.equal(d.json.caffeine.count, 0, "just after midnight belongs to the next day"); assert.equal(d.json.supplements.length, 1, "a supplement is taken once per day, past days too");
+  assert.deepEqual(d.json.entries.map((e: any) => e.key), ["supplement.taken", "mood"], "that day's entries, oldest first");
+  assert.deepEqual(Object.keys(d.json.entries[0]).sort(), ["at", "dose", "id", "key", "label", "name", "source", "unit"]);
+  const now = await dayCall(""); assert.equal(now.json.today, true); assert.deepEqual(now.json.entries, []);
+  for (const bad of ["?date=2026-6-3", "?date=2026-02-30", "?date=yesterday", "?date=1969-12-31", "?date=" + new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10)]) {
+    assert.equal((await dayCall(bad)).status, 400, bad);
+  }
+  assert.ok(!JSON.stringify((await dayCall("?date=SECRET-MARKER")).json).includes("SECRET-MARKER"), "the date is never echoed back");
+}
+
 
 // ---- the log feed, deleting, and supplements
 await db().delete(events); await cap.insertLog({ type: "mood", value: 3 }, "manual", { now: new Date("2026-10-10T10:00:00Z") }); await cap.insertLog({ type: "mood", value: 5 }, "manual", { now: new Date("2026-10-10T11:00:00Z") });
