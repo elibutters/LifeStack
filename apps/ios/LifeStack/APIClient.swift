@@ -8,6 +8,8 @@ struct TodaySummary: Decodable, Equatable {
     let mood: Mood?
     let caffeine: Caffeine
     let supplements: [Supplement]
+    // Only on /api/v1/log/today: that day's entries, oldest first. The overview's copy leaves it out.
+    var entries: [HistoryEntry]? = nil
 }
 
 enum APIError: LocalizedError {
@@ -133,8 +135,10 @@ struct APIClient {
         }
     }
 
-    func today() async throws -> TodaySummary {
-        do { return try JSONDecoder().decode(TodaySummary.self, from: try await request("api/v1/log/today")) }
+    // One day's log: today when `date` is nil, otherwise that past day (YYYY-MM-DD).
+    func day(_ date: String? = nil) async throws -> TodaySummary {
+        let query = date.map { [URLQueryItem(name: "date", value: $0)] } ?? []
+        do { return try JSONDecoder().decode(TodaySummary.self, from: try await request("api/v1/log/today", query: query)) }
         catch let e as APIError { throw e } catch is CancellationError { throw CancellationError() } catch { throw APIError.server }
     }
 

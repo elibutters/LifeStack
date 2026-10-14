@@ -58,14 +58,15 @@ export const KEYS = { mood: ["log", "mood"], caffeine: ["log", "caffeine"], supp
 export const CAPTURE_KEYS = ["mood", "caffeine", "supplement.taken"] as const;
 
 const FUTURE_SLACK_MS = 5 * 60 * 1000;
-const MAX_BACKDATE_MS = 30 * 24 * 60 * 60 * 1000;
+// Any past day can be logged; this floor only rejects times that are clearly a mistake (same floor as isValidDay).
+const EARLIEST_MS = Date.UTC(1970, 0, 1);
 
 export function resolveTime(at: string | undefined, now: Date): { ok: true; ts: Date } | { ok: false; error: string } {
   if (!at) return { ok: true, ts: now };
   const ts = new Date(at);
   if (Number.isNaN(ts.getTime())) return { ok: false, error: "at is not a valid time" };
   if (ts.getTime() > now.getTime() + FUTURE_SLACK_MS) return { ok: false, error: "at is in the future" };
-  if (ts.getTime() < now.getTime() - MAX_BACKDATE_MS) return { ok: false, error: "at is more than 30 days ago" };
+  if (ts.getTime() < EARLIEST_MS) return { ok: false, error: "at is before 1970" };
   return { ok: true, ts };
 }
 

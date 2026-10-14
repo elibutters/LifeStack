@@ -6,14 +6,21 @@ struct TodayView: View {
     @Environment(AppModel.self) private var model
     @State private var tapped = 0
     @State private var editingDoses = false
+    @State private var pickingDay = false
 
     private var drinks: [LogOptions.Drink] { model.options?.caffeine ?? [] }
-    private var takenCount: Int { (model.options?.supplements ?? []).filter { model.takenToday($0.name) != nil }.count }
+    private var takenCount: Int { (model.options?.supplements ?? []).filter { model.taken($0.name) != nil }.count }
     private let two = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
 
     var body: some View {
-        Screen(title: "Log", refresh: { await model.refresh() }) {
+        Screen(title: "Log", refresh: { await model.refresh() }, trailing: {
+            if !model.isToday {
+                Button("Today") { Task { await model.showDay(.now) } }
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.warm).buttonStyle(.plain).accessibilityIdentifier("log-today")
+            }
+        }) {
             ErrorBanner(text: model.message)
+            dayBar
             summary
             moodCard
             caffeineCard
@@ -21,8 +28,40 @@ struct TodayView: View {
             todayList
         }
         .sheet(isPresented: $editingDoses) { DoseEditor(supplements: model.options?.supplements ?? []) }
+        .sheet(isPresented: $pickingDay) { DayPicker(start: model.shownDay) }
         .sensoryFeedback(.success, trigger: tapped)
         .task { await model.refresh() }
+    }
+
+    private var dayName: String {
+        if model.isToday { return "Today" }
+        if Calendar.current.isDateInYesterday(model.shownDay) { return "Yesterday" }
+        return Format.longDay(model.shownDay)
+    }
+
+    // Which day the taps below log to. Arrows step a day; the name opens a calendar to jump to any past day.
+    private var dayBar: some View {
+        HStack(spacing: 6) {
+            Button { Task { await model.shiftDay(-1) } } label: { Image(systemName: "chevron.left").font(.body.weight(.semibold)).frame(width: 44, height: 40) }
+                .buttonStyle(.plain).accessibilityLabel("Previous day").accessibilityIdentifier("log-prev-day")
+            Button { pickingDay = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "calendar").font(.subheadline).foregroundStyle(model.isToday ? Theme.muted : Theme.warm)
+                    Text(dayName).font(.headline).lineLimit(1).minimumScaleFactor(0.8)
+                }
+                .frame(maxWidth: .infinity, minHeight: 40)
+            }
+            .buttonStyle(.plain).accessibilityLabel("Logging for \(dayName). Pick a day").accessibilityIdentifier("log-day")
+            if model.isToday {
+                Image(systemName: "chevron.right").font(.body.weight(.semibold)).foregroundStyle(Theme.muted.opacity(0.4)).frame(width: 44, height: 40)
+            } else {
+                Button { Task { await model.shiftDay(1) } } label: { Image(systemName: "chevron.right").font(.body.weight(.semibold)).frame(width: 44, height: 40) }
+                    .buttonStyle(.plain).accessibilityLabel("Next day").accessibilityIdentifier("log-next-day")
+            }
+        }
+        .foregroundStyle(Theme.sky)
+        .padding(.horizontal, 4)
+        .chip(model.isToday ? nil : Theme.warm.opacity(0.25))
     }
 
     private var summary: some View {
@@ -82,9 +121,9 @@ struct TodayView: View {
         }
     }
 
-    // Today's entries for one drink. The drink is the start of the entry's label, as in "Coffee (95 mg)".
+    // The shown day's entries for one drink. The drink is the start of the entry's label, as in "Coffee (95 mg)".
     private func drinkEntries(_ drink: String) -> [HistoryEntry] {
-        model.history.filter { $0.key == "caffeine" && Format.isToday($0.at) && $0.drinkName.caseInsensitiveCompare(drink) == .orderedSame }
+        (model.today?.entries ?? []).filter { $0.key == "caffeine" && $0.drinkName.caseInsensitiveCompare(drink) == .orderedSame }
     }
 
     private func removeLatest(of entries: [HistoryEntry]) {
@@ -97,7 +136,7 @@ struct TodayView: View {
             if (model.options?.supplements ?? []).isEmpty { Empty(text: "Add supplements on the web app and they show up here.") }
             LazyVGrid(columns: two, spacing: 8) {
                 ForEach(model.options?.supplements ?? [], id: \.self) { s in
-                    let taken = model.takenToday(s.name) != nil
+                    let taken = model.taken(s.name) != nil
                     Button { Task { if await model.toggleSupplement(s) { tapped += 1 } } } label: {
                         HStack(spacing: 8) {
                             Image(systemName: taken ? "checkmark.circle.fill" : "circle").font(.callout).foregroundStyle(taken ? Theme.good : Theme.muted)
@@ -120,9 +159,9 @@ struct TodayView: View {
     }
 
     @ViewBuilder private var todayList: some View {
-        let rows = model.history.filter { Format.isToday($0.at) }
+        let rows = Array((model.today?.entries ?? []).reversed())
         if !rows.isEmpty {
-            Card(title: "Logged today", trailing: "\(rows.count)") {
+            Card(title: model.isToday ? "Logged today" : "Logged \(dayName == "Yesterday" ? "yesterday" : "that day")", trailing: "\(rows.count)") {
                 VStack(spacing: 0) {
                     ForEach(rows) { r in
                         HStack {
@@ -147,4 +186,31 @@ struct TodayView: View {
 
 private extension HistoryEntry {
     var drinkName: String { name ?? String(label.split(separator: "(").first ?? "").trimmingCharacters(in: .whitespaces) }
+}
+
+// A calendar to jump to any past day. Picking a day shows it and closes the sheet.
+private struct DayPicker: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var date: Date
+
+    init(start: Date) { _date = State(initialValue: start) }
+
+    var body: some View {
+        NavigationStack {
+            DatePicker("Day", selection: $date, in: ...Date.now, displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .tint(Theme.sky)
+                .padding(14)
+                .onChange(of: date) { _, d in Task { await model.showDay(d) }; dismiss() }
+                .navigationTitle("Log for").navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) { Button("Today") { Task { await model.showDay(.now) }; dismiss() } }
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
+                .background(Ambient())
+        }
+        .presentationDetents([.medium, .large])
+    }
 }

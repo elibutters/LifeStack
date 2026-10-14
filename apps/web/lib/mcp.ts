@@ -135,7 +135,7 @@ export function buildServer(token: VerifiedToken): McpServer {
     server.registerTool(
       "log_event",
       {
-        description: "Log a mood (value 1-5), a caffeine drink (drink, optional mg) or a supplement taken (name). Optional 'at' (ISO time, up to 30 days back) and 'id' (8-64 letters/numbers; a retry with the same id never logs twice).",
+        description: "Log a mood (value 1-5), a caffeine drink (drink, optional mg) or a supplement taken (name). Optional 'at' (ISO time, any past day) and 'id' (8-64 letters/numbers; a retry with the same id never logs twice).",
         inputSchema: {
           type: z.enum(["mood", "caffeine", "supplement"]),
           value: z.number().optional(),
