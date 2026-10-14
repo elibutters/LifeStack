@@ -93,7 +93,7 @@ export default async function ApiKeys() {
         <p className="mt-3 mb-1 text-sm text-muted">Supplement (use the same name as on the Quick log page):</p>
         <code className={code}>{`{ "type": "supplement", "name": "Morning stack" }`}</code>
         <p className="mt-4 text-sm text-muted">
-          Add <code className="rounded bg-surface px-1.5 py-0.5">"at": "2026-10-04T08:00:00-04:00"</code> to log something that already happened (up to 30 days back). Add an <code className="rounded bg-surface px-1.5 py-0.5">"id"</code> of 8 to 64 letters and numbers if a request might be retried, and it will never be logged twice.
+          Add <code className="rounded bg-surface px-1.5 py-0.5">"at": "2026-10-04T08:00:00-04:00"</code> to log something that already happened (any past day). Add an <code className="rounded bg-surface px-1.5 py-0.5">"id"</code> of 8 to 64 letters and numbers if a request might be retried, and it will never be logged twice.
         </p>
       </Card>
 
