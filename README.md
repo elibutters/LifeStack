@@ -150,6 +150,27 @@ calendar, pace per run, records and every activity. The numbers come from one pl
 the app through `GET /api/v1/workouts?weeks=26&recent=40`, so the two always agree. Distances are metric in the API and
 shown in miles on screen.
 
+### Connect Notion
+
+Copies the text of the Notion pages you choose to share, so agents can search your notes. Read-only: it never writes to
+Notion. Only pages shared with the integration are copied, as plain text capped at 6,000 characters per page; files and
+images are left out. Disconnecting deletes the copy.
+
+1. At <https://www.notion.so/profile/integrations> create a **public** integration. Under **Capabilities** tick only
+   **Read content** (leave update, insert and user-information off). Set the **Redirect URI** to
+   `https://your-app.vercel.app/api/connections/notion/callback`.
+2. Copy the **OAuth client ID** and **OAuth client secret** into `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET` (Vercel
+   environment variables for production, `.env` locally), then redeploy. `APP_URL` and `ENCRYPTION_KEY` must also be set.
+3. Open **Connections** and press **Connect Notion**. On Notion's access screen pick the pages to share; their sub-pages
+   and databases come with them.
+
+Notion access tokens expire and a refresh replaces both, so both are stored encrypted and rotated safely. The sync walks
+the shared pages (search plus child pages and databases, five levels deep, at most 2,000 pages) in small steps of 40
+requests, so a large workspace takes several runs: the daily cron, the **Sync** button, or just reading notes. A pass only
+deletes pages that disappeared once it has read everything. Agents use the `search_notes` and `get_note` MCP tools and
+apps use `GET /api/v1/notes` and `GET /api/v1/notes/{id}` (key scope `notes:read`, on agent keys, not on a phone key). The
+**Notes** page on the web searches the same copy.
+
 ### Connect Eight Sleep
 
 Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep account. Eight Sleep has no public developer API, so this uses the same private app login as Home Assistant. The pod is never controlled.

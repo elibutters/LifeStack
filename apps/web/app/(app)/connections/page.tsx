@@ -15,9 +15,11 @@ import { getConnection, getSyncState } from "@/lib/outlook";
 import { db } from "@/lib/db";
 import { accounts, events } from "@lifestack/db";
 import { eq, sql } from "drizzle-orm";
-import { disconnect, syncFinance, syncNow, unlinkFinance, connectEight, disconnectEightNow, syncEightNow, disconnectAmazonNow, syncStravaNow, disconnectStravaNow } from "../settings/actions";
+import { disconnect, syncFinance, syncNow, unlinkFinance, connectEight, disconnectEightNow, syncEightNow, disconnectAmazonNow, syncStravaNow, disconnectStravaNow, syncNotionNow, disconnectNotionNow } from "../settings/actions";
 import { getConnection as getStravaConnection, getSyncState as getStravaState, stravaActivityCount } from "@/lib/strava-sync";
 import { stravaConfigured } from "@/lib/strava";
+import { notionConfigured } from "@/lib/notion";
+import { getConnection as getNotionConnection, notionStatus } from "@/lib/notion-sync";
 import { getEightConnection, getEightSyncState } from "@/lib/eight";
 import { loadAmazon } from "@/lib/amazon";
 import { LOGIN_REQUIRED } from "@/lib/amazon-map";
@@ -39,6 +41,9 @@ const MESSAGES: Record<string, string> = {
   strava_state: "That Strava sign-in attempt expired or did not match. Try again.",
   strava_exchange: "Strava sign-in could not be completed. Try again.",
   strava_scope: "Strava needs permission to read your activities. Connect again and leave the activity access ticked.",
+  notion_denied: "Notion connection was cancelled.",
+  notion_state: "That Notion sign-in attempt expired or did not match. Try again.",
+  notion_exchange: "Notion sign-in could not be completed. Try again.",
   eight_auth:
     "Could not sign in to Eight Sleep. Check the email and password. Accounts with two-factor authentication are not supported.",
 };
@@ -85,6 +90,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
   const plaidKeys = plaidConfigured() ? await keyStatus() : null;
   // "not configured" is already explained inside the card, so it gets no banner.
   const [stravaConn, stravaState, stravaCount] = await Promise.all([getStravaConnection().catch(() => null), getStravaState().catch(() => null), stravaActivityCount().catch(() => 0)]);
+  const [notionConn, notion] = await Promise.all([getNotionConnection().catch(() => null), notionStatus().catch(() => null)]);
   const error = sp.error && sp.error !== "not_configured" ? (MESSAGES[sp.error] ?? "Something went wrong.") : null;
 
   const amazonLive = Boolean(amazon.state?.lastOkAt || amazon.state?.lastError || amazon.orders.length || amazon.cart.length);
@@ -108,6 +114,9 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
       {error && <p className="rounded-md border border-danger/30 bg-danger/10 px-4 py-3 text-danger">{error}</p>}
       {sp.connected === "strava" && !error && (
         <p className="rounded-md border border-ok/40 bg-ok/10 px-4 py-3 text-ok">Strava connected. Your history is importing and will show up in a minute.</p>
+      )}
+      {sp.connected === "notion" && !error && (
+        <p className="rounded-md border border-ok/40 bg-ok/10 px-4 py-3 text-ok">Notion connected. Your shared pages are being copied and will show up on the Notes page.</p>
       )}
       {sp.connected === "eight" && !error && (
         <p className="rounded-md border border-accent/30 bg-accent/10 px-4 py-3 text-accent">
@@ -266,6 +275,57 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
         )}
       </ConnectionPanel>
 
+
+      <ConnectionPanel
+        title="Notion"
+        status={notionConn ? (notion?.lastError ? "Sync problem" : notion?.walking ? "Copying" : "Connected") : "Not linked"}
+        tone={notionConn ? (notion?.lastError ? "bad" : "ok") : "muted"}
+        defaultOpen={!notionConn || Boolean(notion?.lastError)}
+        meta={notionConn && notion?.lastOkAt ? <LastSyncAgo at={notion.lastOkAt.toISOString()} /> : undefined}
+        actions={
+          notionConn ? (
+            <>
+              <form action={syncNotionNow}>
+                <button type="submit" className={button}>
+                  Sync
+                </button>
+              </form>
+              <form action={disconnectNotionNow}>
+                <button type="submit" className={danger}>
+                  Disconnect
+                </button>
+              </form>
+            </>
+          ) : undefined
+        }
+      >
+        {notionConn ? (
+          <>
+            <dl>
+              <Row label="Workspace" value={notionConn.account ?? "Connected"} />
+              <Row label="Pages stored" value={String(notion?.notes ?? 0)} />
+              {notion?.walking && <Row label="Progress" value={`Still reading (${notion.queued} left in the queue). Press Sync to continue.`} />}
+              {notion?.lastError && <Row label="Status" value={notion.lastError} bad />}
+            </dl>
+            <p className="text-sm text-muted">
+              Only pages you shared with Life Stack are copied, as plain text capped at 6,000 characters each. Files and images are left out. It never writes to Notion.
+              Disconnecting deletes the copy. To also withdraw access at Notion, remove the connection in Notion&apos;s My connections settings.
+            </p>
+          </>
+        ) : notionConfigured() ? (
+          <>
+            <p className="text-sm text-muted">
+              Copies the text of the Notion pages you choose to share, so your assistant can search your notes. Read-only: only pages you pick on Notion&apos;s
+              access screen are copied, text is capped, files and images are omitted, and disconnecting deletes the copy.
+            </p>
+            <a href="/api/connections/notion/start" className={`${button} w-fit`}>
+              Connect Notion
+            </a>
+          </>
+        ) : (
+          <p className="text-sm text-danger">Notion is not set up on this deployment yet. See the README for the two settings it needs.</p>
+        )}
+      </ConnectionPanel>
 
       <ConnectionPanel
         title="Amazon"

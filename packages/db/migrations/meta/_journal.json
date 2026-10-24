@@ -120,6 +120,13 @@
       "when": 1791855231709,
       "tag": "0016_nosy_lockjaw",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792863378792,
+      "tag": "0017_right_azazel",
+      "breakpoints": true
     }
   ]
 }
