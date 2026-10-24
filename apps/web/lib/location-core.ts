@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Pure rules for location history: what a reported point looks like, distances, naming places and pairing visits into stays.
-export const POINT_SOURCES = ["visit-arrival", "visit-departure", "significant", "manual"] as const;
+export const POINT_SOURCES = ["visit-arrival", "visit-departure", "significant", "manual", "trip"] as const;
 export type PointSource = (typeof POINT_SOURCES)[number];
 
 export const PointInput = z.object({

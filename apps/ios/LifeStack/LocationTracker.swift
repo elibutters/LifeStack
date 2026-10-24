@@ -4,6 +4,10 @@ import UIKit
 
 // Reports where you have been, cheaply: iOS tells the app when you arrive at or leave a place (visits) and when you move a
 // significant distance, even when the app is closed. Points wait in a small file until they upload, so nothing is lost offline.
+//
+// Trip mode adds detail only while you are moving. When you stop, a small circle (a geofence) is registered where you are; leaving
+// it wakes the app, which records a point about every 30 m. Once you have stayed within about 40 m for 4 minutes it switches the
+// detailed tracking off again and registers a new circle. Standing still costs almost nothing.
 @MainActor
 @Observable
 final class LocationTracker: NSObject, CLLocationManagerDelegate {
@@ -19,7 +23,17 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     }
 
     private static let enabledKey = "location-enabled"
+    private static let tripsKey = "location-trips"
+    private static let tripActiveKey = "location-trip-active"
+    private static let anchorId = "trip-anchor"
+    private static let exitRadius: CLLocationDistance = 120
+    private static let stillRadius: CLLocationDistance = 40
+    private static let stillAfter: TimeInterval = 240
+    private static let maxTrip: TimeInterval = 6 * 3600
+    private static let batchSize = 20
     var enabled: Bool { didSet { UserDefaults.standard.set(enabled, forKey: Self.enabledKey); enabled ? begin() : end() } }
+    var trips: Bool { didSet { UserDefaults.standard.set(trips, forKey: Self.tripsKey); if enabled { trips ? beginTrips() : endTrips() } } }
+    private(set) var tripActive = false
     private(set) var status: CLAuthorizationStatus
     private(set) var pending = 0
     private(set) var lastUpload: Date?
@@ -31,10 +45,15 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     @ObservationIgnored private var queue: [Point] = []
     @ObservationIgnored private var flushing = false
     @ObservationIgnored private var manualPending = false
+    @ObservationIgnored private var anchorPending = false
+    @ObservationIgnored private var rest: CLLocation?
+    @ObservationIgnored private var tripStarted: Date?
+    @ObservationIgnored private var stillTimer: Timer?
     @ObservationIgnored private let iso = ISO8601DateFormatter()
 
     private override init() {
         enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
+        trips = UserDefaults.standard.object(forKey: Self.tripsKey) as? Bool ?? true
         status = manager.authorizationStatus
         super.init()
         manager.delegate = self
@@ -48,7 +67,7 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     var summary: String {
         if !enabled { return "Off" }
         switch status {
-        case .authorizedAlways: return pending > 0 ? "On, \(pending) waiting to upload" : "On"
+        case .authorizedAlways: return tripActive ? "On, recording a trip" : pending > 0 ? "On, \(pending) waiting to upload" : "On"
         case .authorizedWhenInUse: return "Needs Always access"
         case .denied, .restricted: return "Blocked in Settings"
         default: return "Waiting for permission"
@@ -78,6 +97,7 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         case .authorizedAlways:
             manager.startMonitoringVisits()
             manager.startMonitoringSignificantLocationChanges()
+            beginTrips()
             flush()
         default: break
         }
@@ -86,6 +106,80 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     private func end() {
         manager.stopMonitoringVisits()
         manager.stopMonitoringSignificantLocationChanges()
+        endTrips()
+    }
+
+    // MARK: Trip mode
+
+    // A trip that was running when iOS relaunched the app carries on; otherwise a circle is placed where you are now.
+    private func beginTrips() {
+        guard enabled, trips, status == .authorizedAlways else { return }
+        if UserDefaults.standard.bool(forKey: Self.tripActiveKey) { startDetailed(); return }
+        if !manager.monitoredRegions.contains(where: { $0.identifier == Self.anchorId }) { anchorPending = true; manager.requestLocation() }
+    }
+
+    private func endTrips() {
+        stillTimer?.invalidate(); stillTimer = nil
+        manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = false
+        tripActive = false
+        UserDefaults.standard.set(false, forKey: Self.tripActiveKey)
+        clearAnchor()
+    }
+
+    private func clearAnchor() {
+        for r in manager.monitoredRegions where r.identifier == Self.anchorId { manager.stopMonitoring(for: r) }
+    }
+
+    private func setAnchor(_ c: CLLocationCoordinate2D) {
+        clearAnchor()
+        guard CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self) else { return }
+        let region = CLCircularRegion(center: c, radius: min(Self.exitRadius, manager.maximumRegionMonitoringDistance), identifier: Self.anchorId)
+        region.notifyOnExit = true
+        region.notifyOnEntry = false
+        manager.startMonitoring(for: region)
+    }
+
+    private func startDetailed() {
+        guard !tripActive else { return }
+        clearAnchor()
+        tripActive = true
+        tripStarted = .now
+        rest = nil
+        UserDefaults.standard.set(true, forKey: Self.tripActiveKey)
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        manager.distanceFilter = 30
+        manager.activityType = .otherNavigation
+        manager.pausesLocationUpdatesAutomatically = false
+        manager.allowsBackgroundLocationUpdates = true
+        manager.startUpdatingLocation()
+        armStillTimer()
+    }
+
+    private func stopDetailed() {
+        guard tripActive else { return }
+        stillTimer?.invalidate(); stillTimer = nil
+        manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = false
+        tripActive = false
+        UserDefaults.standard.set(false, forKey: Self.tripActiveKey)
+        if let c = rest?.coordinate ?? manager.location?.coordinate { setAnchor(c) } else { anchorPending = true; manager.requestLocation() }
+        rest = nil
+        flush()
+    }
+
+    // Updates stop arriving when you stand still (the 30 m filter), so a timer ends the trip once you have stayed put for a while.
+    private func armStillTimer() {
+        stillTimer?.invalidate()
+        stillTimer = Timer.scheduledTimer(withTimeInterval: Self.stillAfter, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.stopDetailed() }
+        }
+    }
+
+    private func noteMovement(_ c: CLLocationCoordinate2D) {
+        let here = CLLocation(latitude: c.latitude, longitude: c.longitude)
+        if rest == nil || here.distance(from: rest!) > Self.stillRadius { rest = here; armStillTimer() }
+        if let started = tripStarted, Date.now.timeIntervalSince(started) > Self.maxTrip { stopDetailed() }
     }
 
     // MARK: Delegate
@@ -106,18 +200,31 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         let list = locations.map { ($0.timestamp, $0.coordinate, $0.horizontalAccuracy) }
         Task { @MainActor in
-            let manual = self.manualPending
-            self.manualPending = false; self.refreshing = false
+            let manual = self.manualPending, anchoring = self.anchorPending
+            self.manualPending = false; self.anchorPending = false; self.refreshing = false
+            var detailedOnly = true
             for (t, c, a) in list {
-                self.add(manual ? "mn" : "sc", t, c, a, manual ? "manual" : "significant")
                 self.last = (c.latitude, c.longitude, t)
+                if manual { self.add("mn", t, c, a, "manual"); detailedOnly = false }
+                else if self.tripActive { if a >= 0 && a <= 100 { self.add("tp", t, c, a, "trip"); self.noteMovement(c) } }
+                else if !anchoring { self.add("sc", t, c, a, "significant"); detailedOnly = false }
             }
-            self.flush()
+            // Not on a trip: wherever this fix is becomes the circle that starts the next one.
+            if (anchoring || manual), !self.tripActive, self.trips, self.enabled, let l = list.last { self.setAnchor(l.1) }
+            // Trip points upload in batches; anything else goes straight away.
+            if detailedOnly && self.tripActive { if self.queue.count >= Self.batchSize { self.flush() } } else { self.flush() }
         }
     }
 
+    nonisolated func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
+        let id = region.identifier
+        Task { @MainActor in if id == Self.anchorId, self.enabled, self.trips { self.startDetailed() } }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {}
+
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        Task { @MainActor in self.refreshing = false; self.manualPending = false }
+        Task { @MainActor in self.refreshing = false; self.manualPending = false; self.anchorPending = false }
     }
 
     // MARK: Queue
