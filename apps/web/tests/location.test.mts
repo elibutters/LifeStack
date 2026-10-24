@@ -30,9 +30,14 @@ assert.equal(core.placeAt({ lat: 40.7, lon: -74.0009 }, [home, gym])?.label, "Gy
 assert.equal(core.placeAt({ lat: 41, lon: -74 }, [home, gym]), null);
 const P = (iso: string, source: string, lat = 40.7, lon = -74) => ({ ts: new Date(iso), lat, lon, source });
 const st = core.staysOf([P("2026-10-12T08:00:00Z", "visit-arrival"), P("2026-10-12T09:30:00Z", "visit-departure"), P("2026-10-12T10:00:00Z", "visit-arrival", 41, -74)], [home], new Date("2026-10-12T11:00:00Z"));
-assert.deepEqual(st.map((s) => [s.place, s.minutes, s.to === null]), [[null, 60, true], ["Home", 90, false]], "newest first; no departure means ongoing");
-assert.equal(core.staysOf([P("2026-10-12T08:00:00Z", "visit-arrival"), P("2026-10-12T09:00:00Z", "visit-departure", 41, -74)], [], now)[0]!.to, null, "a departure far away is not this stay's");
+assert.deepEqual(st.map((s) => [s.place, s.minutes, s.to === null, s.estimated]), [[null, 60, true, false], ["Home", 90, false, false]], "newest first; the latest stay with no departure and fresh data is ongoing");
+assert.equal(core.staysOf([P("2026-10-12T08:00:00Z", "visit-arrival"), P("2026-10-12T09:00:00Z", "visit-departure", 41, -74)], [], new Date("2026-10-12T09:30:00Z"))[0]!.to, null, "a departure far away is not this stay's (and fresh data means still there)");
 
+// a missing departure: a later arrival elsewhere ends the stay at the last point seen there; stale data is not "now"
+const miss = core.staysOf([P("2026-10-12T08:00:00Z", "visit-arrival"), P("2026-10-12T08:20:00Z", "significant"), P("2026-10-12T09:00:00Z", "visit-arrival", 41, -74)], [home], new Date("2026-10-12T09:10:00Z"));
+assert.deepEqual(miss.map((s) => [s.minutes, s.to !== null, s.estimated]), [[10, false, false], [20, true, true]], "ended by the next arrival, estimated from the last point seen");
+const stale = core.staysOf([P("2026-10-10T08:00:00Z", "visit-arrival")], [], new Date("2026-10-12T09:00:00Z"));
+assert.deepEqual([stale[0]!.to, stale[0]!.minutes, stale[0]!.estimated], [stale[0]!.from, 0, true], "old data with no departure is not shown as now");
 // the same visit reported twice (slightly different coordinates) is one stay, and it still pairs with its departure
 const dup = core.staysOf([P("2026-10-12T08:00:00Z", "visit-arrival", 40.7, -74), P("2026-10-12T08:00:00Z", "visit-arrival", 40.7003, -74.0002), P("2026-10-12T09:00:00Z", "visit-departure")], [home], new Date("2026-10-12T10:00:00Z"));
 assert.deepEqual(dup.map((s) => [s.place, s.minutes, s.to !== null]), [["Home", 60, true]]);
