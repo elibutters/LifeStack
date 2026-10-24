@@ -28,6 +28,9 @@ export function LocationMap({ points, places }: { points: Pt[]; places: Place[] 
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
         className: "map-tiles-dark",
+        // The site sends Referrer-Policy: no-referrer, but OpenStreetMap blocks tile requests with no referrer. Send only
+        // this site's address (never a path or any point data).
+        referrerPolicy: "origin",
       }).addTo(map);
 
       const all: [number, number][] = [];

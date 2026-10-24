@@ -46,7 +46,9 @@ export function placeAt(p: { lat: number; lon: number }, places: Place[]): Place
 }
 
 export type Pt = { ts: Date; lat: number; lon: number; source: string };
-export type Stay = { from: string; to: string | null; minutes: number | null; lat: number; lon: number; place: string | null };
+// to is null only while the stay is still going. estimated means iOS never reported the departure, so the end is the last point seen there.
+export type Stay = { from: string; to: string | null; minutes: number | null; lat: number; lon: number; place: string | null; estimated: boolean };
+const ONGOING_MS = 3 * 60 * 60 * 1000;
 
 // A stay is an arrival and the first departure after it (near the same spot, before the next arrival). No departure yet means ongoing.
 // iOS can report one visit twice with slightly different coordinates, so arrivals within a minute and 300 m of an earlier one are the same.
@@ -54,14 +56,19 @@ export function staysOf(points: Pt[], places: Place[], now = new Date()): Stay[]
   const all = [...points].sort((a, b) => a.ts.getTime() - b.ts.getTime());
   const sorted = all.filter((p, i) => p.source !== "visit-arrival" || !all.slice(0, i).some((q) => q.source === "visit-arrival" && p.ts.getTime() - q.ts.getTime() <= 60_000 && distanceM(p, q) <= 300));
   const out: Stay[] = [];
+  const arrivals = sorted.filter((p) => p.source === "visit-arrival");
   sorted.forEach((p, i) => {
     if (p.source !== "visit-arrival") return;
-    let dep: Pt | undefined;
+    const next = arrivals[arrivals.indexOf(p) + 1];
+    let dep: Pt | undefined, lastSeen = p.ts;
     for (const q of sorted.slice(i + 1)) {
-      if (q.source === "visit-arrival") break;
+      if (q === next) break;
       if (q.source === "visit-departure" && distanceM(p, q) <= 300) { dep = q; break; }
+      if (q.source !== "visit-arrival" && distanceM(p, q) <= 300 && q.ts > lastSeen) lastSeen = q.ts;
     }
-    const end = dep?.ts ?? null;
+    // No departure was reported. A later arrival means the stay ended; otherwise it only counts as ongoing while the data is fresh.
+    const ongoing = !dep && !next && now.getTime() - lastSeen.getTime() <= ONGOING_MS;
+    const end = dep?.ts ?? (ongoing ? null : lastSeen);
     out.push({
       from: p.ts.toISOString(),
       to: end?.toISOString() ?? null,
@@ -69,6 +76,7 @@ export function staysOf(points: Pt[], places: Place[], now = new Date()): Stay[]
       lat: p.lat,
       lon: p.lon,
       place: placeAt(p, places)?.label ?? null,
+      estimated: !dep && !ongoing,
     });
   });
   return out.reverse(); // newest first
