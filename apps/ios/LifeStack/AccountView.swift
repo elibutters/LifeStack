@@ -31,6 +31,7 @@ struct AccountView: View {
                     @Bindable var tracker = LocationTracker.shared
                     Toggle("Record places and trips", isOn: $tracker.enabled).accessibilityIdentifier("location-toggle")
                     LabeledContent("Status", value: tracker.summary)
+                    Toggle("Detailed trips", isOn: $tracker.trips).accessibilityIdentifier("location-trips")
                     if tracker.enabled {
                         Button(tracker.refreshing ? "Locating..." : "Update my location now") { tracker.refreshNow() }.disabled(tracker.refreshing)
                             .accessibilityIdentifier("location-refresh")
@@ -43,7 +44,7 @@ struct AccountView: View {
                     if tracker.status == .denied || tracker.status == .authorizedWhenInUse {
                         Button("Open Settings") { if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) } }
                     }
-                    Text("Uses iOS's low-power visit and significant-change tracking, not constant GPS. Choose Always in Settings so it works with the app closed. Stored in your own database.").font(.caption).foregroundStyle(.secondary)
+                    Text("Always keeps iOS's low-power visit tracking. Detailed trips adds a point about every 30 m, but only while you are moving, and turns itself off when you stop. Choose Always in Settings so it works with the app closed. Stored in your own database.").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("This device") {
                     LabeledContent("Server", value: model.address)

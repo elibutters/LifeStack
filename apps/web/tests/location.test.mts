@@ -16,6 +16,7 @@ assert.equal(core.PointInput.safeParse(pt({ lat: 91 })).success, false);
 assert.equal(core.PointInput.safeParse(pt({ lon: -181 })).success, false);
 assert.equal(core.PointInput.safeParse(pt({ id: "short" })).success, false);
 assert.equal(core.PointInput.safeParse(pt({ source: "gps" })).success, false);
+assert.equal(core.PointInput.safeParse(pt({ source: "trip" })).success, true, "trip mode points are accepted");
 assert.equal(core.PointInput.safeParse(pt({ at: "yesterday" })).success, false);
 assert.equal(core.BatchInput.safeParse({ points: [] }).success, false);
 assert.equal(core.BatchInput.safeParse({ points: Array.from({ length: 201 }, (_, i) => pt({ id: `id-${String(i).padStart(6, "0")}` })) }).success, false);
