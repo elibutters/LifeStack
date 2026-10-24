@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 
 type Pt = { t: string; lat: number; lon: number; src: string; acc: number | null };
 type Place = { id: number; label: string; lat: number; lon: number; radiusM: number };
 
-const COLOR: Record<string, string> = { "visit-arrival": "#7a88ff", "visit-departure": "#a78bfa", significant: "#9ca3af", manual: "#7dd3fc" };
-const NAME: Record<string, string> = { "visit-arrival": "Arrived", "visit-departure": "Left", significant: "Moved", manual: "Checked in" };
+const COLOR: Record<string, string> = { "visit-arrival": "#7a88ff", "visit-departure": "#a78bfa", significant: "#9ca3af", manual: "#7dd3fc", trip: "#5eead4" };
+const NAME: Record<string, string> = { "visit-arrival": "Arrived", "visit-departure": "Left", significant: "Moved", manual: "Checked in", trip: "Trip" };
 // Keyless map backgrounds. "Streets" is OpenStreetMap darkened by a CSS filter; it draws ferry routes and other detail, so the
 // Esri gray canvases (no ferry lines) come first. "Points only" draws no map at all and sends nothing to a third party.
 const STYLES = {
@@ -20,11 +20,27 @@ const STYLES = {
 type StyleKey = keyof typeof STYLES;
 const RANGES = [{ key: "7", label: "7 days", days: 7 }, { key: "30", label: "30 days", days: 30 }, { key: "all", label: "All", days: 0 }] as const;
 
+const WINDOWS = [{ key: "all", label: "Whole trail", ms: 0 }, { key: "24", label: "Last 24 h", ms: 24 * 3_600_000 }, { key: "6", label: "Last 6 h", ms: 6 * 3_600_000 }, { key: "1", label: "Last hour", ms: 3_600_000 }] as const;
+const SPEEDS = [1, 3, 10] as const;
+const fmt = (t: string) => new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
 export function LocationMap({ points, places }: { points: Pt[]; places: Place[] }) {
   const el = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<import("leaflet").Map | null>(null);
+  const LRef = useRef<typeof import("leaflet") | null>(null);
+  const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
+  const fitFor = useRef("");
+  const [mapVersion, setMapVersion] = useState(0);
   const [range, setRange] = useState<(typeof RANGES)[number]["key"]>("all");
   const [style, setStyle] = useState<StyleKey>("dark");
   const [lines, setLines] = useState(true);
+  // The time slider: null means "everything" (the end); a number is a position in the list of points.
+  const [cursor, setCursor] = useState<number | null>(null);
+  const [engaged, setEngaged] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(3);
+  const [win, setWin] = useState<(typeof WINDOWS)[number]["key"]>("all");
+
   // Remember the choices on this browser (a convenience only; it works without storage).
   useEffect(() => {
     try {
@@ -35,16 +51,35 @@ export function LocationMap({ points, places }: { points: Pt[]; places: Place[] 
   }, []);
   const choose = (st: StyleKey) => { setStyle(st); try { window.localStorage.setItem("ls-map-style", st); } catch {} };
   const toggleLines = (on: boolean) => { setLines(on); try { window.localStorage.setItem("ls-map-lines", on ? "1" : "0"); } catch {} };
-  const days = RANGES.find((r) => r.key === range)!.days;
-  const shown = days ? points.filter((p) => Date.now() - Date.parse(p.t) <= days * 86_400_000) : points;
 
+  const days = RANGES.find((r) => r.key === range)!.days;
+  const shown = useMemo(() => (days ? points.filter((p) => Date.now() - Date.parse(p.t) <= days * 86_400_000) : points), [points, days]);
+  const last = shown.length - 1;
+  const ci = cursor === null ? last : Math.min(cursor, last);
+  const windowMs = WINDOWS.find((w) => w.key === win)!.ms;
+
+  const changeRange = (r: typeof range) => { setRange(r); setCursor(null); setEngaged(false); setPlaying(false); };
+
+  // Playback: step forward a few points at a time until the end.
   useEffect(() => {
-    let map: import("leaflet").Map | null = null;
+    if (!playing) return;
+    const id = setInterval(() => {
+      setCursor((c) => {
+        const next = (c ?? 0) + speed;
+        if (next >= last) { setPlaying(false); return null; }
+        return next;
+      });
+    }, 120);
+    return () => clearInterval(id);
+  }, [playing, speed, last]);
+
+  // The map itself and its background; rebuilt only when the style changes.
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       const L = (await import("leaflet")).default;
       if (cancelled || !el.current) return;
-      map = L.map(el.current, { zoomControl: true, attributionControl: true });
+      const map = L.map(el.current, { zoomControl: true, attributionControl: true, preferCanvas: true });
       const st = STYLES[style];
       if (st.url) {
         L.tileLayer(st.url, {
@@ -57,35 +92,57 @@ export function LocationMap({ points, places }: { points: Pt[]; places: Place[] 
           referrerPolicy: "origin",
         }).addTo(map);
       }
-
-      const all: [number, number][] = [];
-      if (lines && shown.length > 1) L.polyline(shown.map((p) => [p.lat, p.lon] as [number, number]), { color: "#7a88ff", weight: 2, opacity: 0.3 }).addTo(map);
-      for (const p of shown) {
-        all.push([p.lat, p.lon]);
-        const when = new Date(p.t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-        L.circleMarker([p.lat, p.lon], { radius: 5, color: "#0a0a0b", weight: 1, fillColor: COLOR[p.src] ?? "#9ca3af", fillOpacity: 0.9 })
-          .bindTooltip(`${NAME[p.src] ?? p.src} · ${when}${p.acc != null ? ` · ±${Math.round(p.acc)} m` : ""}`)
-          .addTo(map);
-      }
-      for (const pl of places) {
-        all.push([pl.lat, pl.lon]);
-        L.circle([pl.lat, pl.lon], { radius: pl.radiusM, color: "#34d399", weight: 1.5, fillOpacity: 0.12 }).bindTooltip(pl.label, { permanent: true, direction: "top", offset: [0, -4] }).addTo(map);
-      }
-      if (all.length) map.fitBounds(L.latLngBounds(all).pad(0.15), { maxZoom: 16 });
-      else map.setView([40.7128, -74.006], 11);
+      LRef.current = L;
+      mapRef.current = map;
+      layerRef.current = L.layerGroup().addTo(map);
+      fitFor.current = "";
+      setMapVersion((v) => v + 1);
     })();
     return () => {
       cancelled = true;
-      map?.remove();
+      mapRef.current?.remove();
+      mapRef.current = null;
+      layerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- redraw only when the range changes
-  }, [range, style, lines]);
+  }, [style]);
+
+  // The dots, lines and places; redrawn cheaply as the slider moves, without touching the map background.
+  useEffect(() => {
+    const L = LRef.current, map = mapRef.current, layer = layerRef.current;
+    if (!L || !map || !layer) return;
+    layer.clearLayers();
+    const now = shown[ci] ? Date.parse(shown[ci]!.t) : 0;
+    const visible = shown.slice(0, ci + 1).filter((p) => !windowMs || now - Date.parse(p.t) <= windowMs);
+    if (lines && visible.length > 1) L.polyline(visible.map((p) => [p.lat, p.lon] as [number, number]), { color: "#7a88ff", weight: 2, opacity: 0.3 }).addTo(layer);
+    for (const p of visible) {
+      const age = windowMs ? (now - Date.parse(p.t)) / windowMs : 0;
+      L.circleMarker([p.lat, p.lon], { radius: p.src === "trip" ? 3 : 5, color: "#0a0a0b", weight: 1, fillColor: COLOR[p.src] ?? "#9ca3af", fillOpacity: windowMs ? 0.25 + 0.65 * (1 - age) : 0.9 })
+        .bindTooltip(`${NAME[p.src] ?? p.src} \u00b7 ${fmt(p.t)}${p.acc != null ? ` \u00b7 \u00b1${Math.round(p.acc)} m` : ""}`)
+        .addTo(layer);
+    }
+    for (const pl of places) {
+      L.circle([pl.lat, pl.lon], { radius: pl.radiusM, color: "#34d399", weight: 1.5, fillOpacity: 0.12 }).bindTooltip(pl.label, { permanent: true, direction: "top", offset: [0, -4] }).addTo(layer);
+    }
+    // While scrubbing, mark where you were at the chosen moment.
+    const here = shown[ci];
+    if (engaged && here) L.circleMarker([here.lat, here.lon], { radius: 9, color: "#ffffff", weight: 2, fillColor: "#7a88ff", fillOpacity: 1 }).bindTooltip(fmt(here.t), { permanent: true, direction: "top", offset: [0, -8] }).addTo(layer);
+    // Fit the view once per range and style, not on every slider step, so playback does not jump around.
+    const key = `${range}|${mapVersion}`;
+    if (fitFor.current !== key) {
+      fitFor.current = key;
+      const all: [number, number][] = [...shown.map((p) => [p.lat, p.lon] as [number, number]), ...places.map((pl) => [pl.lat, pl.lon] as [number, number])];
+      if (all.length) map.fitBounds(L.latLngBounds(all).pad(0.15), { maxZoom: 16 });
+      else map.setView([40.7128, -74.006], 11);
+    }
+  }, [mapVersion, shown, places, lines, ci, windowMs, engaged, range]);
+
+  const btn = (on: boolean) => `h-8 rounded-md border px-3 text-sm ${on ? "border-accent text-fg" : "border-line text-muted hover:bg-raised"}`;
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {RANGES.map((r) => (
-          <button key={r.key} type="button" onClick={() => setRange(r.key)} aria-pressed={range === r.key} className={`h-8 rounded-md border px-3 text-sm ${range === r.key ? "border-accent text-fg" : "border-line text-muted hover:bg-raised"}`}>
+          <button key={r.key} type="button" onClick={() => changeRange(r.key)} aria-pressed={range === r.key} className={btn(range === r.key)}>
             {r.label}
           </button>
         ))}
@@ -96,6 +153,44 @@ export function LocationMap({ points, places }: { points: Pt[]; places: Place[] 
         <span className="ml-auto text-sm text-muted tabular-nums">{shown.length} point{shown.length === 1 ? "" : "s"}</span>
       </div>
       <div ref={el} className="h-[60vh] min-h-80 w-full overflow-hidden rounded-md border border-line bg-surface" role="img" aria-label="Map of where you have been" />
+      {shown.length > 1 && (
+        <div className="mt-3 space-y-2 rounded-md border border-line bg-surface px-3 py-2">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => { if (playing) setPlaying(false); else { setEngaged(true); if (cursor === null || cursor >= last) setCursor(0); setPlaying(true); } }}
+              className={btn(playing)}
+              aria-label={playing ? "Pause" : "Play"}
+            >
+              {playing ? "Pause" : "Play"}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={last}
+              value={ci}
+              onChange={(e) => { setEngaged(true); setPlaying(false); setCursor(Number(e.target.value)); }}
+              aria-label="Move through time"
+              className="min-w-0 flex-1 accent-[var(--color-accent)]"
+            />
+            <span className="w-44 shrink-0 text-right text-sm tabular-nums">{shown[ci] ? fmt(shown[ci]!.t) : ""}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
+            <label className="flex items-center gap-1.5">Trail
+              <select value={win} onChange={(e) => setWin(e.target.value as typeof win)} aria-label="Trail length" className="h-8 rounded-md border border-line bg-surface px-2 text-sm text-fg">
+                {WINDOWS.map((w) => <option key={w.key} value={w.key}>{w.label}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5">Speed
+              <select value={speed} onChange={(e) => setSpeed(Number(e.target.value) as typeof speed)} aria-label="Playback speed" className="h-8 rounded-md border border-line bg-surface px-2 text-sm text-fg">
+                {SPEEDS.map((v) => <option key={v} value={v}>{v}x</option>)}
+              </select>
+            </label>
+            {engaged && <button type="button" onClick={() => { setCursor(null); setEngaged(false); setPlaying(false); }} className={btn(false)}>Show everything</button>}
+            <span className="ml-auto tabular-nums">{ci + 1} of {shown.length}</span>
+          </div>
+        </div>
+      )}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
         {Object.entries(NAME).map(([k, v]) => (
           <span key={k} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: COLOR[k] }} />{v}</span>
