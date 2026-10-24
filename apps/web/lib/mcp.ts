@@ -14,6 +14,7 @@ import { loadNights } from "./sleep";
 import { loadActivities, totals } from "./activities";
 import { getEmail, loadAgenda, searchEmails } from "./email";
 import { addPlace, loadHistory } from "./location";
+import { getNote, kickSync, searchNotes } from "./notes";
 import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
 
@@ -248,6 +249,38 @@ export function buildServer(token: VerifiedToken): McpServer {
         } catch (e) {
           console.error("mcp: name_place failed", describeError(e));
           return fail("The tool could not save that.");
+        }
+      },
+    );
+  }
+
+  if (has("notes:read")) {
+    server.registerTool(
+      "search_notes",
+      {
+        description: "Search the owner's shared Notion pages (title and text), most recently edited first. Returns a snippet per page; use get_note for the text. Only pages shared with the integration are copied, the text is capped, and files are omitted.",
+        inputSchema: { q: z.string().optional(), limit: z.number().int().min(1).max(50).optional() },
+      },
+      async (args) => {
+        try {
+          kickSync();
+          return ok(await searchNotes(args));
+        } catch (e) {
+          console.error("mcp: search_notes failed", describeError(e));
+          return fail("The tool could not read the data.");
+        }
+      },
+    );
+    server.registerTool(
+      "get_note",
+      { description: "The text of one Notion page by id (from search_notes), capped at 6,000 characters.", inputSchema: { id: z.number().int() } },
+      async ({ id }) => {
+        try {
+          const n = await getNote(id);
+          return n ? ok(n) : fail("No such note.");
+        } catch (e) {
+          console.error("mcp: get_note failed", describeError(e));
+          return fail("The tool could not read the data.");
         }
       },
     );

@@ -12,6 +12,7 @@ import { disconnectEight, saveEightConnection, syncEight } from "@/lib/eight";
 import { syncItem, unlinkItem } from "@/lib/finance";
 import { syncMail } from "@/lib/email";
 import { disconnectOutlook, syncOutlook } from "@/lib/outlook";
+import { disconnectNotion, syncNotion } from "@/lib/notion-sync";
 import { disconnectStrava, syncStrava } from "@/lib/strava-sync";
 
 // Server actions are POSTs to their page, so each one checks the session itself.
@@ -128,4 +129,20 @@ export async function renameAccount(id: number, nickname: string): Promise<void>
   );
   revalidatePath("/connections");
   revalidatePath("/finance", "layout");
+}
+
+export async function syncNotionNow(): Promise<void> {
+  await requireSession();
+  try {
+    await syncNotion();
+  } catch {
+    // The failure is recorded and shown on the Connections page.
+  }
+  revalidatePath("/", "layout");
+}
+
+export async function disconnectNotionNow(): Promise<void> {
+  await requireSession();
+  await disconnectNotion();
+  revalidatePath("/", "layout");
 }

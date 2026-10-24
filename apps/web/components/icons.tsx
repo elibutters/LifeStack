@@ -77,6 +77,13 @@ export const MapIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const NotesIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M7 4h8l3 3v13H7V4Z" />
+    <path d="M10 11h5M10 14.5h5" />
+  </Icon>
+);
+
 export const UserIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <circle cx="12" cy="8" r="3.25" />

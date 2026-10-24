@@ -29,12 +29,12 @@ export const EventInput = z.discriminatedUnion("type", [
 export type EventInputT = z.infer<typeof EventInput>;
 
 // log:* are for shortcuts and widgets; the :read scopes below let an agent read each area through MCP.
-export const SCOPES = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read", "amazon:write", "account:read", "email:read", "location:read", "location:write"] as const;
-export const AGENT_SCOPES: Scope[] = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read", "email:read", "location:read", "location:write"];
+export const SCOPES = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read", "amazon:write", "account:read", "email:read", "location:read", "location:write", "notes:read"] as const;
+export const AGENT_SCOPES: Scope[] = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read", "email:read", "location:read", "location:write", "notes:read"];
 export type Scope = (typeof SCOPES)[number];
 // What the iPhone app's key carries: everything an agent reads, plus the account section.
 // Mail stays out of a new phone key by default: the app has no mail screen, so a lost phone key cannot read it. The owner can allow it per key.
-export const APP_SCOPES: Scope[] = [...AGENT_SCOPES.filter((s) => s !== "email:read"), "account:read"];
+export const APP_SCOPES: Scope[] = [...AGENT_SCOPES.filter((s) => s !== "email:read" && s !== "notes:read"), "account:read"];
 
 // What each permission lets a key do, for the keys page.
 export const SCOPE_LABELS: Partial<Record<Scope, string>> = {
@@ -49,6 +49,7 @@ export const SCOPE_LABELS: Partial<Record<Scope, string>> = {
   "account:read": "Read account and connections (phone app)",
   "location:read": "Read location history and places",
   "location:write": "Send location and name places",
+  "notes:read": "Read Notion notes",
 };
 
 // Domain and key each kind of entry is stored under in the shared events table.

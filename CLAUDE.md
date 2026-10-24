@@ -58,6 +58,12 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Strava (`lib/strava*.ts`): OAuth with a rotating refresh token stored encrypted in `connections`; activities are `events`
   rows (domain `activity`, source `strava`, `source_id` `act:<id>`) and no GPS is stored. The public `/api/webhooks/strava`
   trusts nothing in an event: it only checks the athlete id and runs the normal sync. Scope `fitness:read` guards reads.
+- Notion (`lib/notion*.ts`): a public integration with read-content only. Both tokens are stored encrypted as JSON in
+  `connections.refresh_token_enc` and rotated with a compare-and-swap on the ciphertext. The sync is a resumable walk
+  (search plus child pages and databases, depth 5, 2,000 pages, 40 requests per run) whose queue and generation live in
+  `sync_state.cursor`; rows are stamped with the generation and older generations are deleted only when a walk finishes.
+  Notes are plain text capped at 6,000 characters in the `notes` table, never backed up, and read through `notes:read`
+  (agent keys only, never the phone key). Nothing is ever written to Notion.
 - Workouts: all aggregation lives in `lib/workouts-core.ts` (pure, tested); the web page and `/api/v1/workouts` both use it,
   so clients never recompute totals. US units are display-only (`lib/units.ts`, `Format` in the app).
 - Backup restore must work for tables without an `id` column (connections, sync_state); keep that case in its test.

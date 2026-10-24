@@ -281,3 +281,21 @@ export const locationPoints = pgTable(
   },
   (t) => [index("location_points_ts_idx").on(t.ts)],
 );
+
+// Text copied from the owner's shared Notion pages so agents have context. Re-syncable, so never backed up.
+// generation says which full walk last saw the page; a finished walk deletes older generations.
+export const notes = pgTable(
+  "notes",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    sourceId: text("source_id").notNull().unique(), // page:<uuid>
+    title: text("title").notNull().default(""),
+    url: text("url"),
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    parentId: text("parent_id"),
+    bodyText: text("body_text").notNull().default(""),
+    generation: integer("generation").notNull().default(0),
+    createdAt,
+  },
+  (t) => [index("notes_edited_idx").on(t.editedAt)],
+);
