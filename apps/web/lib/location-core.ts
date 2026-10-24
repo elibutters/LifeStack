@@ -49,8 +49,10 @@ export type Pt = { ts: Date; lat: number; lon: number; source: string };
 export type Stay = { from: string; to: string | null; minutes: number | null; lat: number; lon: number; place: string | null };
 
 // A stay is an arrival and the first departure after it (near the same spot, before the next arrival). No departure yet means ongoing.
+// iOS can report one visit twice with slightly different coordinates, so arrivals within a minute and 300 m of an earlier one are the same.
 export function staysOf(points: Pt[], places: Place[], now = new Date()): Stay[] {
-  const sorted = [...points].sort((a, b) => a.ts.getTime() - b.ts.getTime());
+  const all = [...points].sort((a, b) => a.ts.getTime() - b.ts.getTime());
+  const sorted = all.filter((p, i) => p.source !== "visit-arrival" || !all.slice(0, i).some((q) => q.source === "visit-arrival" && p.ts.getTime() - q.ts.getTime() <= 60_000 && distanceM(p, q) <= 300));
   const out: Stay[] = [];
   sorted.forEach((p, i) => {
     if (p.source !== "visit-arrival") return;

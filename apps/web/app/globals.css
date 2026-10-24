@@ -57,3 +57,8 @@ a,
 button {
   touch-action: manipulation;
 }
+
+/* The map uses OpenStreetMap's light tiles; this darkens them to sit in the app's dark theme. */
+.map-tiles-dark {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92) saturate(0.55);
+}

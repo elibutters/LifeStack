@@ -23,10 +23,11 @@ export function LocationMap({ points, places }: { points: Pt[]; places: Place[] 
       const L = (await import("leaflet")).default;
       if (cancelled || !el.current) return;
       map = L.map(el.current, { zoomControl: true, attributionControl: true });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: "abcd",
+      // OpenStreetMap's own tiles need no key. They are light, so a CSS filter (map-tiles-dark) darkens them to match the app.
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
+        className: "map-tiles-dark",
       }).addTo(map);
 
       const all: [number, number][] = [];
