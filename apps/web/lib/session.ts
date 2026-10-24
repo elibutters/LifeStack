@@ -8,6 +8,9 @@ const enc = new TextEncoder();
 // The signing key includes the password, so changing APP_PASSWORD signs everyone out.
 // Rotating SESSION_SECRET does the same. Returns null (deny everything) if either is
 // missing or too short to be safe on the public internet.
+// The shortest APP_PASSWORD the password-only login accepts (the owner's choice; sign-in attempts are throttled).
+export const MIN_APP_PASSWORD = 8;
+
 export function sessionKey(): string | null {
   const password = process.env.APP_PASSWORD ?? "";
   const secret = process.env.SESSION_SECRET ?? "";
@@ -15,7 +18,7 @@ export function sessionKey(): string | null {
   // With accounts (OWNER_EMAIL set) passwords live in the database and can be changed in the app, so sessions
   // are signed by the secret alone. Without accounts the shared password is part of the key, as before.
   if (process.env.OWNER_EMAIL) return secret;
-  if (password.length < 16) return null;
+  if (password.length < MIN_APP_PASSWORD) return null;
   return `${secret}\0${password}`;
 }
 

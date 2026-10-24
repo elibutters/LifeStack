@@ -117,6 +117,12 @@ assert.equal(await usr.changeEmail(ownerRow.id, "new.owner@example.com"), "ok", 
 assert.equal((await post({ email: "new.owner@example.com", password: "a brand new passphrase" })).status, 200); assert.equal((await post({ email: "owner@example.com", password: "a brand new passphrase" })).status, 401);
 
 // sessions are signed by the secret alone once accounts are on, so changing the password in the app never needs a redeploy
+// password-only login: 8 characters is the minimum, everywhere
+{ const pw = process.env.APP_PASSWORD, ow = process.env.OWNER_EMAIL; delete process.env.OWNER_EMAIL;
+  process.env.APP_PASSWORD = "12345678"; assert.notEqual(sess.sessionKey(), null, "8 characters is accepted");
+  process.env.APP_PASSWORD = "1234567"; assert.equal(sess.sessionKey(), null, "7 is still too short");
+  assert.equal(sess.MIN_APP_PASSWORD, 8);
+  process.env.APP_PASSWORD = pw; if (ow) process.env.OWNER_EMAIL = ow; }
 const keepPw = process.env.APP_PASSWORD; process.env.APP_PASSWORD = "short";
 assert.equal(sess.sessionKey(), process.env.SESSION_SECRET, "accounts: the signing key does not depend on APP_PASSWORD");
 delete process.env.OWNER_EMAIL; assert.equal(sess.sessionKey(), null, "no accounts: a short APP_PASSWORD still fails closed");
