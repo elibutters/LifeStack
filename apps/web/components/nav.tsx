@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
-import { CalendarIcon, FinanceIcon, LogIcon, OverviewIcon, SleepIcon, WantsIcon, WorkoutsIcon } from "./icons";
+import { CalendarIcon, FinanceIcon, LogIcon, OverviewIcon, SleepIcon, MapIcon, WantsIcon, WorkoutsIcon } from "./icons";
 
-type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>> };
+type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>>; desktopOnly?: boolean };
 
 // Adding a tab is one line here. The bottom bar on phones fits about seven at this width.
 const NAV: Item[] = [
@@ -16,6 +16,7 @@ const NAV: Item[] = [
   { href: "/finance", label: "Finance", Icon: FinanceIcon },
   { href: "/log", label: "Log", Icon: LogIcon },
   { href: "/wants", label: "Wants", Icon: WantsIcon },
+  { href: "/map", label: "Map", Icon: MapIcon, desktopOnly: true }, // the phone bar is full
 ];
 
 function useActive() {
@@ -53,7 +54,7 @@ export function MobileNav() {
       className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/90 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur md:hidden"
     >
       <ul className="flex">
-        {NAV.map(({ href, label, Icon }) => (
+        {NAV.filter((n) => !n.desktopOnly).map(({ href, label, Icon }) => (
           <li key={href} className="flex-1">
             <Link
               href={href}
