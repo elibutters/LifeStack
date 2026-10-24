@@ -3,10 +3,10 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { checkPassword, clientIp } from "@/lib/login-guard";
-import { createSession, SESSION_COOKIE, SESSION_TTL_S } from "@/lib/session";
+import { createSession, MIN_APP_PASSWORD, SESSION_COOKIE, SESSION_TTL_S } from "@/lib/session";
 
 const MESSAGES = {
-  not_configured: "Sign-in is not configured. Set APP_PASSWORD (16+ chars) and SESSION_SECRET (32+ chars).",
+  not_configured: `Sign-in is not configured. Set APP_PASSWORD (${MIN_APP_PASSWORD}+ chars) and SESSION_SECRET (32+ chars).`,
   unavailable: "Sign-in is unavailable right now. Try again shortly.",
   throttled: "Too many attempts. Try again in 15 minutes.",
   wrong: "Wrong email or password.",
