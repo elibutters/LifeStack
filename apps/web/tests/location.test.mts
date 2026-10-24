@@ -33,6 +33,10 @@ const st = core.staysOf([P("2026-10-12T08:00:00Z", "visit-arrival"), P("2026-10-
 assert.deepEqual(st.map((s) => [s.place, s.minutes, s.to === null]), [[null, 60, true], ["Home", 90, false]], "newest first; no departure means ongoing");
 assert.equal(core.staysOf([P("2026-10-12T08:00:00Z", "visit-arrival"), P("2026-10-12T09:00:00Z", "visit-departure", 41, -74)], [], now)[0]!.to, null, "a departure far away is not this stay's");
 
+// the same visit reported twice (slightly different coordinates) is one stay, and it still pairs with its departure
+const dup = core.staysOf([P("2026-10-12T08:00:00Z", "visit-arrival", 40.7, -74), P("2026-10-12T08:00:00Z", "visit-arrival", 40.7003, -74.0002), P("2026-10-12T09:00:00Z", "visit-departure")], [home], new Date("2026-10-12T10:00:00Z"));
+assert.deepEqual(dup.map((s) => [s.place, s.minutes, s.to !== null]), [["Home", 60, true]]);
+
 // ---- storage and API
 await db().delete(locationPoints); await db().delete(places); await db().delete(apiTokens);
 const body = (extra: Record<string, unknown>[]) => ({ points: extra.map((e, i) => pt({ id: `batch-id-${i}`, ...e })) });

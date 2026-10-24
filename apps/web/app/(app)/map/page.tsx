@@ -27,8 +27,8 @@ export default async function MapPage() {
         <Card title="Stays, last 30 days">
           {data.stays.length ? (
             <ul className="divide-y divide-line">
-              {data.stays.slice(0, 40).map((s) => (
-                <li key={s.from} className="flex flex-wrap items-baseline justify-between gap-x-3 py-2 text-sm">
+              {data.stays.slice(0, 40).map((s, i) => (
+                <li key={`${s.from}-${i}`} className="flex flex-wrap items-baseline justify-between gap-x-3 py-2 text-sm">
                   <span>{s.place ?? `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}`}</span>
                   <span className="text-muted tabular-nums">{when(s.from)} &middot; {s.to ? dur(s.minutes) : "now"}</span>
                 </li>
