@@ -97,3 +97,18 @@ export const handlePlace = (req: Request, rawId: string) =>
     const id = /^\d{1,15}$/.test(rawId) ? Number(rawId) : 0;
     return id && (await deletePlace(id)) ? json({ ok: true }) : json({ error: "not_found" }, 404);
   }, false);
+
+// Everything the map page draws: every reported point (oldest first), the saved places, and the last month of stays.
+export async function loadMapData(now = new Date()) {
+  const [pts, pl] = await Promise.all([
+    db().select().from(locationPoints).orderBy(desc(locationPoints.ts)).limit(20_000),
+    listPlaces(),
+  ]);
+  const since = now.getTime() - 30 * 86_400_000;
+  const stays = staysOf(pts.filter((r) => r.ts.getTime() >= since).map((r) => ({ ts: r.ts, lat: r.lat, lon: r.lon, source: r.source })), pl, now);
+  return {
+    points: pts.reverse().map((r) => ({ t: r.ts.toISOString(), lat: r.lat, lon: r.lon, src: r.source, acc: r.accuracyM })),
+    places: pl,
+    stays,
+  };
+}

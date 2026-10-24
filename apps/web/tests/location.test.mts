@@ -57,6 +57,10 @@ assert.equal(((await (await loc.handleLocation(req("GET", "/location", reader.to
 assert.equal((await loc.handlePlace(req("DELETE", `/places/${pid}`, reader.token), String(pid))).status, 403);
 assert.equal((await loc.handlePlace(req("DELETE", `/places/${pid}`, writer.token), String(pid))).status, 200);
 assert.equal((await loc.handlePlace(req("DELETE", `/places/${pid}`, writer.token), String(pid))).status, 404);
+// ---- map data
+const map = await loc.loadMapData(new Date());
+assert.ok(map.points.length >= 2 && map.points.every((p, i, a) => i === 0 || a[i - 1]!.t <= p.t), "map points come oldest first");
+assert.ok(map.stays.length >= 1 && map.places.length === 0, "stays and places travel with the points");
 assert.ok(cap.APP_SCOPES.includes("location:write") && !cap.APP_SCOPES.includes("email:read"), "the phone can upload location but not read mail");
 
 await db().delete(locationPoints); await db().delete(places); await db().delete(apiTokens);
