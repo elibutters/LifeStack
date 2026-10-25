@@ -370,7 +370,7 @@ export function buildServer(token: VerifiedToken): McpServer {
       "propose_plan",
       {
         description:
-          'Drafts the sessions for a goal and fits them into real free time. It saves nothing, so call it as often as you like while brainstorming and show the owner the result. kind "prep": counts back from targetDay (a date, YYYY-MM-DD) with a session every everyDays days (default 2) of durationMin minutes (default 60), the last taperLast ones lighter. kind "progress": a session each day (or only the listed weekdays, Monday is 0) from fromDay (default today) to targetDay. kind "train": a weekly template of {weekday, durationMin, title}, scaled week by week (builds up, steps back every fourth week, tapers the last two) until targetDay. kind "custom": an explicit list of sessions [{day, durationMin, title, flexDays}]. Returns the placed sessions, any that did not fit with the reason, and a feasibility summary (minutes needed, available, short by).',
+          'Drafts the sessions for a goal and fits them into real free time. It saves nothing, so call it as often as you like while brainstorming and show the owner the result. kind "prep": counts back from targetDay (a date, YYYY-MM-DD) with a session every everyDays days (default 2) of durationMin minutes (default 60), the last taperLast ones lighter. kind "progress": a session each day (or only the listed weekdays, Monday is 0) from fromDay (default today) to targetDay. kind "train": a weekly template of {weekday, durationMin, title}, scaled week by week (builds up, steps back every fourth week, tapers the last two) until targetDay. kind "custom": an explicit list of sessions [{day, durationMin, title, flexDays}]. Every plan and every template slot or custom session can take a start ("HH:MM", local) to say when in the free time it likes to begin, such as "09:00" for a morning long run or "18:30" for an evening one; without it sessions start at the general preference (about 7pm). Returns the placed sessions, any that did not fit with the reason, and a feasibility summary (minutes needed, available, short by).',
         inputSchema: {
           kind: z.enum(["prep", "progress", "train", "custom"]),
           title: z.string(),
@@ -381,8 +381,9 @@ export function buildServer(token: VerifiedToken): McpServer {
           taperLast: z.number().int().optional(),
           weekdays: z.array(z.number().int()).optional(),
           weeks: z.number().int().optional(),
-          template: z.array(z.object({ weekday: z.number().int(), durationMin: z.number().int(), title: z.string() })).optional(),
-          sessions: z.array(z.object({ day: z.string(), durationMin: z.number().int(), title: z.string(), flexDays: z.number().int().optional() })).optional(),
+          start: z.string().optional(),
+          template: z.array(z.object({ weekday: z.number().int(), durationMin: z.number().int(), title: z.string(), start: z.string().optional() })).optional(),
+          sessions: z.array(z.object({ day: z.string(), durationMin: z.number().int(), title: z.string(), flexDays: z.number().int().optional(), start: z.string().optional() })).optional(),
           flexDays: z.number().int().optional(),
         },
       },

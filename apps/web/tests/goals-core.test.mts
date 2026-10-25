@@ -108,4 +108,10 @@ assert.equal(g.reschedule({ durationMin: 780, free: freeNow, c: NY, existing: []
 rs = g.reschedule({ durationMin: 60, free: g.freeSlots(at(mon, 18 * 60 + 45), at("2026-11-10", 0), [], NY, at(mon, 18 * 60 + 45)), c: NY, existing: [], now: at(mon, 18 * 60 + 45) });
 assert.ok(rs!.start.getTime() >= at(mon, 18 * 60 + 45).getTime() + 30 * 60000);
 
+// a session can ask to start somewhere other than the general preference
+r = g.place([{ title: "Long", day: sat, durationMin: 90, flexDays: 0, startMin: 9 * 60 }, { title: "Easy", day: sat, durationMin: 30, flexDays: 0 }], range(), NY);
+assert.equal(hm(r.placed.find((p) => p.title === "Long")!.start), "09:00", "its own start time wins");
+assert.equal(hm(r.placed.find((p) => p.title === "Easy")!.start), "19:00", "others keep the general preference");
+assert.equal(g.weeklyPlan({ fromDay: mon, toDay: "2026-11-02", template: [{ weekday: 5, durationMin: 60, title: "Long", startMin: 540 }] })[0].startMin, 540, "the template passes it on");
+
 console.log("goals-core: ok");

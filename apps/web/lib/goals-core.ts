@@ -113,15 +113,15 @@ export function freeSlots(from: Date, to: Date, busy: Interval[], c: Constraints
 
 // ---- sessions
 // One session a goal wants: on `day` (give or take `flexDays`), `durationMin` long.
-export type Desired = { key?: string; title: string; day: string; durationMin: number; flexDays?: number; earliestDay?: string; latestDay?: string; note?: string };
+export type Desired = { key?: string; title: string; day: string; durationMin: number; flexDays?: number; earliestDay?: string; latestDay?: string; note?: string; startMin?: number }; // startMin: where in free time this one likes to start (local minutes), instead of the general preference
 export type Placed = Desired & { start: Date; end: Date; placedDay: string; shiftedDays: number };
 export type Unplaced = { desired: Desired; reason: string };
 
 // A start inside free time for `durationMin` on a local day, nearest the preferred start, or null.
-function fit(day: string, durationMin: number, free: Interval[], taken: Interval[], c: Constraints): Interval | null {
+function fit(day: string, durationMin: number, free: Interval[], taken: Interval[], c: Constraints, startMin = c.preferredStartMin): Interval | null {
   const dayStart = localToDate(day, 0, c.tz);
   const dayEnd = localToDate(addDay(day, 1), 0, c.tz);
-  const preferred = localToDate(day, c.preferredStartMin, c.tz).getTime();
+  const preferred = localToDate(day, startMin, c.tz).getTime();
   const blocked = pad(taken, c.bufferMin);
   let best: Interval | null = null;
   let bestDist = Infinity;
@@ -161,7 +161,7 @@ export function place(desired: Desired[], free: Interval[], c: Constraints, exis
       const day = addDay(d.day, off);
       if ((d.earliestDay && day < d.earliestDay) || (d.latestDay && day > d.latestDay)) continue;
       if ((perDay.get(day) ?? 0) >= c.maxPerDay) continue;
-      const slot = fit(day, d.durationMin, free, taken, c);
+      const slot = fit(day, d.durationMin, free, taken, c, d.startMin);
       if (!slot) continue;
       taken.push(slot);
       perDay.set(day, (perDay.get(day) ?? 0) + 1);
@@ -178,24 +178,24 @@ export function place(desired: Desired[], free: Interval[], c: Constraints, exis
 const round5 = (n: number) => Math.max(15, Math.round(n / 5) * 5);
 
 // Prep for a date: a session every `everyDays` counting back from the day before the target, lighter near the end.
-export function cadence(o: { fromDay: string; targetDay: string; everyDays: number; durationMin: number; title: string; stopBeforeDays?: number; taperLast?: number; taperFactor?: number; flexDays?: number }): Desired[] {
+export function cadence(o: { fromDay: string; targetDay: string; everyDays: number; durationMin: number; title: string; stopBeforeDays?: number; taperLast?: number; taperFactor?: number; flexDays?: number; startMin?: number }): Desired[] {
   const days: string[] = [];
   for (let d = addDay(o.targetDay, -(o.stopBeforeDays ?? 1)); d >= o.fromDay; d = addDay(d, -Math.max(1, o.everyDays))) days.unshift(d);
   const taper = o.taperLast ?? 0;
   return days.map((day, i) => {
     const light = taper > 0 && i >= days.length - taper;
-    return { title: light ? `${o.title} (light)` : o.title, day, durationMin: light ? round5(o.durationMin * (o.taperFactor ?? 0.5)) : o.durationMin, flexDays: o.flexDays ?? 1 };
+    return { title: light ? `${o.title} (light)` : o.title, day, durationMin: light ? round5(o.durationMin * (o.taperFactor ?? 0.5)) : o.durationMin, flexDays: o.flexDays ?? 1, startMin: o.startMin };
   });
 }
 
 // Steady progress toward a deadline: a session each day (or each chosen weekday, Monday 0).
-export function daily(o: { fromDay: string; toDay: string; durationMin: number; title: string; weekdays?: number[]; flexDays?: number }): Desired[] {
+export function daily(o: { fromDay: string; toDay: string; durationMin: number; title: string; weekdays?: number[]; flexDays?: number; startMin?: number }): Desired[] {
   const out: Desired[] = [];
-  for (let d = o.fromDay; d <= o.toDay; d = addDay(d, 1)) if (!o.weekdays || o.weekdays.includes(weekdayOf(d))) out.push({ title: o.title, day: d, durationMin: o.durationMin, flexDays: o.flexDays ?? 1 });
+  for (let d = o.fromDay; d <= o.toDay; d = addDay(d, 1)) if (!o.weekdays || o.weekdays.includes(weekdayOf(d))) out.push({ title: o.title, day: d, durationMin: o.durationMin, flexDays: o.flexDays ?? 1, startMin: o.startMin });
   return out;
 }
 
-export type TemplateSlot = { weekday: number; durationMin: number; title: string };
+export type TemplateSlot = { weekday: number; durationMin: number; title: string; startMin?: number };
 
 // A repeating week, scaled week by week (a training block ramps up, deloads and tapers).
 export function weeklyPlan(o: { fromDay: string; toDay: string; template: TemplateSlot[]; multipliers?: number[]; flexDays?: number }): Desired[] {
@@ -206,7 +206,7 @@ export function weeklyPlan(o: { fromDay: string; toDay: string; template: Templa
     for (const t of o.template) {
       const day = addDay(monday, w * 7 + t.weekday);
       if (day < o.fromDay || day > o.toDay) continue;
-      out.push({ title: t.title, day, durationMin: round5(t.durationMin * scale), flexDays: o.flexDays ?? 1 });
+      out.push({ title: t.title, day, durationMin: round5(t.durationMin * scale), flexDays: o.flexDays ?? 1, startMin: t.startMin });
     }
   }
   return out;
