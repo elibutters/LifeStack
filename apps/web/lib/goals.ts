@@ -8,6 +8,8 @@ import { TZ } from "./dates";
 import { describeError } from "./errors";
 import * as eng from "./goals-core";
 import { notebookUrl } from "./goals-notion-core";
+import { after } from "next/server";
+import { syncOutlook } from "./outlook";
 import { createEvents, deleteEvent, updateEvent, type SessionEvent } from "./outlook-write";
 import { loadOverrides } from "./settings-store";
 import { verifyBearer } from "./tokens";
@@ -266,7 +268,19 @@ export async function commitPlan(goalId: string, input: unknown, now = new Date(
     });
   }
   if (goal.status === "draft") await patchPayload(`goal:${goalId}`, { status: "active" });
+  if (cal.ok) refreshCalendar();
   return { ok: true as const, saved: made.length, calendar: (cal.ok ? "ok" : cal.reason) as CalendarState, sessions: (await sessionsOf(goalId)).filter((s) => made.some((m) => m.id === s.id)).map(sessionJson) };
+}
+
+// After Outlook has been written to, copy the calendar back so the site shows the change now rather than at the next daily sync.
+// Runs after the response when in a request, otherwise in the background. Never throws.
+function refreshCalendar() {
+  const run = () => syncOutlook().catch(() => {});
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
 }
 
 const eventBody = (g: Goal, note?: string | null) => [`Goal: ${g.title}`, g.thesis ? g.thesis.slice(0, 500) : "", note ?? "", "", "Planned by Life Stack."].filter((x, i) => x || i === 3).join("\n");
@@ -279,6 +293,7 @@ export async function pushToCalendar(goalId?: string) {
   const cal = await createEvents(todo.map((s) => ({ key: s.id, title: s.title, start: s.start, end: s.end, body: eventBody(goals.get(s.goalId) ?? ({ title: "", thesis: "" } as Goal), s.note) })));
   if (!cal.ok) return { calendar: cal.reason as CalendarState, pushed: 0 };
   for (const v of cal.value) await patchPayload(`session:${v.key}`, { outlookEventId: v.id });
+  refreshCalendar();
   return { calendar: "ok" as CalendarState, pushed: cal.value.length };
 }
 
@@ -304,6 +319,7 @@ export async function skipSession(id: string) {
   // A skipped session comes off the calendar so it does not clutter it; the record stays.
   const cal = s.outlookEventId ? await deleteEvent(s.outlookEventId) : null;
   await patchPayload(`session:${id}`, cal && cal.ok ? { outlookEventId: null } : {}, { valueText: "skipped" });
+  if (cal && cal.ok) refreshCalendar();
   return { ok: true as const, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
 }
 
@@ -328,6 +344,7 @@ export async function moveSession(id: string, input: { start?: string } = {}, no
   }
   const cal = s.outlookEventId ? await updateEvent(s.outlookEventId, { start: slot.start, end: slot.end }) : null;
   await patchPayload(`session:${id}`, { end: slot.end.toISOString(), day: eng.localDay(slot.start, ctx.c.tz), movedFrom: [...s.movedFrom, s.start.toISOString()].slice(-10) }, { ts: slot.start });
+  if (cal && cal.ok) refreshCalendar();
   return { ok: true as const, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
 }
 
