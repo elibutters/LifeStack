@@ -70,5 +70,16 @@ const who = text(await rpc(agent, "tools/call", { name: "get_profile", arguments
 assert.equal(who.timezone, "UTC");
 assert.equal(who.name, undefined);
 
+// ---- usage is recorded: tool, outcome and argument names, never values or answers
+await rpc(agent, "tools/call", { name: "log_event", arguments: { type: "mood", value: 9, note: "secret-note-value" } }); // out of range: invalid
+await new Promise((r) => setTimeout(r, 700)); // recording runs after the response
+const used = await db().select().from(events).where((await import("drizzle-orm")).eq(events.source, "mcp"));
+assert.ok(used.length > 5, "tool calls were recorded");
+assert.ok(used.every((r: any) => r.domain === "mcp" && r.key === "mcp.call" && typeof r.valueText === "string"));
+assert.ok(used.some((r: any) => r.valueText === "log_event" && (r.payload.argKeys as string[]).includes("note")), "argument names are kept");
+assert.ok(!JSON.stringify(used).includes("secret-note-value") && !JSON.stringify(used).includes("calm"), "argument values are never stored");
+assert.ok(used.some((r: any) => r.payload.outcome === "ok") && used.some((r: any) => r.payload.outcome !== "ok"), "both outcomes are seen");
+assert.ok(!used.some((r: any) => r.valueText === "tools/list" || r.valueText === "initialize"), "only tool calls are recorded");
+
 await db().delete(events); await db().delete(apiTokens);
 console.log("MCP OK"); process.exit(0);

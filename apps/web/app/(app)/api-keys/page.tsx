@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { headers } from "next/headers";
 import { Card } from "@/components/card";
 import { PageHeader } from "@/components/page-header";
@@ -28,6 +29,7 @@ export default async function ApiKeys() {
     <>
       <PageHeader>
         <h1 className="text-3xl font-semibold tracking-tight">API keys</h1>
+        <Link href="/mcp" className="text-sm text-accent">Claude usage</Link>
       </PageHeader>
       <div className="space-y-6">
       <div className="max-w-3xl space-y-4">

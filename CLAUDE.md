@@ -55,7 +55,9 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   second password check elsewhere.
 - MCP: `/api/v1/mcp` (`lib/mcp.ts`) exposes read tools and `log_event` to agents. Each tool is registered only
   when the key holds its scope; a new tool must pick the narrowest scope and return no secrets. It is
-  stateless, rejects browser (Origin) requests, and the body is capped.
+  stateless, rejects browser (Origin) requests, and the body is capped. Every tool call is recorded as an `events` row (source `mcp`,
+  `lib/mcp-usage.ts`: tool, key, timing, outcome, answer size and argument NAMES only, never values or answers) and read on
+  `/mcp` (maths in `lib/mcp-usage-core.ts`); use it to tune tool descriptions, merge tools and trim answers.
 - Backups: `/api/cron/backup` writes an encrypted full dump to private Vercel Blob daily. New tables are
   included automatically; a new table that must not be backed up goes in `SKIP` in `lib/backup-db.ts`.
 - Strava (`lib/strava*.ts`): OAuth with a rotating refresh token stored encrypted in `connections`; activities are `events`
