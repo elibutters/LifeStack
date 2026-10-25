@@ -39,7 +39,7 @@ struct LargeWidgetView: View {
         Group {
             if !entry.signedIn { SignedOut() }
             else {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 14) {
                     header
                     moodRow
                     caffeineRow
@@ -80,7 +80,7 @@ struct LargeWidgetView: View {
             ForEach(1 ... 5, id: \.self) { v in
                 Button(intent: LogMoodIntent(value: v)) {
                     Text(["Low", "Meh", "Okay", "Good", "Great"][v - 1]).font(.system(size: 11, weight: .medium)).lineLimit(1).minimumScaleFactor(0.7)
-                        .frame(maxWidth: .infinity).frame(height: 28)
+                        .frame(maxWidth: .infinity).frame(height: 36)
                         .background(moodNow == v ? AnyShapeStyle(WColor.gradient) : AnyShapeStyle(Color.white.opacity(0.08)), in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -95,43 +95,28 @@ struct LargeWidgetView: View {
             Spacer(minLength: 6)
             Button(intent: LogCaffeineIntent()) {
                 Label("Coffee", systemImage: "plus").font(.system(size: 12, weight: .semibold))
-                    .padding(.horizontal, 12).frame(height: 28).background(Color.white.opacity(0.08), in: Capsule())
+                    .padding(.horizontal, 14).frame(height: 34).background(Color.white.opacity(0.08), in: Capsule())
             }
             .buttonStyle(.plain)
         }
     }
 
-    private var supplementBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("SUPPLEMENTS").font(.caption2.weight(.semibold)).foregroundStyle(WColor.muted)
-                Text("\(supplements.filter { taken.contains($0.lowercased()) }.count) of \(supplements.count)").font(.caption).foregroundStyle(WColor.muted)
-                Spacer()
-                Button(intent: TakeAllSupplementsIntent()) {
-                    Text("Take all").font(.system(size: 11, weight: .semibold)).padding(.horizontal, 10).frame(height: 22).background(Color.white.opacity(0.08), in: Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-            if supplements.isEmpty { Text("No supplements yet").font(.caption).foregroundStyle(WColor.muted) }
-            ForEach(Array(stride(from: 0, to: min(supplements.count, 9), by: 3)), id: \.self) { start in
-                HStack(spacing: 6) {
-                    ForEach(Array(supplements[start ..< min(start + 3, supplements.count)]), id: \.self) { name in chip(name) }
-                    if start + 3 > supplements.count { ForEach(0 ..< (start + 3 - supplements.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity) } }
-                }
-            }
-        }
-    }
+    private var allTaken: Bool { !supplements.isEmpty && supplements.allSatisfy { taken.contains($0.lowercased()) } }
 
-    private func chip(_ name: String) -> some View {
-        let done = taken.contains(name.lowercased())
-        return Button(intent: TakeSupplementIntent(name: name)) {
-            HStack(spacing: 4) {
-                Image(systemName: done ? "checkmark.circle.fill" : "circle").font(.system(size: 11))
-                Text(name).font(.system(size: 12, weight: .medium)).lineLimit(1).minimumScaleFactor(0.75)
+    // One button: take everything, or (once everything is taken) undo it. Odd mixes are done in the app.
+    private var supplementBlock: some View {
+        let count = supplements.filter { taken.contains($0.lowercased()) }.count
+        return Button(intent: ToggleSupplementsIntent()) {
+            HStack(spacing: 8) {
+                Image(systemName: allTaken ? "checkmark.circle.fill" : "circle").font(.system(size: 16))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(allTaken ? "All supplements taken" : "Take all supplements").font(.system(size: 14, weight: .semibold))
+                    Text(allTaken ? "Tap to undo" : "\(count) of \(supplements.count) taken").font(.caption2).foregroundStyle(allTaken ? Color.white.opacity(0.7) : WColor.muted)
+                }
+                Spacer(minLength: 0)
             }
-            .foregroundStyle(done ? Color.white : Color.white.opacity(0.85))
-            .frame(maxWidth: .infinity).frame(height: 28)
-            .background(done ? AnyShapeStyle(WColor.good.opacity(0.28)) : AnyShapeStyle(Color.white.opacity(0.08)), in: Capsule())
+            .padding(.horizontal, 14).frame(maxWidth: .infinity).frame(height: 48)
+            .background(allTaken ? AnyShapeStyle(WColor.good.opacity(0.30)) : AnyShapeStyle(Color.white.opacity(0.10)), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
     }
