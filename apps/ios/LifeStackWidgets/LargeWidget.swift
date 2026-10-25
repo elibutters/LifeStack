@@ -118,7 +118,7 @@ struct LargeWidgetView: View {
 
     private var drinks: [(drink: String, mg: Double)] {
         let from = entry.options?.caffeine.map { ($0.drink, $0.mg) } ?? []
-        return from.isEmpty ? [("Coffee", 95), ("Espresso", 64), ("Cold brew", 150), ("Energy drink", 80)] : from
+        return from.isEmpty ? [("Coffee", 95), ("Cold brew", 200), ("Energy drink", 200)] : from
     }
 
     // Caffeine: the day's total, a one-tap Coffee, and a small chevron that opens the full list of drinks.

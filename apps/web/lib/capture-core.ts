@@ -7,9 +7,8 @@ export const MOOD_LABELS: Record<number, string> = { 1: "Low", 2: "Meh", 3: "Oka
 // Typical amounts, only used when no amount is given. They are estimates.
 export const CAFFEINE_PRESETS = [
   { drink: "Coffee", mg: 95 },
-  { drink: "Espresso", mg: 64 },
-  { drink: "Cold brew", mg: 150 },
-  { drink: "Energy drink", mg: 80 },
+  { drink: "Cold brew", mg: 200 },
+  { drink: "Energy drink", mg: 200 },
 ] as const;
 
 const shared = {
