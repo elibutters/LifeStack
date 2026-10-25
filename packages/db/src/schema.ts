@@ -299,3 +299,11 @@ export const notes = pgTable(
   },
   (t) => [index("notes_edited_idx").on(t.editedAt)],
 );
+
+// Owner preferences that used to be constants in code, changed by the owner or an agent without a deploy.
+// Only keys in lib/settings-core.ts are accepted; a missing row means the built-in default.
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<unknown>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

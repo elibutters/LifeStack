@@ -17,23 +17,27 @@ const STYLES = {
   satellite: { label: "Satellite", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attribution: "Tiles &copy; Esri", maxNative: 19, className: "" },
   none: { label: "Points only", url: "", attribution: "", maxNative: 19, className: "" },
 } as const;
-type StyleKey = keyof typeof STYLES;
+export type StyleKey = keyof typeof STYLES;
 const RANGES = [{ key: "7", label: "7 days", days: 7 }, { key: "30", label: "30 days", days: 30 }, { key: "all", label: "All", days: 0 }] as const;
 
 const WINDOWS = [{ key: "all", label: "Whole trail", ms: 0 }, { key: "24", label: "Last 24 h", ms: 24 * 3_600_000 }, { key: "6", label: "Last 6 h", ms: 6 * 3_600_000 }, { key: "1", label: "Last hour", ms: 3_600_000 }] as const;
 const SPEEDS = [1, 3, 10] as const;
 const fmt = (t: string) => new Date(t).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-export function LocationMap({ points, places }: { points: Pt[]; places: Place[] }) {
+export type MapDefaults = { style: StyleKey; lines: boolean; range: (typeof RANGES)[number]["key"] };
+
+// defaults come from the owner's preferences (changeable without a deploy). A choice made in this browser wins only if it was made
+// after the preferences last changed, so changing a default always shows up.
+export function LocationMap({ points, places, defaults, defaultsAt }: { points: Pt[]; places: Place[]; defaults: MapDefaults; defaultsAt: string | null }) {
   const el = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const LRef = useRef<typeof import("leaflet") | null>(null);
   const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const fitFor = useRef("");
   const [mapVersion, setMapVersion] = useState(0);
-  const [range, setRange] = useState<(typeof RANGES)[number]["key"]>("all");
-  const [style, setStyle] = useState<StyleKey>("dark");
-  const [lines, setLines] = useState(true);
+  const [range, setRange] = useState<(typeof RANGES)[number]["key"]>(defaults.range);
+  const [style, setStyle] = useState<StyleKey>(defaults.style);
+  const [lines, setLines] = useState(defaults.lines);
   // The time slider: null means "everything" (the end); a number is a position in the list of points.
   const [cursor, setCursor] = useState<number | null>(null);
   const [engaged, setEngaged] = useState(false);
@@ -41,16 +45,18 @@ export function LocationMap({ points, places }: { points: Pt[]; places: Place[] 
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(3);
   const [win, setWin] = useState<(typeof WINDOWS)[number]["key"]>("all");
 
-  // Remember the choices on this browser (a convenience only; it works without storage).
   useEffect(() => {
     try {
-      const st = window.localStorage.getItem("ls-map-style") as StyleKey | null;
-      if (st && st in STYLES) setStyle(st);
-      if (window.localStorage.getItem("ls-map-lines") === "0") setLines(false);
+      const saved = JSON.parse(window.localStorage.getItem("ls-map-prefs") ?? "null") as { style?: StyleKey; lines?: boolean; at?: number } | null;
+      if (saved?.at && saved.at > (defaultsAt ? Date.parse(defaultsAt) : 0)) {
+        if (saved.style && saved.style in STYLES) setStyle(saved.style);
+        if (typeof saved.lines === "boolean") setLines(saved.lines);
+      }
     } catch {}
-  }, []);
-  const choose = (st: StyleKey) => { setStyle(st); try { window.localStorage.setItem("ls-map-style", st); } catch {} };
-  const toggleLines = (on: boolean) => { setLines(on); try { window.localStorage.setItem("ls-map-lines", on ? "1" : "0"); } catch {} };
+  }, [defaultsAt]);
+  const remember = (st: StyleKey, ln: boolean) => { try { window.localStorage.setItem("ls-map-prefs", JSON.stringify({ style: st, lines: ln, at: Date.now() })); } catch {} };
+  const choose = (st: StyleKey) => { setStyle(st); remember(st, lines); };
+  const toggleLines = (on: boolean) => { setLines(on); remember(style, on); };
 
   const days = RANGES.find((r) => r.key === range)!.days;
   const shown = useMemo(() => (days ? points.filter((p) => Date.now() - Date.parse(p.t) <= days * 86_400_000) : points), [points, days]);

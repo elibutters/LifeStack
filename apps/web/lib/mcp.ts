@@ -15,6 +15,7 @@ import { loadActivities, totals } from "./activities";
 import { getEmail, loadAgenda, searchEmails } from "./email";
 import { addPlace, loadHistory } from "./location";
 import { getNote, kickSync, searchNotes } from "./notes";
+import { changeSetting, listSettings, resetSetting } from "./settings";
 import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
 
@@ -281,6 +282,46 @@ export function buildServer(token: VerifiedToken): McpServer {
         } catch (e) {
           console.error("mcp: get_note failed", describeError(e));
           return fail("The tool could not read the data.");
+        }
+      },
+    );
+  }
+
+  if (has("settings:read")) {
+    server.registerTool(
+      "get_settings",
+      { description: "The preferences that can be changed without a deploy: each with a description, its current value, its default and whether it was customised. Includes the mail sorting rules, the web map defaults and the iPhone app's trip mode tuning." },
+      guard(async () => ok(await listSettings())),
+    );
+  }
+
+  if (has("settings:write")) {
+    server.registerTool(
+      "set_setting",
+      {
+        description: "Change one preference (key and value from get_settings). The value is validated against that setting; an invalid one is refused. Changing email.rules re-sorts existing mail. Web changes show on the next page load and iPhone app changes the next time the app opens.",
+        inputSchema: { key: z.string(), value: z.unknown() },
+      },
+      async ({ key, value }) => {
+        try {
+          const r = await changeSetting(key, value);
+          return r.ok ? ok({ setting: r.view, effects: r.effects }) : fail(`Invalid: ${r.error}`);
+        } catch (e) {
+          console.error("mcp: set_setting failed", describeError(e));
+          return fail("The tool could not save that.");
+        }
+      },
+    );
+    server.registerTool(
+      "reset_setting",
+      { description: "Put one preference back to its built-in default.", inputSchema: { key: z.string() } },
+      async ({ key }) => {
+        try {
+          const r = await resetSetting(key);
+          return r.ok ? ok({ setting: r.view, effects: r.effects }) : fail(`Invalid: ${r.error}`);
+        } catch (e) {
+          console.error("mcp: reset_setting failed", describeError(e));
+          return fail("The tool could not save that.");
         }
       },
     );

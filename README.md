@@ -171,6 +171,15 @@ deletes pages that disappeared once it has read everything. Agents use the `sear
 apps use `GET /api/v1/notes` and `GET /api/v1/notes/{id}` (key scope `notes:read`, on agent keys, not on a phone key). The
 **Notes** page on the web searches the same copy.
 
+### Preferences (change behaviour without a deploy)
+
+A few things that used to be constants in code are preferences: extra mail sorting rules, the default map style, lines and range
+on the web Map page, and the iPhone app's trip mode tuning (distance between points, minutes still before it switches off, how far
+you must move before it starts). Agents read them with `get_settings` and change them with `set_setting` and `reset_setting` (key
+scopes `settings:read` and `settings:write`); apps use `GET`, `PUT` and `DELETE /api/v1/settings`. Every key and value is checked
+against `lib/settings-core.ts`. The web **Preferences** page shows them and can reset one. Web changes show on the next page load,
+and the iPhone app picks up its numbers each time it opens.
+
 ### Connect Eight Sleep
 
 Nightly sleep (score, stages, HRV, time in bed) is copied from an Eight Sleep account. Eight Sleep has no public developer API, so this uses the same private app login as Home Assistant. The pod is never controlled.

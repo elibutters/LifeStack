@@ -194,4 +194,13 @@ struct APIClient {
     func addPlace(label: String, lat: Double, lon: Double) async throws {
         _ = try await request("api/v1/places", method: "POST", body: try JSONSerialization.data(withJSONObject: ["label": label, "lat": lat, "lon": lon]))
     }
+
+    // The preferences the owner can change without a new app version, as plain values (numbers, text, true or false).
+    func settings() async throws -> [String: Any] {
+        let data = try await request("api/v1/settings")
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let list = root["settings"] as? [[String: Any]] else { throw APIError.server }
+        var out: [String: Any] = [:]
+        for item in list { if let key = item["key"] as? String, let value = item["value"] { out[key] = value } }
+        return out
+    }
 }

@@ -26,9 +26,11 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     private static let tripsKey = "location-trips"
     private static let tripActiveKey = "location-trip-active"
     private static let anchorId = "trip-anchor"
-    private static let exitRadius: CLLocationDistance = 120
+    // Tunable from the server (see AppConfig); these are the values used until the first fetch.
+    private static var exitRadius: CLLocationDistance { AppConfig.number("location.tripExitRadiusM", fallback: 120) }
+    private static var stillAfter: TimeInterval { AppConfig.number("location.tripStillMinutes", fallback: 4) * 60 }
+    private static var tripDistance: CLLocationDistance { AppConfig.number("location.tripDistanceM", fallback: 30) }
     private static let stillRadius: CLLocationDistance = 40
-    private static let stillAfter: TimeInterval = 240
     private static let maxTrip: TimeInterval = 6 * 3600
     private static let batchSize = 20
     var enabled: Bool { didSet { UserDefaults.standard.set(enabled, forKey: Self.enabledKey); enabled ? begin() : end() } }
@@ -148,7 +150,7 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         rest = nil
         UserDefaults.standard.set(true, forKey: Self.tripActiveKey)
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-        manager.distanceFilter = 30
+        manager.distanceFilter = Self.tripDistance
         manager.activityType = .otherNavigation
         manager.pausesLocationUpdatesAutomatically = false
         manager.allowsBackgroundLocationUpdates = true

@@ -4,6 +4,8 @@ import { LocationMap } from "@/components/location-map";
 import { PageHeader } from "@/components/page-header";
 import { requireSession } from "@/lib/auth";
 import { loadMapData } from "@/lib/location";
+import { listSettings } from "@/lib/settings";
+import { valueOf } from "@/lib/settings-core";
 
 export const metadata: Metadata = { title: "Map" };
 export const dynamic = "force-dynamic";
@@ -14,6 +16,9 @@ const dur = (m: number | null) => (m == null ? "" : m < 60 ? `${m} min` : `${Mat
 export default async function MapPage() {
   await requireSession();
   const data = await loadMapData().catch(() => null);
+  const prefs = await listSettings().catch(() => null);
+  const defaults = { style: prefs ? valueOf(prefs, "map.style") : "dark", lines: prefs ? valueOf(prefs, "map.lines") : true, range: prefs ? valueOf(prefs, "map.range") : "all" } as const;
+  const defaultsAt = prefs?.filter((p) => p.key.startsWith("map.") && p.updatedAt).map((p) => p.updatedAt!).sort().at(-1) ?? null;
   if (!data) return <p className="text-danger">Couldn&apos;t load your locations. Try again shortly.</p>;
   return (
     <>
@@ -22,7 +27,7 @@ export default async function MapPage() {
       </PageHeader>
       <div className="max-w-4xl space-y-4">
         <Card title="Where you have been">
-          {data.points.length ? <LocationMap points={data.points} places={data.places} /> : <p className="py-4 text-sm text-muted">No location points yet. Turn on Record places and trips in the iPhone app&apos;s Account screen.</p>}
+          {data.points.length ? <LocationMap points={data.points} places={data.places} defaults={defaults} defaultsAt={defaultsAt} /> : <p className="py-4 text-sm text-muted">No location points yet. Turn on Record places and trips in the iPhone app&apos;s Account screen.</p>}
         </Card>
         <Card title="Stays, last 30 days">
           {data.stays.length ? (
