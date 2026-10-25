@@ -22,7 +22,7 @@ const para = (id: string, t: string) => blk(id, "paragraph", { paragraph: { rich
 const rich = (type: string, id: string, t: string, extra: Record<string, unknown> = {}) => blk(id, type, { [type]: { rich_text: rt(t), ...extra } });
 const childPage = (id: string, title: string) => blk(id, "child_page", { child_page: { title } });
 
-type Pg = { id: string; title: string; trashed?: boolean; parent?: unknown };
+type Pg = { id: string; title: string; trashed?: boolean; parent?: unknown; edited?: string; created?: string };
 const pages = new Map<string, Pg>(); const kids = new Map<string, unknown[]>();
 let searchPages: string[] = []; let searchDs: string[] = []; const dsRows = new Map<string, string[]>(); const dbSources = new Map<string, string[]>();
 function build() {
@@ -40,12 +40,13 @@ function build() {
   add(u(2), "Child B", [para(u(215), "bee")], { parent: { type: "page_id", page_id: u(1) } });
   add(u(3), "Hidden in toggle", [para(u(216), "found via container")]);
   for (let n = 0; n <= 7; n++) add(u(10 + n), `Level ${n}`, [para(u(300 + n), `level ${n}`), ...(n < 7 ? [childPage(u(11 + n), `Level ${n + 1}`)] : [])]);
-  add(u(20), "Big", [para(u(217), "x".repeat(7000))]);
+  add(u(20), "Big", [para(u(217), "x".repeat(7000))], { edited: "2026-10-25T18:10:00.000Z", created: "2025-03-16T21:53:00.000Z" }); // shared today: Notion bumped its edit time
+  add(u(22), "Empty and shared today", [], { edited: "2026-10-25T18:10:00.000Z", created: "2025-03-16T21:53:00.000Z" });
   add(u(21), "Gone", [para(u(218), "gone")], { trashed: true });
   add(u(30), "Row one", [para(u(219), "row body")], { parent: { type: "data_source_id", data_source_id: u(60), database_id: u(50) } });
   add(u(31), "Row two", [para(u(220), "row two")], { trashed: true });
   dbSources.set(u(50), [u(60)]); dsRows.set(u(60), [u(30), u(31)]);
-  searchPages = [u(1), u(10), u(20), u(21)]; searchDs = [u(60)];
+  searchPages = [u(1), u(10), u(20), u(21), u(22)]; searchDs = [u(60)];
 }
 
 // ---------------------------------------------------------------- mock Notion
@@ -54,7 +55,7 @@ const calls: Call[] = [];
 let access = "at-0", refresh = "rt-0", refreshCount = 0, rotation = 0;
 let refreshMode: "ok" | "invalid" = "ok"; let alwaysUnauthorized = false; let onRefresh: (() => Promise<void>) | null = null;
 let rateLimit: { remaining: number; retryAfter: string } | null = null; const SEARCH_PAGE = 2;
-const pageObj = (p: Pg) => ({ object: "page", id: p.id, in_trash: !!p.trashed, url: `https://www.notion.so/${p.id.replace(/-/g, "")}`, last_edited_time: "2026-10-01T10:00:00.000Z", parent: p.parent ?? { type: "workspace", workspace: true }, properties: { Name: { type: "title", title: rt(p.title) } } });
+const pageObj = (p: Pg) => ({ object: "page", id: p.id, in_trash: !!p.trashed, url: `https://www.notion.so/${p.id.replace(/-/g, "")}`, last_edited_time: p.edited ?? "2026-10-01T10:00:00.000Z", created_time: p.created ?? "2026-09-01T10:00:00.000Z", parent: p.parent ?? { type: "workspace", workspace: true }, properties: { Name: { type: "title", title: rt(p.title) } } });
 const paged = (all: unknown[], cursor: string | null, size: number) => { const off = Number(cursor ?? 0); const part = all.slice(off, off + size); return { results: part, has_more: off + size < all.length, next_cursor: off + size < all.length ? String(off + size) : null }; };
 globalThis.fetch = (async (input: any, init: any = {}) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url; const u2 = new URL(url);
@@ -122,6 +123,15 @@ assert.equal(core.noteRow(u(1), { title: "T", edited: null, parent: null }, "b",
 const refs = core.childRefs([childPage(u(2), "Child B"), blk(u(50), "child_database", { child_database: { title: "Tasks" } }), para(u(9), "x"), childPage("not-a-uuid", "bad")]);
 assert.deepEqual([refs.pages.map((p) => p.id), refs.databases.map((d) => d.id)], [[u(2)], [u(50)]]);
 assert.deepEqual(core.containerIds([blk(u(100), "toggle", {}, true), blk(u(101), "toggle", {}, false), blk(u(102), "paragraph", {}, true), blk(u(103), "column_list", {}, true)]), [u(100), u(103)]);
+{
+  const b = (t: string, type = "paragraph") => ({ id: u(1), type, last_edited_time: t });
+  assert.equal(core.effectiveEdited("2026-10-25T18:10:00Z", "2025-01-01T00:00:00Z", [b("2026-03-03T00:00:00Z"), b("2026-02-02T00:00:00Z")]), "2026-03-03T00:00:00.000Z", "newest content edit, not the share-time bump");
+  assert.equal(core.effectiveEdited("2026-03-04T00:00:00Z", null, [b("2026-03-05T00:00:00Z")]), "2026-03-04T00:00:00.000Z", "never later than the page's own time");
+  assert.equal(core.effectiveEdited("2026-10-25T18:10:00Z", "2025-01-01T00:00:00Z", []), "2025-01-01T00:00:00.000Z", "no content: when it was created");
+  assert.equal(core.effectiveEdited("2026-10-25T18:10:00Z", "2025-01-01T00:00:00Z", [b("2026-10-25T18:10:00Z", "child_page")]), "2025-01-01T00:00:00.000Z", "child pages' blocks are not this page's content");
+  assert.equal(core.effectiveEdited("2026-10-25T18:10:00Z", null, []), "2026-10-25T18:10:00Z", "nothing better known: the page's own time");
+  assert.equal(core.effectiveEdited(null, null, [b("2026-03-03T00:00:00Z")]), "2026-03-03T00:00:00.000Z");
+}
 assert.equal(core.snippetAround("a ".repeat(300) + "needle here", "NEEDLE", 60).includes("needle"), true);
 assert.equal(core.snippetAround("short text", undefined), "short text");
 assert.deepEqual(core.readCursor("not json"), { gen: 0, active: false, queue: [], count: 0 });
@@ -145,10 +155,18 @@ const conn0 = (await db().select().from(connections))[0]!;
 assert.ok(!conn0.refreshTokenEnc.includes("at-0") && !conn0.refreshTokenEnc.includes("rt-0"), "tokens are stored encrypted");
 assert.deepEqual(JSON.parse(decrypt(conn0.refreshTokenEnc)), { access: "at-0", refresh: "rt-0" }); assert.equal(conn0.account, "Synthetic Space");
 
+// ---------------------------------------------------------------- a machine without Notion credentials must not touch the connection
+{
+  const id = process.env.NOTION_CLIENT_ID; delete process.env.NOTION_CLIENT_ID; access = "at-server-new"; calls.length = 0;
+  assert.equal(await sync.syncNotion(noSleep), null, "no credentials: no sync"); await sync.syncNotionIfStale();
+  assert.equal(calls.length, 0, "and no requests at all"); assert.equal((await sync.getSyncState())?.lastError ?? null, null, "the connection is not marked expired");
+  process.env.NOTION_CLIENT_ID = id; access = "at-0";
+}
+
 // ---------------------------------------------------------------- a full walk
 let r = await sync.syncNotion(noSleep);
-assert.deepEqual(r, { pages: 11, done: true });
-const want = [u(1), u(2), u(3), ...[0, 1, 2, 3, 4, 5].map((n) => u(10 + n)), u(20), u(30)].map((x) => `page:${x}`).sort();
+assert.deepEqual(r, { pages: 12, done: true });
+const want = [u(1), u(2), u(3), ...[0, 1, 2, 3, 4, 5].map((n) => u(10 + n)), u(20), u(22), u(30)].map((x) => `page:${x}`).sort();
 assert.deepEqual((await stored()).map((n) => n.sourceId), want, "shared pages, child pages, pages in toggles, rows and a chain to depth 5; no trash, no depth 6");
 assert.equal(await byId(21), undefined, "a trashed page is not stored"); assert.equal(await byId(31), undefined, "a trashed database row is not stored"); assert.equal(await byId(16), undefined, "depth stops at 5");
 const alpha = (await byId(1))!;
@@ -156,6 +174,9 @@ assert.equal(alpha.title, "Project Alpha"); assert.equal(alpha.url, `https://www
 assert.ok(alpha.bodyText.includes("# ") === false && alpha.bodyText.startsWith("Plan\nFirst paragraph\n- milk\n- eggs\n1. one\n2. two\n[ ] call\n[x] email\n> wise words\nheads up\nlet x = 1\nMore\ninside toggle"), alpha.bodyText);
 assert.ok(!/files\.example|secret\.png|doc\.pdf/.test(alpha.bodyText), "files and media are omitted");
 assert.equal((await byId(20))!.bodyText.length, 6000, "bodies are capped at 6,000 characters");
+assert.equal((await byId(20))!.editedAt?.toISOString(), "2026-10-02T10:00:00.000Z", "a page Notion marked edited when it was shared counts as edited when its content did");
+assert.equal((await byId(22))!.editedAt?.toISOString(), "2025-03-16T21:53:00.000Z", "an empty page falls back to when it was created");
+assert.equal((await byId(1))!.editedAt?.toISOString(), "2026-10-01T10:00:00.000Z", "a normal page keeps its own edit time when content is not newer");
 assert.equal((await byId(2))!.parentId, `page:${u(1)}`); assert.equal((await byId(30))!.parentId, `data_source:${u(60)}`);
 assert.equal((await byId(3))!.bodyText, "found via container", "a page inside a toggle is found by walking");
 const st = await sync.getSyncState(); assert.ok(st!.lastOkAt && st!.lastError === null && st!.leaseUntil === null, "finished, no error, lease released");

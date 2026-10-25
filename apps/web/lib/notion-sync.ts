@@ -4,9 +4,9 @@ import { connections, notes, syncState } from "@lifestack/db";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./db";
 import { describeError } from "./errors";
-import { NOTION_API, NotionError, refreshTokens } from "./notion";
+import { NOTION_API, notionConfigured, NotionError, refreshTokens } from "./notion";
 import {
-  blocksToText, childRefs, containerIds, freshWalk, isTrashed, MAX_DEPTH, MAX_PAGES, metaOfPage, NOTION_VERSION, noteRow, pageSourceId, parseStored,
+  blocksToText, childRefs, containerIds, effectiveEdited, freshWalk, isTrashed, MAX_DEPTH, MAX_PAGES, metaOfPage, NOTION_VERSION, noteRow, pageSourceId, parseStored,
   readCursor, validId, type Block, type Item, type NoteRow, type PageMeta, type StoredTokensT, type WalkCursor,
 } from "./notion-core";
 
@@ -145,6 +145,9 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
   const o: Required<RunOptions> = { maxRequests: opts.maxRequests ?? MAX_REQUESTS, budgetMs: opts.budgetMs ?? BUDGET_MS, maxPages: opts.maxPages ?? MAX_PAGES, sleep: opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))) };
   const conn = await getConnection();
   if (!conn) return null;
+  // A machine without the app's Notion credentials (a local dev server sharing the database) cannot refresh tokens, and must never
+  // mark the connection expired for everyone because of that.
+  if (!notionConfigured()) return null;
   if (!(await claimLease())) return { skipped: true };
   let cur: WalkCursor = readCursor(null);
   try {
@@ -216,11 +219,11 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
       const nested: Block[] = [];
       for (const bid of containerIds(top).slice(0, 2)) nested.push(...(await children(bid, 1)));
       const all = [...top, ...nested];
-      await writeNote(noteRow(id, meta, blocksToText(all), cur.gen));
+      await writeNote(noteRow(id, { ...meta, edited: effectiveEdited(meta.edited, meta.created, all) }, blocksToText(all), cur.gen));
       cur.count++;
       pages++;
       const refs = childRefs(all);
-      for (const p of refs.pages) enqueue({ k: "page", id: p.id, depth: item.depth + 1, meta: { title: p.title, edited: p.edited, parent: `page:${id}` } });
+      for (const p of refs.pages) enqueue({ k: "page", id: p.id, depth: item.depth + 1, meta: { title: p.title, edited: p.edited, created: p.created, parent: `page:${id}` } });
       for (const d of refs.databases) enqueue({ k: "db", id: d.id, depth: item.depth + 1 });
     };
 
@@ -310,7 +313,7 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
 // Called before reads and after pages render, so using the app keeps notes fresh without delaying it.
 export async function syncNotionIfStale() {
   try {
-    if (!(await getConnection())) return;
+    if (!(await getConnection()) || !notionConfigured()) return;
     const state = await getSyncState();
     if (state?.lastError === EXPIRED) return; // needs the owner to reconnect; retrying cannot help
     const cur = readCursor(state?.cursor);

@@ -74,7 +74,7 @@ export function blocksToText(blocks: Block[]): string {
 
 export const capText = (s: string, n = BODY_CAP) => (s.length > n ? s.slice(0, n) : s);
 
-export type ChildPage = { id: string; title: string; edited: string | null };
+export type ChildPage = { id: string; title: string; edited: string | null; created: string | null };
 export type ChildRefs = { pages: ChildPage[]; databases: { id: string; title: string }[] };
 
 // Pages and databases that live inside a page, found from its child_page and child_database blocks.
@@ -83,7 +83,7 @@ export function childRefs(blocks: Block[]): ChildRefs {
   for (const b of blocks) {
     const id = uuid(b.id);
     if (!id) continue;
-    if (b.type === "child_page") out.pages.push({ id, title: richText([{ plain_text: rec(b.child_page).title }]).trim() || "Untitled", edited: typeof b.last_edited_time === "string" ? b.last_edited_time : null });
+    if (b.type === "child_page") out.pages.push({ id, title: richText([{ plain_text: rec(b.child_page).title }]).trim() || "Untitled", edited: typeof b.last_edited_time === "string" ? b.last_edited_time : null, created: typeof b.created_time === "string" ? b.created_time : null });
     else if (b.type === "child_database") out.databases.push({ id, title: String(rec(b.child_database).title ?? "Untitled") });
   }
   return out;
@@ -94,11 +94,25 @@ const CONTAINERS = new Set(["column_list", "column", "toggle"]);
 export const containerIds = (blocks: Block[]): string[] => blocks.filter((b) => b.has_children === true && CONTAINERS.has(b.type ?? "")).map((b) => uuid(b.id)).filter((x): x is string => !!x);
 
 export type NoteRow = { sourceId: string; title: string; url: string; editedAt: Date | null; parentId: string | null; bodyText: string; generation: number };
-export type PageMeta = { title: string; edited: string | null; parent: string | null; url?: string };
+export type PageMeta = { title: string; edited: string | null; created?: string | null; parent: string | null; url?: string };
 
 export function metaOfPage(page: unknown): PageMeta {
   const p = rec(page);
-  return { title: pageTitle(page), edited: typeof p.last_edited_time === "string" ? p.last_edited_time : null, parent: parentRef(p.parent), url: typeof p.url === "string" ? p.url : undefined };
+  return { title: pageTitle(page), edited: typeof p.last_edited_time === "string" ? p.last_edited_time : null, created: typeof p.created_time === "string" ? p.created_time : null, parent: parentRef(p.parent), url: typeof p.url === "string" ? p.url : undefined };
+}
+
+const ms = (iso: string | null | undefined) => { const t = iso ? Date.parse(iso) : NaN; return Number.isNaN(t) ? null : t; };
+
+// When the page's own text last changed. Notion marks a page as edited when it is shared with an integration, so on its own the
+// page's last_edited_time says "just now" for everything shared at once. The content blocks keep their real times, so the page
+// counts as edited when its content did (blocks of other pages, like child pages, are left out), or when it was created if it has none.
+export function effectiveEdited(pageEdited: string | null, created: string | null | undefined, blocks: Block[]): string | null {
+  const content = blocks.filter((b) => b.type !== "child_page" && b.type !== "child_database").map((b) => ms(b.last_edited_time)).filter((t): t is number => t !== null);
+  const contentTime = content.length ? Math.max(...content) : ms(created);
+  const page = ms(pageEdited);
+  if (contentTime === null) return pageEdited;
+  if (page === null) return new Date(contentTime).toISOString();
+  return new Date(Math.min(page, contentTime)).toISOString();
 }
 
 export function noteRow(id: string, meta: PageMeta, body: string, generation: number): NoteRow {
@@ -127,7 +141,7 @@ const ItemSchema = z.union([
   z.object({ k: z.literal("search"), filter: z.enum(["page", "data_source"]), cursor: z.string().optional() }),
   z.object({ k: z.literal("ds"), id: z.string(), depth: z.number(), cursor: z.string().optional() }),
   z.object({ k: z.literal("db"), id: z.string(), depth: z.number() }),
-  z.object({ k: z.literal("page"), id: z.string(), depth: z.number(), meta: z.object({ title: z.string(), edited: z.string().nullable(), parent: z.string().nullable(), url: z.string().optional() }).optional() }),
+  z.object({ k: z.literal("page"), id: z.string(), depth: z.number(), meta: z.object({ title: z.string(), edited: z.string().nullable(), created: z.string().nullable().optional(), parent: z.string().nullable(), url: z.string().optional() }).optional() }),
 ]);
 const CursorSchema = z.object({ gen: z.number().int().min(0), active: z.boolean(), queue: z.array(ItemSchema), count: z.number().int().min(0), tried: z.string().optional() });
 
