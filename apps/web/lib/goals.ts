@@ -157,6 +157,7 @@ export async function findFreeTime(o: { from: Date; to: Date; minMin?: number; n
 }
 
 // ---- proposing a plan (changes nothing)
+const Clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/); // HH:MM, local time
 const Spec = z.object({
   kind: z.enum(["prep", "progress", "train", "custom"]),
   title: z.string().trim().min(1).max(120),
@@ -165,13 +166,15 @@ const Spec = z.object({
   everyDays: z.number().int().min(1).max(30).optional(),
   durationMin: z.number().int().min(10).max(480).optional(),
   taperLast: z.number().int().min(0).max(5).optional(),
+  start: Clock.optional(),
   weekdays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   weeks: z.number().int().min(1).max(40).optional(),
-  template: z.array(z.object({ weekday: z.number().int().min(0).max(6), durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120) })).max(14).optional(),
-  sessions: z.array(z.object({ day: Day, durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), flexDays: z.number().int().min(0).max(7).optional() })).max(120).optional(),
+  template: z.array(z.object({ weekday: z.number().int().min(0).max(6), durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), start: Clock.optional() })).max(14).optional(),
+  sessions: z.array(z.object({ day: Day, durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), flexDays: z.number().int().min(0).max(7).optional(), start: Clock.optional() })).max(120).optional(),
   flexDays: z.number().int().min(0).max(7).optional(),
 });
 export type PlanSpec = z.input<typeof Spec>;
+const toMin = (hhmm?: string) => (hhmm ? Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3)) : undefined);
 
 export function desiredFrom(spec: z.infer<typeof Spec>, today: string): { desired: eng.Desired[] } | { error: string } {
   const from = spec.fromDay ?? today;
@@ -180,18 +183,18 @@ export function desiredFrom(spec: z.infer<typeof Spec>, today: string): { desire
   switch (spec.kind) {
     case "prep":
       if (!target) return { error: "A prep plan needs targetDay (the date it counts back from)." };
-      return { desired: eng.cadence({ fromDay: from, targetDay: target, everyDays: spec.everyDays ?? 2, durationMin: dur, title: spec.title, taperLast: spec.taperLast ?? 0, flexDays: spec.flexDays }) };
+      return { desired: eng.cadence({ fromDay: from, targetDay: target, everyDays: spec.everyDays ?? 2, durationMin: dur, title: spec.title, taperLast: spec.taperLast ?? 0, flexDays: spec.flexDays, startMin: toMin(spec.start) }) };
     case "progress":
       if (!target) return { error: "A progress plan needs targetDay (the deadline)." };
-      return { desired: eng.daily({ fromDay: from, toDay: target, durationMin: dur, title: spec.title, weekdays: spec.weekdays, flexDays: spec.flexDays }) };
+      return { desired: eng.daily({ fromDay: from, toDay: target, durationMin: dur, title: spec.title, weekdays: spec.weekdays, flexDays: spec.flexDays, startMin: toMin(spec.start) }) };
     case "train": {
       if (!target || !spec.template?.length) return { error: "A training plan needs targetDay (race day) and a weekly template of {weekday, durationMin, title}." };
       const weeks = spec.weeks ?? Math.max(1, Math.ceil((eng.daysBetween(from, target) + 1) / 7));
-      return { desired: eng.weeklyPlan({ fromDay: from, toDay: eng.addDay(target, -1), template: spec.template, multipliers: eng.trainingMultipliers(weeks), flexDays: spec.flexDays }) };
+      return { desired: eng.weeklyPlan({ fromDay: from, toDay: eng.addDay(target, -1), template: spec.template.map((t) => ({ weekday: t.weekday, durationMin: t.durationMin, title: t.title, startMin: toMin(t.start) })), multipliers: eng.trainingMultipliers(weeks), flexDays: spec.flexDays }) };
     }
     default:
       if (!spec.sessions?.length) return { error: "A custom plan needs sessions: a list of {day, durationMin, title}." };
-      return { desired: spec.sessions.map((s) => ({ ...s, flexDays: s.flexDays ?? spec.flexDays ?? 1 })) };
+      return { desired: spec.sessions.map((s) => ({ day: s.day, durationMin: s.durationMin, title: s.title, flexDays: s.flexDays ?? spec.flexDays ?? 1, startMin: toMin(s.start) ?? toMin(spec.start) })) };
   }
 }
 
