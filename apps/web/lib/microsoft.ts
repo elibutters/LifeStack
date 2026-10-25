@@ -9,7 +9,10 @@ export const GRAPH = "https://graph.microsoft.com/v1.0";
 // the owner has re-linked Outlook to allow mail.
 export const CALENDAR_SCOPES = "offline_access Calendars.Read User.Read";
 export const MAIL_SCOPES = "offline_access Calendars.Read Mail.Read User.Read";
-const SCOPES = MAIL_SCOPES;
+// Adding goal sessions to the calendar needs write access. Everything that only reads keeps asking for the narrower sets above, so a
+// connection made before the owner approved writing still syncs.
+export const WRITE_SCOPES = "offline_access Calendars.ReadWrite Mail.Read User.Read";
+const SCOPES = WRITE_SCOPES;
 
 export const OAUTH_COOKIE = "ls_oauth";
 export const OAUTH_COOKIE_PATH = "/api/connections/outlook";
@@ -85,4 +88,24 @@ export async function graphGet(url: string, accessToken: string, extraPrefer?: s
   });
   if (!res.ok) throw new Error(`graph request failed: ${res.status}`);
   return res.json();
+}
+
+export class GraphError extends Error {
+  constructor(public status: number) {
+    super(`graph request failed: ${status}`);
+  }
+}
+
+// Create, change or delete something in Graph. Only ever sends the access token to Microsoft Graph. Ids come back in the same
+// immutable form the calendar sync stores, so a created event can be matched to its synced copy.
+export async function graphSend(method: "POST" | "PATCH" | "DELETE", url: string, accessToken: string, body?: unknown): Promise<unknown> {
+  if (new URL(url).origin !== "https://graph.microsoft.com") throw new Error("refusing non-Graph URL");
+  const res = await fetch(url, {
+    method,
+    headers: { authorization: `Bearer ${accessToken}`, prefer: 'outlook.timezone="UTC", IdType="ImmutableId"', ...(body ? { "content-type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+  if (!res.ok) throw new GraphError(res.status);
+  return res.status === 204 ? null : res.json();
 }
