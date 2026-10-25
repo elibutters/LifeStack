@@ -176,8 +176,8 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
         ) : (
           <>
             <p className="text-sm text-muted">
-              Link a personal Outlook account (outlook.com, hotmail.com or live.com). The app only reads your calendar and mail; it can never change
-              either.
+              Link a personal Outlook account (outlook.com, hotmail.com or live.com). The app reads your calendar and mail. It only adds events for goals you approve, tagged "Life Stack", and never changes
+              or deletes anything else.
             </p>
             {!microsoftConfigured() && <p className="text-sm text-danger">{MESSAGES.not_configured}</p>}
           </>

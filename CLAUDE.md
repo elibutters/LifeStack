@@ -37,7 +37,10 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   `source_id` is unique per source across all kinds, so snapshots are prefixed (`bal:`, `liab:`,
   `hold:`, `inv:`). The Plaid webhook is a public path and must verify Plaid's signature.
 - Third-party tokens are stored only encrypted (`lib/crypto.ts`, key in `ENCRYPTION_KEY`).
-  Outlook is linked through Microsoft Graph for personal accounts only, with read-only scopes (calendar and mail).
+  Outlook is linked through Microsoft Graph for personal accounts only. Mail is read-only. The calendar is read-write so goal
+  sessions can be added (`lib/outlook-write.ts`): only events Life Stack created itself, always in the "Life Stack" category and
+  created idempotently, are ever changed or deleted. Anything that only reads asks for the narrower scopes, so an older
+  connection keeps syncing until the owner reconnects to approve writing.
   Mail is copied into the `emails` table (plain text, capped, classified by `lib/email-core.ts`) so agents have context;
   the owner chose this. It is read through `email:read` (agent keys; a phone key only if the owner ticks it on the keys page) and is never backed up.
   Work or employer calendars are never connected.
