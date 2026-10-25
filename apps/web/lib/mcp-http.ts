@@ -1,6 +1,7 @@
 import "server-only";
 import type { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { buildServer } from "./mcp";
+import { recordAfter } from "./mcp-usage";
 import { verifyBearer } from "./tokens";
 
 // /api/v1/ skips the session gate in proxy.ts, so this authenticates itself and fails closed.
@@ -17,11 +18,16 @@ export async function handleMcp(req: Request, Transport: typeof WebStandardStrea
   const text = await req.text();
   if (text.length > MAX_BODY) return json({ error: "too_large" }, 413);
 
+  const started = Date.now();
   const server = buildServer(auth.token);
   const transport = new Transport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   try {
-    return await transport.handleRequest(new Request(req.url, { method: "POST", headers: req.headers, body: text }));
+    const res = await transport.handleRequest(new Request(req.url, { method: "POST", headers: req.headers, body: text }));
+    let body: unknown = null;
+    try { body = JSON.parse(text); } catch { /* not JSON: nothing to record */ }
+    recordAfter(body, res, auth.token.id, started);
+    return res;
   } finally {
     await server.close();
   }

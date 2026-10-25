@@ -1,7 +1,7 @@
 import "server-only";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { EventInput, type Scope } from "./capture-core";
+import { AGENT_SCOPES, EventInput, type Scope } from "./capture-core";
 import { insertLog, loadToday } from "./capture";
 import { loadOverview, loadWeekSummary } from "./overview";
 import { calendarItems } from "./calendar";
@@ -582,4 +582,10 @@ export function buildServer(token: VerifiedToken): McpServer {
   }
 
   return server;
+}
+
+// Every tool the server can offer, for the usage page to show which ones never get called.
+export function offeredTools(): string[] {
+  const s = buildServer({ id: 0, kind: "agent", scopes: [...AGENT_SCOPES], userId: null });
+  return Object.keys((s as unknown as { _registeredTools?: Record<string, unknown> })._registeredTools ?? {}).sort();
 }
