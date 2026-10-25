@@ -29,29 +29,21 @@ struct LogMoodIntent: AppIntent {
     }
 }
 
-// A supplement is taken or not: logging one that is already taken today changes nothing, so a double tap is harmless.
-struct TakeSupplementIntent: AppIntent {
-    static var title: LocalizedStringResource = "Take a supplement"
-    @Parameter(title: "Supplement") var name: String
-
-    init() {}
-    init(name: String) { self.name = name }
-
-    func perform() async throws -> some IntentResult {
-        _ = try await WidgetData.client?.log(["type": "supplement", "name": name])
-        WidgetCenter.shared.reloadAllTimelines()
-        return .result()
-    }
-}
-
-struct TakeAllSupplementsIntent: AppIntent {
-    static var title: LocalizedStringResource = "Take all supplements"
+// One button for the whole stack. If everything on the list is already taken today it undoes today's supplements; otherwise it takes
+// whatever is missing. Anything more particular (one supplement, an odd mix) is done in the app.
+struct ToggleSupplementsIntent: AppIntent {
+    static var title: LocalizedStringResource = "Take or undo all supplements"
 
     func perform() async throws -> some IntentResult {
         guard let client = WidgetData.client else { return .result() }
         let all = try await client.options().supplements.map(\.name)
         let taken = Set(try await client.today().supplements.filter { $0.count > 0 }.map { $0.name.lowercased() })
-        for name in all where !taken.contains(name.lowercased()) { _ = try await client.log(["type": "supplement", "name": name]) }
+        let missing = all.filter { !taken.contains($0.lowercased()) }
+        if missing.isEmpty && !all.isEmpty {
+            for entry in try await client.history(limit: 100) where entry.key == "supplement.taken" && Format.isToday(entry.at) { try await client.deleteEntry(entry.id) }
+        } else {
+            for name in missing { _ = try await client.log(["type": "supplement", "name": name]) }
+        }
         WidgetCenter.shared.reloadAllTimelines()
         return .result()
     }
