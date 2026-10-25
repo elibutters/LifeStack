@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
-import { CalendarIcon, FinanceIcon, LogIcon, OverviewIcon, SleepIcon, MapIcon, NotesIcon, PreferencesIcon, WantsIcon, WorkoutsIcon } from "./icons";
+import { CalendarIcon, FinanceIcon, LogIcon, OverviewIcon, SleepIcon, GoalsIcon, MapIcon, NotesIcon, PreferencesIcon, WantsIcon, WorkoutsIcon } from "./icons";
 
 type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>>; desktopOnly?: boolean };
 
@@ -16,6 +16,7 @@ const NAV: Item[] = [
   { href: "/finance", label: "Finance", Icon: FinanceIcon },
   { href: "/log", label: "Log", Icon: LogIcon },
   { href: "/wants", label: "Wants", Icon: WantsIcon },
+  { href: "/goals", label: "Goals", Icon: GoalsIcon, desktopOnly: true },
   { href: "/map", label: "Map", Icon: MapIcon, desktopOnly: true }, // the phone bar is full
   { href: "/notes", label: "Notes", Icon: NotesIcon, desktopOnly: true },
   { href: "/preferences", label: "Preferences", Icon: PreferencesIcon, desktopOnly: true },

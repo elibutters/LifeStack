@@ -92,6 +92,14 @@ export const PreferencesIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const GoalsIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="4.5" />
+    <circle cx="12" cy="12" r="1" />
+  </Icon>
+);
+
 export const UserIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <circle cx="12" cy="8" r="3.25" />
