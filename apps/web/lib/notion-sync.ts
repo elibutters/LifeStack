@@ -111,7 +111,7 @@ class Session {
     this.enc = enc;
   }
 
-  async call(method: "GET" | "POST", path: string, body?: unknown, query: Record<string, string> = {}): Promise<unknown> {
+  async call(method: "GET" | "POST" | "PATCH", path: string, body?: unknown, query: Record<string, string> = {}): Promise<unknown> {
     const url = new URL(`${NOTION_API}${path}`);
     for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
     if (url.origin !== NOTION_API) throw new Error("refusing non-Notion URL");
@@ -324,4 +324,34 @@ export async function syncNotionIfStale() {
   } catch {
     // Recorded in sync_state; the Connections page shows it.
   }
+}
+
+export type NotionWrite<T> = { ok: true; value: T } | { ok: false; reason: "not_connected" | "expired" | "needs_write" | "not_found" | "failed" };
+
+// Runs a few Notion calls (reads or writes) outside a sync, with the same careful token handling: reuse the access token, refresh once
+// on a 401 and store the new pair by compare-and-swap. A refused write means the integration was not given the Insert and Update
+// content abilities (or the page was never shared with it), which is reported plainly so the owner knows what to switch on.
+export async function withNotion<T>(fn: (call: Session["call"]) => Promise<T>, opts: RunOptions = {}): Promise<NotionWrite<T>> {
+  if (!notionConfigured()) return { ok: false, reason: "not_connected" };
+  const o: Required<RunOptions> = { maxRequests: opts.maxRequests ?? 12, budgetMs: opts.budgetMs ?? 20_000, maxPages: 0, sleep: opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))) };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const conn = await getConnection();
+    if (!conn) return { ok: false, reason: "not_connected" };
+    const stored = parseStored(decrypt(conn.refreshTokenEnc));
+    if (!stored) return { ok: false, reason: "expired" };
+    const api = new Session(stored, conn.refreshTokenEnc, o);
+    try {
+      return { ok: true, value: await fn((m, p, b, q) => api.call(m, p, b, q)) };
+    } catch (e) {
+      if (e instanceof ConnectionChanged && attempt === 0) continue; // a sync rotated the tokens just now: read them again once
+      if (e instanceof NotionError) {
+        if (e.invalidGrant || e.status === 401) return { ok: false, reason: "expired" };
+        if (e.status === 403) return { ok: false, reason: "needs_write" };
+        if (e.status === 404) return { ok: false, reason: "not_found" };
+      }
+      console.error("notion: write failed", describeError(e));
+      return { ok: false, reason: "failed" };
+    }
+  }
+  return { ok: false, reason: "failed" };
 }

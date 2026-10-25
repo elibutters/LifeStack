@@ -31,6 +31,11 @@ export const SETTINGS = {
     schema: GoalSchedule,
     default: { weekday: [["18:00", "22:30"]], weekend: [["09:00", "21:00"]], maxPerDay: 2, bufferMin: 15, preferredStart: "19:00", latestEnd: "22:30" } as GoalScheduleT,
   },
+  "goals.notionParent": {
+    description: 'The Notion page that goal notebooks are created under, as its page id (a UUID). Leave it empty to use the page titled "Goals" (shared with Life Stack) that has been copied from your Notion.',
+    schema: z.union([z.literal(""), z.string().regex(/^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i)]),
+    default: "" as string,
+  },
   "map.style": { description: "Default map background on the web Map page: dark, light, streets, satellite or none (points only).", schema: z.enum(["dark", "light", "streets", "satellite", "none"]), default: "dark" as const },
   "map.lines": { description: "Whether the web Map page draws a line joining the points by default.", schema: z.boolean(), default: true },
   "map.range": { description: "Default time range on the web Map page: 7 (days), 30 (days) or all.", schema: z.enum(["7", "30", "all"]), default: "all" as const },

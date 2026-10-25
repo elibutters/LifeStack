@@ -16,6 +16,8 @@ import { getEmail, loadAgenda, searchEmails } from "./email";
 import { addPlace, loadHistory } from "./location";
 import { getNote, kickSync, searchNotes } from "./notes";
 import { changeSetting, listSettings, resetSetting } from "./settings";
+import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
+import { logBlocks } from "./goals-notion-core";
 import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, pushToCalendar, skipSession, tonight, updateGoal } from "./goals";
 import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
@@ -410,7 +412,11 @@ export function buildServer(token: VerifiedToken): McpServer {
         inputSchema: { title: z.string(), thesis: z.string().optional(), kind: z.enum(["prep", "progress", "train", "custom"]).optional(), targetDay: z.string().optional(), mode: z.enum(["ask", "slide", "auto"]).optional(), config: z.record(z.string(), z.unknown()).optional() },
       },
       async (args) => {
-        try { return fromResult(await createGoal(args)); } catch (e) { console.error("mcp: create_goal failed", describeError(e)); return fail("The tool could not save that."); }
+        try {
+          const r = await createGoal(args);
+          if (!r.ok) return fail(r.error);
+          return ok({ ...r, notebook: await ensureNotebook(r.goal.id) }); // a Notion notebook for the goal, if Notion is ready for it
+        } catch (e) { console.error("mcp: create_goal failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
     server.registerTool(
@@ -430,7 +436,29 @@ export function buildServer(token: VerifiedToken): McpServer {
         inputSchema: { goalId: z.string(), sessions: z.array(z.object({ title: z.string(), start: z.string(), end: z.string(), note: z.string().optional() })), allowOverlap: z.boolean().optional() },
       },
       async ({ goalId, ...rest }) => {
-        try { return fromResult(await commitPlan(goalId, rest)); } catch (e) { console.error("mcp: commit_plan failed", describeError(e)); return fail("The tool could not save that."); }
+        try {
+          const r = await commitPlan(goalId, rest);
+          if (r.ok) afterResponse(() => notebookHook({ type: "committed", goalId, sessions: r.sessions.map((x) => ({ title: x.title, start: x.start, minutes: x.minutes })) }));
+          return fromResult(r);
+        } catch (e) { console.error("mcp: commit_plan failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "create_notebook",
+      { description: "Creates the goal's Notion notebook if it does not have one yet (a page under the owner's Goals page with the thesis, a Brainstorm section and a Log). create_goal already tries this; use it to retry after the owner fixes Notion. Returns the notebook link, or what the owner needs to switch on.", inputSchema: { goalId: z.string() } },
+      async ({ goalId }) => {
+        try { return ok(await ensureNotebook(goalId)); } catch (e) { console.error("mcp: create_notebook failed", describeError(e)); return fail("The tool could not reach Notion."); }
+      },
+    );
+    server.registerTool(
+      "notebook_note",
+      { description: "Adds a dated line to the goal's Notion notebook, at the end of the page (the log). Use it to record what was decided while brainstorming: ideas, constraints, a changed plan. Prefix the text with what it is, such as 'Idea:' or 'Decision:'.", inputSchema: { goalId: z.string(), text: z.string() } },
+      async ({ goalId, text }) => {
+        try {
+          const day = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date());
+          const state = await appendToNotebook(goalId, logBlocks(day, text.slice(0, 3800)));
+          return state === "ok" ? ok({ state }) : fail(`The note was not added (${state}). ${state === "no_notebook" ? "Run create_notebook first." : ""}`.trim());
+        } catch (e) { console.error("mcp: notebook_note failed", describeError(e)); return fail("The tool could not reach Notion."); }
       },
     );
     server.registerTool(
@@ -444,21 +472,33 @@ export function buildServer(token: VerifiedToken): McpServer {
       "complete_session",
       { description: "Marks a session done. Optionally the minutes actually spent, a note about what was covered, and a 1 to 5 rating of how it went.", inputSchema: { id: z.string(), minutes: z.number().int().optional(), note: z.string().optional(), rating: z.number().int().optional() } },
       async ({ id, ...rest }) => {
-        try { return fromResult(await completeSession(id, rest)); } catch (e) { console.error("mcp: complete_session failed", describeError(e)); return fail("The tool could not save that."); }
+        try {
+          const r = await completeSession(id, rest);
+          if (r.ok) afterResponse(() => notebookHook({ type: "done", session: r.session, note: rest.note }));
+          return fromResult(r);
+        } catch (e) { console.error("mcp: complete_session failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
     server.registerTool(
       "skip_session",
       { description: "Skips a session: it stays in the record and comes off the calendar.", inputSchema: { id: z.string() } },
       async ({ id }) => {
-        try { return fromResult(await skipSession(id)); } catch (e) { console.error("mcp: skip_session failed", describeError(e)); return fail("The tool could not save that."); }
+        try {
+          const r = await skipSession(id);
+          if (r.ok) afterResponse(() => notebookHook({ type: "skipped", session: r.session }));
+          return fromResult(r);
+        } catch (e) { console.error("mcp: skip_session failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
     server.registerTool(
       "move_session",
       { description: "Moves a planned session, and its calendar event. Give start (an ISO time) to pick the time, or leave it out to use the next free slot. Refuses an overlap, and says plainly when there is no slot before the goal's last day.", inputSchema: { id: z.string(), start: z.string().optional() } },
       async ({ id, start }) => {
-        try { return fromResult(await moveSession(id, { start })); } catch (e) { console.error("mcp: move_session failed", describeError(e)); return fail("The tool could not save that."); }
+        try {
+          const r = await moveSession(id, { start });
+          if (r.ok) afterResponse(() => notebookHook({ type: "moved", session: r.session }));
+          return fromResult(r);
+        } catch (e) { console.error("mcp: move_session failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
   }
