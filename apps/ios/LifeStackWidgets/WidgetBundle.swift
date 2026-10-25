@@ -5,6 +5,7 @@ import WidgetKit
 struct LifeStackWidgetBundle: WidgetBundle {
     var body: some Widget {
         OverviewWidget()
+        LargeWidget()
         WorkoutsWidget()
     }
 }

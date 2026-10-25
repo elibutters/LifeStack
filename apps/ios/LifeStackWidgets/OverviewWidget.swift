@@ -4,24 +4,27 @@ import WidgetKit
 struct OverviewEntry: TimelineEntry {
     let date: Date
     let overview: Overview?
+    var options: LogOptions? = nil
     let signedIn: Bool
 }
 
 struct OverviewProvider: TimelineProvider {
     func placeholder(in context: Context) -> OverviewEntry { OverviewEntry(date: .now, overview: nil, signedIn: true) }
+    private func load() async -> OverviewEntry {
+        async let o = WidgetData.load(Overview.self, path: "api/v1/overview")
+        async let l = WidgetData.load(LogOptions.self, path: "api/v1/log/options")
+        let (ov, lo) = await (o, l)
+        return OverviewEntry(date: .now, overview: ov.value, options: lo.value, signedIn: ov.signedIn)
+    }
     func getSnapshot(in context: Context, completion: @escaping (OverviewEntry) -> Void) {
-        Task { let r = await WidgetData.load(Overview.self, path: "api/v1/overview"); completion(OverviewEntry(date: .now, overview: r.value, signedIn: r.signedIn)) }
+        Task { completion(await load()) }
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<OverviewEntry>) -> Void) {
-        Task {
-            let r = await WidgetData.load(Overview.self, path: "api/v1/overview")
-            let entry = OverviewEntry(date: .now, overview: r.value, signedIn: r.signedIn)
-            completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(WidgetData.refresh))))
-        }
+        Task { completion(Timeline(entries: [await load()], policy: .after(.now.addingTimeInterval(WidgetData.refresh)))) }
     }
 }
 
-private extension Overview {
+extension Overview {
     var score: Double? { sleep?.lastNight?.score }
     var asleep: String { Format.minutes(sleep?.lastNight?.sleepMin) }
     // The next event that has not started yet, else the first all-day item today.
@@ -61,13 +64,22 @@ struct OverviewWidgetView: View {
             .gaugeStyle(.accessoryCircularCapacity)
     }
 
+    // The lock screen rectangle is the largest shape iOS allows there, so it carries three lines: sleep, today's log, the next event.
     private var rectangular: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 1) {
             Text("Sleep \(scoreText) \u{00B7} \(o?.asleep ?? "-")").font(.headline)
-            if let e = o?.nextEvent { Text("\(Format.time(e)) \(e.title)").font(.caption).lineLimit(2) }
+            Text(logLine).font(.caption)
+            if let e = o?.nextEvent { Text("\(Format.time(e)) \(e.title)").font(.caption).lineLimit(1) }
             else { Text("Nothing else today").font(.caption) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var logLine: String {
+        let taken = o?.supplementsTaken ?? 0
+        let total = entry.options?.supplements.count
+        let mg = o?.log.map { Int($0.caffeine.mg) } ?? 0
+        return "Supps \(total.map { "\(taken)/\($0)" } ?? "\(taken)") \u{00B7} \(mg) mg"
     }
 
     private var inline: some View { Text("Sleep \(scoreText) \u{00B7} \(o?.asleep ?? "-")") }
