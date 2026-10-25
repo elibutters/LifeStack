@@ -1,9 +1,9 @@
 import { ImageResponse } from "next/og";
-import { logoIconSvg, svgDataUri } from "./logo";
+import { logoFaviconSvg, logoIconSvg, svgDataUri } from "./logo";
 
-export function renderIcon(px: number) {
+export function renderIcon(px: number, favicon = false) {
   return new ImageResponse(
-    <img src={svgDataUri(logoIconSvg(false))} width={px} height={px} alt="" />,
+    <img src={svgDataUri(favicon ? logoFaviconSvg() : logoIconSvg(false))} width={px} height={px} alt="" />,
     { width: px, height: px },
   );
 }

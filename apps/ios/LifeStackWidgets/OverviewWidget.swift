@@ -89,7 +89,7 @@ struct OverviewWidgetView: View {
             ZStack {
                 Ring(fraction: (o?.score ?? 0) / 100, width: 9)
                 VStack(spacing: 0) {
-                    Text(scoreText).font(.system(size: 30, weight: .semibold, design: .rounded)).monospacedDigit()
+                    Text(scoreText).font(.system(size: 30, weight: .semibold)).monospacedDigit()
                     Text("sleep").font(.caption2).foregroundStyle(WColor.muted)
                 }
             }
@@ -121,7 +121,7 @@ struct OverviewWidgetView: View {
 
     private func stat(_ v: String, _ label: String) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(v).font(.system(.body, design: .rounded).weight(.semibold)).monospacedDigit()
+            Text(v).font(.system(.body).weight(.semibold)).monospacedDigit()
             Text(label).font(.caption2).foregroundStyle(WColor.muted)
         }
     }

@@ -19,7 +19,7 @@ export function LogTabs() {
             key={t.href}
             href={t.href}
             aria-current={active ? "page" : undefined}
-            className={`flex h-9 shrink-0 items-center rounded-md px-3 text-sm transition-colors ${active ? "bg-raised text-fg" : "text-muted hover:text-fg"}`}
+            className={`flex h-9 shrink-0 items-center border-b px-3 text-sm transition-colors ${active ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}
           >
             {t.label}
           </Link>

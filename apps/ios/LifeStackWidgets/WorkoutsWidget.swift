@@ -52,7 +52,7 @@ struct WorkoutsWidgetView: View {
                         ZStack {
                             Ring(fraction: week / typical, width: 9)
                             VStack(spacing: 0) {
-                                Text(String(format: "%.1f", week)).font(.system(size: 26, weight: .semibold, design: .rounded)).monospacedDigit()
+                                Text(String(format: "%.1f", week)).font(.system(size: 26, weight: .semibold)).monospacedDigit()
                                 Text("mi, 7 days").font(.caption2).foregroundStyle(WColor.muted)
                             }
                         }.frame(width: 90, height: 90)

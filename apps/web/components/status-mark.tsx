@@ -3,7 +3,7 @@ export function StatusMark({ ok, label, choice = false }: { ok: boolean; label?:
   const showCross = !ok && !choice;
   return (
     <span
-      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-sm ${
         choice
           ? ok
             ? "bg-ok text-ok-fg"

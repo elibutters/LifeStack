@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { addSupplementAction, archiveSupplementAction, logCaffeine, logMood, logSupplement, setSupplementDoseAction, unlogSupplement, undoLog, type LogResult } from "@/app/(app)/log/actions";
 import { Card } from "@/components/card";
+import { StatusMark } from "@/components/status-mark";
 import { CAFFEINE_PRESETS, MOOD_LABELS } from "@/lib/capture-core";
 
-const tap = "min-h-14 rounded-md border border-line bg-surface px-3 text-base transition-colors hover:bg-raised active:bg-raised disabled:opacity-50";
+const tap = "min-h-14 rounded-md border px-3 text-base transition-colors disabled:opacity-50";
+const MOOD_ON = ["", "border-mood-1 bg-mood-1/25", "border-mood-2 bg-mood-2/25", "border-mood-3 bg-mood-3/30", "border-mood-4 bg-mood-4/25", "border-mood-5 bg-mood-5/25"];
 const linkBtn = "min-h-11 px-2 text-sm text-accent";
 const drinkKey = (name: string) => name.trim().toLowerCase();
 
@@ -15,10 +17,12 @@ export function QuickLog({
   supplements,
   taken,
   caffeine,
+  mood: moodNow,
 }: {
   supplements: { id: number; name: string; dose: number | null; unit: "mg" | "g" }[];
   taken: string[];
   caffeine: { id: number; drink: string }[];
+  mood: number | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -27,6 +31,8 @@ export function QuickLog({
   const [editing, setEditing] = useState(false);
   const [mg, setMg] = useState("");
   const [name, setName] = useState("");
+  const [mood, setMood] = useState(moodNow);
+  useEffect(() => setMood(moodNow), [moodNow]);
   const [justLogged, setJustLogged] = useState<string[]>([]);
   const [cleared, setCleared] = useState<string[]>([]);
   const [addedDrinks, setAddedDrinks] = useState<{ id: number; drink: string }[]>([]);
@@ -106,12 +112,31 @@ export function QuickLog({
     <div className="space-y-4">
       <Card title="Mood">
         <div className="grid grid-cols-5 gap-2">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button key={n} type="button" disabled={pending} onClick={() => run(() => logMood(n))} className={`${tap} flex flex-col items-center justify-center py-2`}>
-              <span className="text-xl font-semibold tabular-nums">{n}</span>
-              <span className="text-xs text-muted">{MOOD_LABELS[n]}</span>
-            </button>
-          ))}
+          {[1, 2, 3, 4, 5].map((n) => {
+            const on = mood === n;
+            return (
+              <button
+                key={n}
+                type="button"
+                disabled={pending}
+                aria-pressed={on}
+                onClick={() => {
+                  const previous = mood;
+                  setMood(n);
+                  start(async () => {
+                    const r = await logMood(n);
+                    if (!r.ok) setMood(previous);
+                    show(r);
+                    router.refresh();
+                  });
+                }}
+                className={`${tap} flex flex-col items-center justify-center py-2 ${on ? MOOD_ON[n] : "border-line bg-surface hover:bg-raised active:bg-raised"}`}
+              >
+                <span className="text-xl font-semibold tabular-nums">{n}</span>
+                <span className={`text-xs ${on ? "" : "text-muted"}`}>{MOOD_LABELS[n]}</span>
+              </button>
+            );
+          })}
         </div>
       </Card>
 
@@ -171,33 +196,44 @@ export function QuickLog({
         }
       >
         {supplements.length > 0 && (
-          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {supplements.map((s) => (
-              <li key={s.id} className="flex gap-2">
-                <button type="button" disabled={pending || editing} aria-pressed={selected.has(drinkKey(s.name))} onClick={() => logSupp(s)} className={`${tap} min-w-0 flex-1 truncate text-left ${selected.has(drinkKey(s.name)) ? "ring-2 ring-fg" : ""}`}>
-                  {s.name}{s.dose != null && !editing ? <span className="ml-2 text-sm text-muted">{s.dose} {s.unit}</span> : null}
-                </button>
-                {editing && (
-                  <DoseEditor
-                    key={`${s.id}-${s.dose}-${s.unit}`}
-                    name={s.name}
-                    dose={s.dose}
-                    unit={s.unit}
-                    onSave={(dose, unit) => start(async () => { if (!(await setSupplementDoseAction(s.id, dose, unit))) setError("Enter a dose between 0 and 100000."); router.refresh(); })}
-                  />
-                )}
-                {editing && (
+          <ul className={`grid grid-cols-1 gap-2 ${editing ? "" : "sm:grid-cols-2"}`}>
+            {supplements.map((s) => {
+              const on = selected.has(drinkKey(s.name));
+              return (
+                <li key={s.id} className="flex min-w-0 gap-2">
                   <button
                     type="button"
-                    aria-label={`Remove ${s.name}`}
-                    onClick={() => start(async () => { await archiveSupplementAction(s.id); router.refresh(); })}
-                    className="h-14 rounded-md border border-line px-3 text-sm text-red-300 hover:bg-raised"
+                    disabled={pending || editing}
+                    aria-pressed={on}
+                    onClick={() => logSupp(s)}
+                    className={`flex min-h-14 min-w-0 flex-1 items-center gap-2.5 rounded-md border px-3 text-left text-base transition-colors focus-visible:border-accent disabled:opacity-50 ${on ? "border-ok/40 bg-ok/10 active:bg-ok/20" : "border-line bg-raised active:bg-white/10"}`}
                   >
-                    Remove
+                    <StatusMark ok={on} choice />
+                    <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                    {s.dose != null && !editing ? <span className="shrink-0 text-sm tabular-nums text-muted">{s.dose} {s.unit}</span> : null}
                   </button>
-                )}
-              </li>
-            ))}
+                  {editing && (
+                    <DoseEditor
+                      key={`${s.id}-${s.dose}-${s.unit}`}
+                      name={s.name}
+                      dose={s.dose}
+                      unit={s.unit}
+                      onSave={(dose, unit) => start(async () => { if (!(await setSupplementDoseAction(s.id, dose, unit))) setError("Enter a dose between 0 and 100000."); router.refresh(); })}
+                    />
+                  )}
+                  {editing && (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${s.name}`}
+                      onClick={() => start(async () => { await archiveSupplementAction(s.id); router.refresh(); })}
+                      className="h-14 shrink-0 rounded-md border border-line px-3 text-sm text-red-300 hover:bg-raised"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
         {supplements.length === 0 && <p className="mb-3 text-sm text-muted">Add the things you take, or a whole stack as one button (for example "Morning stack").</p>}

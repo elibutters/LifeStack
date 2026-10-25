@@ -2,6 +2,7 @@ import SwiftUI
 
 // A title row pinned to the very top of a screen, with an optional button on the right. It replaces the large
 // navigation title, which left a tall empty band above the heading whenever a toolbar button was present.
+// The navigation bar itself is hidden once, on each tab, so opening a screen cannot reset the tab bar.
 // Set by the More menu on the screens it opens, so their header shows a back button.
 private struct ScreenBackKey: EnvironmentKey { static let defaultValue: (() -> Void)? = nil }
 extension EnvironmentValues {
@@ -30,7 +31,6 @@ private struct ScreenHeader<T: View>: ViewModifier {
             .padding(.horizontal, 18).padding(.top, 2).padding(.bottom, 0)
             content
         }
-        .toolbar(.hidden, for: .navigationBar)
     }
 }
 

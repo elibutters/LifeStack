@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 type Pt = { t: string; lat: number; lon: number; src: string; acc: number | null };
 type Place = { id: number; label: string; lat: number; lon: number; radiusM: number };
 
-const COLOR: Record<string, string> = { "visit-arrival": "#7a88ff", "visit-departure": "#a78bfa", significant: "#9ca3af", manual: "#7dd3fc", trip: "#5eead4" };
+const COLOR: Record<string, string> = { "visit-arrival": "#ffffff", "visit-departure": "#bdbdbd", significant: "#8a8a8a", manual: "#e5e5e5", trip: "#5c5c5c" };
 const NAME: Record<string, string> = { "visit-arrival": "Arrived", "visit-departure": "Left", significant: "Moved", manual: "Checked in", trip: "Trip" };
 // Keyless map backgrounds. "Streets" is OpenStreetMap darkened by a CSS filter; it draws ferry routes and other detail, so the
 // Esri gray canvases (no ferry lines) come first. "Points only" draws no map at all and sends nothing to a third party.
@@ -119,7 +119,7 @@ export function LocationMap({ points, places, defaults, defaultsAt }: { points: 
     layer.clearLayers();
     const now = shown[ci] ? Date.parse(shown[ci]!.t) : 0;
     const visible = shown.slice(0, ci + 1).filter((p) => !windowMs || now - Date.parse(p.t) <= windowMs);
-    if (lines && visible.length > 1) L.polyline(visible.map((p) => [p.lat, p.lon] as [number, number]), { color: "#7a88ff", weight: 2, opacity: 0.3 }).addTo(layer);
+    if (lines && visible.length > 1) L.polyline(visible.map((p) => [p.lat, p.lon] as [number, number]), { color: "#ffffff", weight: 2, opacity: 0.35 }).addTo(layer);
     for (const p of visible) {
       const age = windowMs ? (now - Date.parse(p.t)) / windowMs : 0;
       L.circleMarker([p.lat, p.lon], { radius: p.src === "trip" ? 3 : 5, color: "#0a0a0b", weight: 1, fillColor: COLOR[p.src] ?? "#9ca3af", fillOpacity: windowMs ? 0.25 + 0.65 * (1 - age) : 0.9 })
@@ -127,11 +127,11 @@ export function LocationMap({ points, places, defaults, defaultsAt }: { points: 
         .addTo(layer);
     }
     for (const pl of places) {
-      L.circle([pl.lat, pl.lon], { radius: pl.radiusM, color: "#34d399", weight: 1.5, fillOpacity: 0.12 }).bindTooltip(pl.label, { permanent: true, direction: "top", offset: [0, -4] }).addTo(layer);
+      L.circle([pl.lat, pl.lon], { radius: pl.radiusM, color: "#6ea8ff", weight: 1.5, fillOpacity: 0.08 }).bindTooltip(pl.label, { permanent: true, direction: "top", offset: [0, -4] }).addTo(layer);
     }
     // While scrubbing, mark where you were at the chosen moment.
     const here = shown[ci];
-    if (engaged && here) L.circleMarker([here.lat, here.lon], { radius: 9, color: "#ffffff", weight: 2, fillColor: "#7a88ff", fillOpacity: 1 }).bindTooltip(fmt(here.t), { permanent: true, direction: "top", offset: [0, -8] }).addTo(layer);
+    if (engaged && here) L.circleMarker([here.lat, here.lon], { radius: 9, color: "#000000", weight: 2, fillColor: "#6ea8ff", fillOpacity: 1 }).bindTooltip(fmt(here.t), { permanent: true, direction: "top", offset: [0, -8] }).addTo(layer);
     // Fit the view once per range and style, not on every slider step, so playback does not jump around.
     const key = `${range}|${mapVersion}`;
     if (fitFor.current !== key) {
@@ -199,9 +199,9 @@ export function LocationMap({ points, places, defaults, defaultsAt }: { points: 
       )}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
         {Object.entries(NAME).map(([k, v]) => (
-          <span key={k} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: COLOR[k] }} />{v}</span>
+          <span key={k} className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: COLOR[k] }} />{v}</span>
         ))}
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full border border-[#34d399]" />Saved place</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm border border-accent" />Saved place</span>
       </div>
     </div>
   );

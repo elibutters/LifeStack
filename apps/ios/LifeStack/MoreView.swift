@@ -1,47 +1,40 @@
 import SwiftUI
 
-// The rightmost tab: a menu of the screens that do not get a tab of their own. Add a case to add a screen.
-private enum MoreItem: String, CaseIterable, Identifiable {
-    case log = "Log", wants = "Wants", calendar = "Calendar"
-    var id: String { rawValue }
-    var icon: String {
-        switch self {
-        case .log: "checkmark.circle"
-        case .wants: "bag"
-        case .calendar: "calendar"
-        }
-    }
-    var blurb: String {
-        switch self {
-        case .log: "Mood, caffeine and supplements"
-        case .wants: "Things you are on the lookout for"
-        case .calendar: "The next 30 days"
-        }
-    }
-}
-
+// The rightmost tab: a menu of the screens that do not get a tab of their own (see MoreItem in Navigator.swift).
 struct MoreView: View {
-    @State private var open: MoreItem?
+    // Pushed on a stack that stays inside this tab. Replacing the tab's root view makes TabView
+    // drop back to Overview, leaving the chosen screen underneath until More is opened again.
+    @Environment(Navigator.self) private var nav
 
     var body: some View {
-        Group {
-            switch open {
-            case .none: menu
-            case .log: TodayView()
-            case .wants: WantsView()
-            case .calendar: CalendarView()
-            }
+        @Bindable var nav = nav
+        NavigationStack {
+            menu
+                .navigationDestination(item: $nav.more) { item in
+                    destination(item)
+                        .navigationBarBackButtonHidden(true)
+                        .environment(\.screenBack, { nav.more = nil })
+                }
         }
-        .environment(\.screenBack, open == nil ? nil : { open = nil })
+        .onChange(of: nav.more) { _, _ in nav.moreClosed() }
+    }
+
+    @ViewBuilder private func destination(_ item: MoreItem) -> some View {
+        switch item {
+        case .finance: FinanceView()
+        case .sleep: SleepView()
+        case .wants: WantsView()
+        case .calendar: CalendarView()
+        }
     }
 
     private var menu: some View {
         Screen(title: "More") {
             VStack(spacing: 8) {
                 ForEach(MoreItem.allCases) { item in
-                    Button { open = item } label: {
+                    Button { nav.more = item } label: {
                         HStack(spacing: 12) {
-                            Image(systemName: item.icon).font(.title3).foregroundStyle(Theme.sky).frame(width: 30)
+                            Image(systemName: item.icon).font(.title3).foregroundStyle(item.tint).frame(width: 30)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.rawValue).font(.body.weight(.semibold)).foregroundStyle(.white)
                                 Text(item.blurb).font(.caption).foregroundStyle(Theme.muted)
@@ -50,7 +43,7 @@ struct MoreView: View {
                             Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.muted)
                         }
                         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: Theme.r))
+                        .panel()
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("more-\(item.rawValue.lowercased())")

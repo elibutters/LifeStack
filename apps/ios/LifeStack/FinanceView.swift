@@ -19,8 +19,8 @@ struct FinanceView: View {
                 Card(title: "Cash flow", trailing: "last 6 months") {
                     Chart {
                         ForEach(s.cashflow) { f in
-                            BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.income)).position(by: .value("Type", "In")).foregroundStyle(Theme.good).cornerRadius(4)
-                            BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.spending)).position(by: .value("Type", "Out")).foregroundStyle(Theme.violet).cornerRadius(4)
+                            BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.income)).position(by: .value("Type", "In")).foregroundStyle(Theme.good).cornerRadius(1)
+                            BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.spending)).position(by: .value("Type", "Out")).foregroundStyle(Theme.violet).cornerRadius(1)
                         }
                         SelectionMark(x: pickedMonth, lines: s.cashflow.first { Format.monthShort($0.month) == pickedMonth }.map { [Format.monthShort($0.month), "In " + Format.money($0.income), "Out " + Format.money($0.spending)] } ?? [])
                     }

@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { after } from "next/server";
 import { Card } from "@/components/card";
-import { EventRow } from "@/components/event-row";
+import { EventRow, eventTone } from "@/components/event-row";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { itemsOnDay, loadCalendar, systemStatus } from "@/lib/calendar";
+import { syncPlanHorizon } from "@/lib/fitness-plan";
 import { syncOutlookIfStale } from "@/lib/outlook";
 import { requireSession } from "@/lib/auth";
 import {
@@ -32,6 +33,7 @@ const href = (month: string, day?: string) => `/calendar?m=${month}${day ? `&d=$
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ m?: string; d?: string }> }) {
   await requireSession();
   after(syncOutlookIfStale);
+  after(syncPlanHorizon);
   const sp = await searchParams;
   const today = ymd(new Date());
   const month = isValidMonth(sp.m) ? sp.m : today.slice(0, 7);
@@ -75,7 +77,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       </PageHeader>
       <div className="space-y-4">
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="flex flex-col gap-6">
         <div className="overflow-hidden rounded-md border border-line bg-surface">
           <div className="grid grid-cols-7 border-b border-line">
             {WEEKDAYS.map((w) => (
@@ -111,12 +113,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                   </span>
                   <span className="hidden flex-col gap-1 md:flex">
                     {list.slice(0, 3).map((i) => (
-                      <span
-                        key={i.id}
-                        className={`truncate rounded-sm px-1.5 py-0.5 text-xs ${
-                          i.kind === "holiday" ? "bg-holiday/15 text-holiday" : "bg-accent/15 text-accent"
-                        }`}
-                      >
+                      <span key={i.id} className={`truncate rounded-sm px-1.5 py-0.5 text-xs ${eventTone(i.kind).chip}`}>
                         {i.title}
                       </span>
                     ))}
@@ -124,7 +121,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                   </span>
                   <span className="flex gap-0.5 md:hidden">
                     {list.slice(0, 3).map((i) => (
-                      <span key={i.id} className={`h-1.5 w-1.5 rounded-full ${i.kind === "holiday" ? "bg-holiday" : "bg-accent"}`} />
+                      <span key={i.id} className={`h-1.5 w-1.5 rounded-sm ${eventTone(i.kind).dot}`} />
                     ))}
                   </span>
                 </Link>
@@ -133,7 +130,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           </div>
         </div>
 
-        <Card title={fmtDayLong(selected)} className="lg:sticky lg:top-6 lg:self-start">
+        <Card title={fmtDayLong(selected)}>
           {dayItems.length > 0 ? (
             <ul className="w-max min-w-full divide-y divide-line">
               {dayItems.map((i) => (

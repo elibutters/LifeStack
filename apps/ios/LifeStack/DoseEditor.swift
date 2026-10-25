@@ -25,10 +25,10 @@ struct DoseEditor: View {
                                         .buttonStyle(.plain).accessibilityLabel("Clear \(s.name) dose")
                                 }
                             }
-                            .padding(.horizontal, 10).frame(width: 100, height: 38).glassEffect(.regular, in: .rect(cornerRadius: Theme.rs))
+                            .padding(.horizontal, 10).frame(width: 100, height: 38).panel(Theme.rs)
                             Picker("Unit", selection: unitBinding(s)) { Text("mg").tag("mg"); Text("g").tag("g") }.pickerStyle(.segmented).frame(width: 92)
                         }
-                        .padding(.horizontal, 12).frame(minHeight: 52).glassEffect(.regular, in: .rect(cornerRadius: Theme.r))
+                        .padding(.horizontal, 12).frame(minHeight: 52).panel()
                     }
                 }
                 .padding(14)

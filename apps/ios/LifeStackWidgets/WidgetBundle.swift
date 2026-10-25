@@ -7,5 +7,6 @@ struct LifeStackWidgetBundle: WidgetBundle {
         OverviewWidget()
         LargeWidget()
         WorkoutsWidget()
+        NextEventLiveActivity()
     }
 }

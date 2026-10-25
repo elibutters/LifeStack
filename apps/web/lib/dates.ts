@@ -66,6 +66,15 @@ export function startOfDay(day: string, tz = TZ): Date {
   return new Date(t);
 }
 
+// A clock time on a calendar day in the owner's timezone. Two passes handle DST changes.
+export function atTime(day: string, hour: number, minute: number, tz = TZ): Date {
+  const [y, m, d] = parseYmd(day);
+  const guess = Date.UTC(y, m - 1, d, hour, minute, 0);
+  let t = guess - offsetMs(new Date(guess), tz);
+  t = guess - offsetMs(new Date(t), tz);
+  return new Date(t);
+}
+
 // Last instant that still belongs to the calendar day. Used when backdating a log.
 export function endOfDay(day: string, tz = TZ): Date {
   return new Date(startOfDay(addDays(day, 1), tz).getTime() - 1);
