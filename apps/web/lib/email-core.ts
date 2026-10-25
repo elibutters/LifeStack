@@ -69,7 +69,16 @@ const RULES: { category: Category; subject: RegExp }[] = [
   { category: "deal", subject: /(\d+% off|\bsale\b|\bdeals?\b|coupon|promo|save \$|price drop|limited time|free shipping|clearance)/i },
 ];
 
-export function categorize(m: Pick<MailInput, "subject" | "body">): Category {
+// Owner-set phrases per category, matched against the subject, sender name and sender address. They run ahead of the built-in
+// rules, and "other" wins over everything so a sender can be kept out of the categories.
+export type CustomRules = Partial<Record<Category, string[]>>;
+const CUSTOM_ORDER: Category[] = ["other", "shipping", "appointment", "bill", "receipt", "deal"];
+
+export function categorize(m: Pick<MailInput, "subject" | "body"> & { fromName?: string | null; fromAddress?: string | null }, custom?: CustomRules): Category {
+  if (custom) {
+    const hay = `${m.subject} ${m.fromName ?? ""} ${m.fromAddress ?? ""}`.toLowerCase();
+    for (const c of CUSTOM_ORDER) if (custom[c]?.some((p) => p && hay.includes(p.toLowerCase()))) return c;
+  }
   for (const r of RULES) if (r.subject.test(m.subject)) return r.category;
   if (findTracking(m.body.slice(0, 3000)) && /\b(shipped|tracking|delivery)\b/i.test(m.body.slice(0, 1500))) return "shipping";
   return "other";
@@ -102,8 +111,8 @@ export function extract(m: MailInput, category: Category): Extracted {
   return out;
 }
 
-export const classify = (m: MailInput) => {
-  const category = categorize(m);
+export const classify = (m: MailInput, custom?: CustomRules) => {
+  const category = categorize(m, custom);
   return { category, extracted: extract(m, category) };
 };
 

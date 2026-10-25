@@ -64,6 +64,10 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   `sync_state.cursor`; rows are stamped with the generation and older generations are deleted only when a walk finishes.
   Notes are plain text capped at 6,000 characters in the `notes` table, never backed up, and read through `notes:read`
   (agent keys only, never the phone key). Nothing is ever written to Notion.
+- Settings: preferences that change behaviour without a deploy live in the `settings` table, but only keys registered in
+  `lib/settings-core.ts` (zod schema plus default) can be set, so a bad value never reaches the code using it. Read them with
+  `listSettings`/`loadEmailRules`; never add an ad hoc key. Scopes: `settings:read` (agent and phone keys) and `settings:write`
+  (agent keys only). Changing `email.rules` re-sorts stored mail. A new tunable constant belongs in that registry.
 - Workouts: all aggregation lives in `lib/workouts-core.ts` (pure, tested); the web page and `/api/v1/workouts` both use it,
   so clients never recompute totals. US units are display-only (`lib/units.ts`, `Format` in the app).
 - Backup restore must work for tables without an `id` column (connections, sync_state); keep that case in its test.

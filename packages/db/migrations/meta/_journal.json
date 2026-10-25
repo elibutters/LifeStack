@@ -127,6 +127,13 @@
       "when": 1792863378792,
       "tag": "0017_right_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792951365990,
+      "tag": "0018_strong_jane_foster",
+      "breakpoints": true
     }
   ]
 }

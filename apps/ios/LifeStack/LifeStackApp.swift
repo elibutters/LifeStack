@@ -12,7 +12,7 @@ struct LifeStackApp: App {
             RootView()
                 .environment(model)
                 .task { Keychain.shareWithWidgets() }
-                .onChange(of: phase) { _, new in if new == .active { LocationTracker.shared.refreshNow(ifOlderThan: 10) } }
+                .onChange(of: phase) { _, new in if new == .active { LocationTracker.shared.refreshNow(ifOlderThan: 10); Task { await AppConfig.refresh(model) } } }
                 .preferredColorScheme(.dark)
         }
     }

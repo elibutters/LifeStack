@@ -1,12 +1,13 @@
 import "server-only";
-import { and, desc, eq, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { connections, emails, syncState } from "@lifestack/db";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./db";
 import { todayInTz } from "./dates";
 import { describeError } from "./errors";
-import { agendaOf, CATEGORIES, classify, snippet, tidyBody, type Extracted } from "./email-core";
+import { agendaOf, CATEGORIES, classify, snippet, tidyBody, type CustomRules, type Extracted } from "./email-core";
+import { loadEmailRules } from "./settings-store";
 import { GRAPH, graphGet, MAIL_SCOPES, refreshTokens, TokenError } from "./microsoft";
 import { verifyBearer } from "./tokens";
 
@@ -30,7 +31,7 @@ const Msg = z.object({
 });
 const Page = z.object({ value: z.array(z.unknown()), "@odata.nextLink": z.string().optional() });
 
-export function toEmailRow(raw: unknown, folder: string): typeof emails.$inferInsert | null {
+export function toEmailRow(raw: unknown, folder: string, rules?: CustomRules): typeof emails.$inferInsert | null {
   const m = Msg.safeParse(raw);
   if (!m.success) return null;
   const receivedAt = new Date(m.data.receivedDateTime);
@@ -38,7 +39,7 @@ export function toEmailRow(raw: unknown, folder: string): typeof emails.$inferIn
   const subject = (m.data.subject ?? "").slice(0, 300);
   const body = m.data.body?.content ?? "";
   const fromName = m.data.from?.emailAddress.name ?? null;
-  const { category, extracted } = classify({ fromName, subject, body, receivedAt });
+  const { category, extracted } = classify({ fromName, fromAddress: m.data.from?.emailAddress.address ?? null, subject, body, receivedAt }, rules);
   return {
     sourceId: m.data.id,
     folder,
@@ -100,6 +101,7 @@ export async function syncMail(budgetMs = 40_000): Promise<MailSync> {
       current = next;
     }
 
+    const rules = await loadEmailRules();
     const [st] = await db().select().from(syncState).where(eq(syncState.source, SOURCE));
     const cursor: Cursor = (() => {
       try {
@@ -122,7 +124,7 @@ export async function syncMail(budgetMs = 40_000): Promise<MailSync> {
       for (let i = 0; next && i < pages; i++) {
         if (Date.now() - started > budgetMs) { more = true; break; }
         const body = Page.parse(await graphGet(next, tokens.access_token, 'outlook.body-content-type="text"'));
-        const batch = body.value.map((r) => toEmailRow(r, folder)).filter((r): r is NonNullable<typeof r> => !!r);
+        const batch = body.value.map((r) => toEmailRow(r, folder, rules)).filter((r): r is NonNullable<typeof r> => !!r);
         if (batch.length) {
           const ok = await db().transaction(async (tx) => {
             const [live] = await tx.select({ enc: connections.refreshTokenEnc }).from(connections).where(eq(connections.provider, "outlook")).for("share");
@@ -181,6 +183,26 @@ export async function syncMail(budgetMs = 40_000): Promise<MailSync> {
   } finally {
     await db().update(syncState).set({ leaseUntil: null }).where(eq(syncState.source, SOURCE)).catch(() => {});
   }
+}
+
+// Sorts the stored mail again with the current rules (after the owner changes them), a batch at a time within a time budget.
+export async function reclassifyEmails(rules: CustomRules, budgetMs = 20_000): Promise<{ checked: number; changed: number }> {
+  const started = Date.now();
+  let after = 0, checked = 0, changed = 0;
+  for (;;) {
+    const rows = await db().select().from(emails).where(gt(emails.id, after)).orderBy(emails.id).limit(300);
+    if (rows.length === 0 || Date.now() - started > budgetMs) break;
+    for (const r of rows) {
+      const { category, extracted } = classify({ fromName: r.fromName, fromAddress: r.fromAddress, subject: r.subject, body: r.bodyText, receivedAt: r.receivedAt }, rules);
+      checked++;
+      if (category !== r.category || JSON.stringify(extracted) !== JSON.stringify(r.extracted)) {
+        await db().update(emails).set({ category, extracted: extracted as Record<string, unknown> }).where(eq(emails.id, r.id));
+        changed++;
+      }
+    }
+    after = rows[rows.length - 1]!.id;
+  }
+  return { checked, changed };
 }
 
 // ---- reading

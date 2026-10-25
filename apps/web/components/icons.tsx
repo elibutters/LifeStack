@@ -84,6 +84,14 @@ export const NotesIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const PreferencesIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M5 8h14M5 16h14" />
+    <circle cx="9" cy="8" r="2" />
+    <circle cx="15" cy="16" r="2" />
+  </Icon>
+);
+
 export const UserIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <circle cx="12" cy="8" r="3.25" />
