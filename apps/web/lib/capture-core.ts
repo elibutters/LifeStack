@@ -9,9 +9,7 @@ export const CAFFEINE_PRESETS = [
   { drink: "Coffee", mg: 95 },
   { drink: "Espresso", mg: 64 },
   { drink: "Cold brew", mg: 150 },
-  { drink: "Tea", mg: 47 },
   { drink: "Energy drink", mg: 80 },
-  { drink: "Soda", mg: 34 },
 ] as const;
 
 const shared = {

@@ -55,24 +55,41 @@ struct TodayView: View {
         }
     }
 
+    // Each drink is a counter for today: plus logs one, minus removes the most recent one, so a mistaken tap is undone right here.
     private var caffeineCard: some View {
-        Card(title: "Caffeine") {
-            LazyVGrid(columns: two, spacing: 8) {
+        Card(title: "Caffeine", trailing: (model.today?.caffeine.count ?? 0) == 0 ? nil : "\(Int(model.today?.caffeine.mg ?? 0)) mg today") {
+            VStack(spacing: 8) {
                 ForEach(drinks, id: \.self) { d in
-                    Button { send(["type": "caffeine", "drink": d.drink], "\(d.drink) (\(Int(d.mg)) mg)") } label: {
-                        HStack {
+                    let entries = drinkEntries(d.drink)
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 1) {
                             Text(d.drink).font(.subheadline.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
-                            Spacer(minLength: 4)
-                            Text("\(Int(d.mg))").font(.caption).monospacedDigit().foregroundStyle(Theme.muted)
+                            Text("\(Int(d.mg)) mg").font(.caption).foregroundStyle(Theme.muted)
                         }
-                        .padding(.horizontal, 12).frame(maxWidth: .infinity, minHeight: 42)
-                        .chip()
+                        Spacer(minLength: 6)
+                        Button { removeLatest(of: entries) } label: { Image(systemName: "minus").font(.body.weight(.semibold)).frame(width: 42, height: 36).chip() }
+                            .buttonStyle(.plain).disabled(entries.isEmpty || model.pending).opacity(entries.isEmpty ? 0.35 : 1)
+                            .accessibilityLabel("Remove one \(d.drink)").accessibilityIdentifier("drink-minus-\(d.drink)")
+                        Text("\(entries.count)").font(.system(.title3, design: .rounded).weight(.semibold)).monospacedDigit().frame(minWidth: 26)
+                        Button { send(["type": "caffeine", "drink": d.drink], "\(d.drink) (\(Int(d.mg)) mg)") } label: { Image(systemName: "plus").font(.body.weight(.semibold)).frame(width: 42, height: 36).chip(Theme.blue.opacity(0.6)) }
+                            .buttonStyle(.plain).disabled(model.pending)
+                            .accessibilityLabel("Add one \(d.drink)").accessibilityIdentifier("drink-plus-\(d.drink)")
                     }
-                    .buttonStyle(.plain)
-                    .disabled(model.pending)
+                    .padding(.horizontal, 12).frame(minHeight: 52)
+                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
                 }
             }
         }
+    }
+
+    // Today's entries for one drink. The drink is the start of the entry's label, as in "Coffee (95 mg)".
+    private func drinkEntries(_ drink: String) -> [HistoryEntry] {
+        model.history.filter { $0.key == "caffeine" && Format.isToday($0.at) && $0.drinkName.caseInsensitiveCompare(drink) == .orderedSame }
+    }
+
+    private func removeLatest(of entries: [HistoryEntry]) {
+        guard let latest = entries.max(by: { (Format.date($0.at) ?? .distantPast) < (Format.date($1.at) ?? .distantPast) }) else { return }
+        Task { await model.remove(latest); tapped += 1 }
     }
 
     private var supplementCard: some View {
@@ -126,4 +143,8 @@ struct TodayView: View {
     private func send(_ event: [String: Any], _ label: String) {
         Task { if await model.log(event, label: label) { tapped += 1 } }
     }
+}
+
+private extension HistoryEntry {
+    var drinkName: String { name ?? String(label.split(separator: "(").first ?? "").trimmingCharacters(in: .whitespaces) }
 }

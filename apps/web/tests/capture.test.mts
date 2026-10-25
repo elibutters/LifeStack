@@ -75,8 +75,8 @@ assert.equal((await post(W, { type: "mood", value: 3, at: new Date(Date.now() + 
 assert.equal((await post(W, { type: "banana" })).status, 400); assert.equal((await rows()).length, 0);
 
 const m = await post(W, { type: "mood", value: 4, note: "calm" }); assert.equal(m.status, 201); assert.equal(m.json.created, true); assert.ok(m.json.id);
-const c = await post(W, { type: "caffeine", drink: "Tea" }); assert.equal(c.status, 201); const s = await post(W, { type: "supplement", name: "Morning stack" }); assert.equal(s.status, 201);
-let all = await rows(); assert.deepEqual(all.map((e: any) => [e.domain, e.key, e.valueNum, e.valueText, e.source]), [["log", "mood", 4, "calm", "shortcut"], ["log", "caffeine", 47, "Tea", "shortcut"], ["supplement", "supplement.taken", null, "Morning stack", "shortcut"]]);
+const c = await post(W, { type: "caffeine", drink: "Espresso" }); assert.equal(c.status, 201); const s = await post(W, { type: "supplement", name: "Morning stack" }); assert.equal(s.status, 201);
+let all = await rows(); assert.deepEqual(all.map((e: any) => [e.domain, e.key, e.valueNum, e.valueText, e.source]), [["log", "mood", 4, "calm", "shortcut"], ["log", "caffeine", 64, "Espresso", "shortcut"], ["supplement", "supplement.taken", null, "Morning stack", "shortcut"]]);
 const again1 = await post(W, { type: "mood", value: 5, id: "retry-key-0001" }); const again2 = await post(W, { type: "mood", value: 5, id: "retry-key-0001" });
 assert.deepEqual([again1.status, again2.status, again1.json.id === again2.json.id, again2.json.created], [201, 200, true, false]); assert.equal((await rows()).length, 4, "a retry never logs twice");
 const back = await post(W, { type: "mood", value: 2, at: new Date(Date.now() - 2 * 3_600_000).toISOString() }); assert.equal(back.status, 201); assert.ok(Math.abs(new Date(back.json.ts).getTime() - (Date.now() - 2 * 3_600_000)) < 5000);
