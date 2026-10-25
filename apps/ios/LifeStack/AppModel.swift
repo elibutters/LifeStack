@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import UIKit
+import WidgetKit
 
 @MainActor
 @Observable
@@ -24,6 +25,10 @@ final class AppModel {
 
     init() {
         signedIn = Keychain.read() != nil && !(Self.bundledAddress ?? UserDefaults.standard.string(forKey: Self.addressKey) ?? "").isEmpty
+        // Debug builds only: UI tests open the tabs with no key, so navigation can be checked. No data loads.
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("UITEST_SIGNED_IN") { signedIn = true }
+        #endif
     }
 
     var client: APIClient? {
@@ -64,6 +69,7 @@ final class AppModel {
         } catch { handle(error) }
         if let opts = await opts { options = opts }
         if let feed = await feed { history = feed }
+        WidgetCenter.shared.reloadAllTimelines() // widgets show what the app just learned, including changes made on the web
     }
 
     // One tap logs. More taps are ignored while a request is in flight, so a double tap cannot log twice.

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OverviewView: View {
     @Environment(AppModel.self) private var model
+    @Environment(Navigator.self) private var nav
     @State private var loader = Loader<Overview>()
     @State private var showAccount = false
     @State private var showCalendar = false
@@ -22,14 +23,24 @@ struct OverviewView: View {
         }) {
             ErrorBanner(text: loader.error)
             if let o = loader.value {
-                if let cal = o.calendar { calendarCard(cal) }
-                if let sleep = o.sleep { sleepCard(sleep) }
-                if let f = o.finance { moneyCard(f) }
+                if let cal = o.calendar {
+                    Button { nav.open(.calendar, from: .overview) } label: { calendarCard(cal) }
+                        .buttonStyle(.plain).accessibilityIdentifier("calendar-card").accessibilityHint("Opens Calendar")
+                }
+                if let sleep = o.sleep {
+                    // Tapping the card opens the Sleep screen; Back returns here.
+                    Button { nav.open(.sleep, from: .overview) } label: { sleepCard(sleep) }
+                        .buttonStyle(.plain).accessibilityIdentifier("sleep-card").accessibilityHint("Opens Sleep")
+                }
+                if let f = o.finance {
+                    Button { nav.open(.finance, from: .overview) } label: { moneyCard(f) }
+                        .buttonStyle(.plain).accessibilityIdentifier("finance-card").accessibilityHint("Opens Finance")
+                }
                 if let t = o.log { logCard(t) }
             } else if loader.loading { ProgressView().padding(.top, 60) }
         }
         .sheet(isPresented: $showAccount) { AccountView(dismiss: { showAccount = false }) }
-        .sheet(isPresented: $showCalendar) { CalendarView(dismiss: { showCalendar = false }) }
+        .sheet(isPresented: $showCalendar) { CalendarView(dismiss: { showCalendar = false }).toolbar(.hidden, for: .navigationBar) }
         .task { await load() }
     }
 

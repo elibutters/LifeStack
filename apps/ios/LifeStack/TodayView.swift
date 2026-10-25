@@ -42,11 +42,11 @@ struct TodayView: View {
                     let on = model.today?.mood?.value == n
                     Button { send(["type": "mood", "value": n], "Mood \(n) (\(moodLabels[n] ?? ""))") } label: {
                         VStack(spacing: 1) {
-                            Text("\(n)").font(.system(size: 19, weight: .semibold, design: .rounded))
+                            Text("\(n)").font(.system(size: 19, weight: .semibold))
                             Text(moodLabels[n] ?? "").font(.system(size: 10)).foregroundStyle(on ? .white : Theme.muted)
                         }
                         .frame(maxWidth: .infinity, minHeight: 46)
-                        .chip(on ? Theme.blue.opacity(0.7) : nil)
+                        .chip(on ? Theme.mood(n).opacity(0.85) : nil)
                     }
                     .buttonStyle(.plain)
                     .disabled(model.pending)
@@ -70,13 +70,13 @@ struct TodayView: View {
                         Button { removeLatest(of: entries) } label: { Image(systemName: "minus").font(.body.weight(.semibold)).frame(width: 42, height: 36).chip() }
                             .buttonStyle(.plain).disabled(entries.isEmpty || model.pending).opacity(entries.isEmpty ? 0.35 : 1)
                             .accessibilityLabel("Remove one \(d.drink)").accessibilityIdentifier("drink-minus-\(d.drink)")
-                        Text("\(entries.count)").font(.system(.title3, design: .rounded).weight(.semibold)).monospacedDigit().frame(minWidth: 26)
+                        Text("\(entries.count)").font(.system(.title3).weight(.semibold)).monospacedDigit().frame(minWidth: 26)
                         Button { send(["type": "caffeine", "drink": d.drink], "\(d.drink) (\(Int(d.mg)) mg)") } label: { Image(systemName: "plus").font(.body.weight(.semibold)).frame(width: 42, height: 36).chip(Theme.blue.opacity(0.6)) }
                             .buttonStyle(.plain).disabled(model.pending)
                             .accessibilityLabel("Add one \(d.drink)").accessibilityIdentifier("drink-plus-\(d.drink)")
                     }
                     .padding(.horizontal, 12).frame(minHeight: 52)
-                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: Theme.rs))
                 }
             }
         }
@@ -114,7 +114,7 @@ struct TodayView: View {
             }
             if !(model.options?.supplements ?? []).isEmpty {
                 Button("Edit doses") { editingDoses = true }
-                    .font(.footnote.weight(.medium)).foregroundStyle(Theme.sky).buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .trailing)
+                    .font(.footnote.weight(.medium)).foregroundStyle(Theme.accent).buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
     }

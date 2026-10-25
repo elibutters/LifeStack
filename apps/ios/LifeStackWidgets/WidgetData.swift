@@ -38,6 +38,7 @@ enum WidgetData {
     enum Change {
         case mood(Int)
         case coffee(mg: Double)
+        case coffeeRemoved(mg: Double)
         case supplements(names: [String], taken: Bool)
     }
 
@@ -56,6 +57,11 @@ enum WidgetData {
             c["count"] = (c["count"] as? Int ?? 0) + 1
             c["mg"] = (c["mg"] as? Double ?? 0) + mg
             log["caffeine"] = c
+        case .coffeeRemoved(let mg):
+            var c = log["caffeine"] as? [String: Any] ?? ["count": 0, "mg": 0.0]
+            c["count"] = max(0, (c["count"] as? Int ?? 0) - 1)
+            c["mg"] = max(0, (c["mg"] as? Double ?? 0) - mg)
+            log["caffeine"] = c
         case .supplements(let names, let taken):
             var list = (log["supplements"] as? [[String: Any]]) ?? []
             if taken {
@@ -63,7 +69,8 @@ enum WidgetData {
                 for n in names where !have.contains(n.lowercased()) { list.append(["name": n, "count": 1]) }
                 list = list.map { var e = $0; if (e["count"] as? Int ?? 0) == 0 { e["count"] = 1 }; return e }
             } else {
-                list = []
+                let drop = Set(names.map { $0.lowercased() })
+                list = list.filter { !drop.contains(($0["name"] as? String ?? "").lowercased()) }
             }
             log["supplements"] = list
         }
@@ -88,17 +95,26 @@ enum WidgetData {
     static func cachedOverview() -> Overview? { defaults.data(forKey: key("api/v1/overview")).flatMap { try? JSONDecoder().decode(Overview.self, from: $0) } }
     static func cachedOptions() -> LogOptions? { defaults.data(forKey: key("api/v1/log/options")).flatMap { try? JSONDecoder().decode(LogOptions.self, from: $0) } }
 
-    static let refresh: TimeInterval = 30 * 60
+    static let refresh: TimeInterval = 15 * 60
 }
 
 enum WColor {
-    static let bg = Color(red: 0.039, green: 0.039, blue: 0.043)
+    static let bg = Color.black
     static let muted = Color.white.opacity(0.55)
-    static let blue = Color(red: 0.30, green: 0.44, blue: 1.0)
-    static let violet = Color(red: 0.56, green: 0.48, blue: 0.94)
-    static let sky = Color(red: 0.66, green: 0.76, blue: 1.0)
-    static let good = Color(red: 0.20, green: 0.83, blue: 0.60)
-    static let gradient = LinearGradient(colors: [blue, violet], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let blue = Color(red: 0.431, green: 0.659, blue: 1)
+    static let violet = Color(red: 0.941, green: 0.443, blue: 0.471)
+    static let sky = blue
+    static let good = Color(red: 0.243, green: 0.812, blue: 0.557)
+    static let gradient = blue
+    static func mood(_ value: Int) -> Color {
+        switch min(max(value, 1), 5) {
+        case 1: Color(red: 0.941, green: 0.443, blue: 0.471)
+        case 2: Color(red: 0.769, green: 0.518, blue: 0.416)
+        case 3: Color(white: 0.541)
+        case 4: Color(red: 0.490, green: 0.729, blue: 0.604)
+        default: Color(red: 0.243, green: 0.812, blue: 0.557)
+        }
+    }
 }
 
 struct Ring: View {
@@ -107,7 +123,7 @@ struct Ring: View {
     var body: some View {
         ZStack {
             Circle().stroke(Color.white.opacity(0.12), lineWidth: width)
-            Circle().trim(from: 0, to: max(0.02, min(1, fraction))).stroke(WColor.gradient, style: StrokeStyle(lineWidth: width, lineCap: .round)).rotationEffect(.degrees(-90))
+            Circle().trim(from: 0, to: max(0.02, min(1, fraction))).stroke(WColor.gradient, style: StrokeStyle(lineWidth: width, lineCap: .butt)).rotationEffect(.degrees(-90))
         }
     }
 }

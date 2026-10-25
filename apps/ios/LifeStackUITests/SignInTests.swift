@@ -25,13 +25,13 @@ final class SignInTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Overview"].waitForExistence(timeout: 20), "should reach the home screen")
         shot("overview", env)
         // Every tab loads its screen from the server.
-        for tab in ["Sleep", "Workouts", "Finance", "More"] {
+        for tab in ["Sleep", "Fitness", "Finance", "More"] {
             let button = app.tabBars.buttons[tab]
             XCTAssertTrue(button.exists, "\(tab) tab")
             button.tap()
             if tab != "More" { shot(tab.lowercased(), env) }
         }
-        app.tabBars.buttons["Workouts"].tap()
+        app.tabBars.buttons["Fitness"].tap()
         XCTAssertTrue(app.staticTexts["MILES PER WEEK"].waitForExistence(timeout: 20), "workouts overview loads")
         shot("workouts", env)
         app.tabBars.buttons["Finance"].tap()
@@ -67,6 +67,34 @@ final class SignInTests: XCTestCase {
         field.typeText("30")
         app.buttons["Save"].tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Alpha' AND label CONTAINS '30'")).firstMatch.waitForExistence(timeout: 15), "the chip shows the new dose")
+    }
+
+    // Opening a screen from More used to replace the tab's contents, which sent the tab bar back to Overview.
+    func testMoreOpensWithoutLeavingTheTab() {
+        let app = XCUIApplication()
+        app.launchArguments = ["UITEST_SIGNED_IN"]
+        app.launch()
+
+        let more = app.tabBars.buttons["More"]
+        XCTAssertTrue(more.waitForExistence(timeout: 10))
+        more.tap()
+        for (id, title) in [("more-calendar", "Calendar"), ("more-log", "Log"), ("more-wants", "Wants")] {
+            app.buttons[id].tap()
+            XCTAssertTrue(app.buttons["back-button"].waitForExistence(timeout: 5), "\(title) should open in place")
+            XCTAssertTrue(app.tabBars.buttons["More"].isSelected, "\(title) should stay on the More tab")
+            XCTAssertFalse(app.buttons[id].exists, "\(title) should cover the menu")
+            app.buttons["back-button"].tap()
+            XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 5), "back should return to the menu")
+        }
+
+        // Sheets keep their own bar. Hiding the tab's navigation bar must not hide Cancel or Done.
+        app.buttons["more-wants"].tap()
+        app.buttons["add-want"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+        app.buttons["Cancel"].tap()
+        app.tabBars.buttons["Overview"].tap()
+        app.buttons["account-button"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     }
 
     private func shot(_ name: String, _ env: [String: String]) {

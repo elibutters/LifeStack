@@ -11,8 +11,8 @@ struct TipBubble: View {
             }
         }
         .padding(.horizontal, 9).padding(.vertical, 6)
-        .background(Theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Theme.line))
+        .background(Theme.raised, in: RoundedRectangle(cornerRadius: Theme.rs))
+        .overlay(RoundedRectangle(cornerRadius: Theme.rs).strokeBorder(Theme.line))
     }
 }
 

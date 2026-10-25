@@ -9,7 +9,7 @@ struct WorkoutsView: View {
     @State private var pickedDay: String?
 
     var body: some View {
-        Screen(title: "Workouts", refresh: { await load() }) {
+        Screen(title: "Fitness", refresh: { await load() }) {
             ErrorBanner(text: loader.error)
             if let o = loader.value {
                 if o.totals.all.count == 0 {
@@ -32,12 +32,12 @@ struct WorkoutsView: View {
     private func tile(_ label: String, _ t: WorkoutTotals) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label.uppercased()).font(.caption2.weight(.semibold)).tracking(0.8).foregroundStyle(Theme.muted)
-            Text(Format.milesText(t.distanceM, digits: t.distanceM > 160_000 ? 0 : 1)).font(.system(size: 24, weight: .semibold, design: .rounded)).monospacedDigit().minimumScaleFactor(0.7).lineLimit(1)
+            Text(Format.milesText(t.distanceM, digits: t.distanceM > 160_000 ? 0 : 1)).font(.system(size: 24, weight: .semibold)).monospacedDigit().minimumScaleFactor(0.7).lineLimit(1)
             Text("\(t.count) workout\(t.count == 1 ? "" : "s") \u{00B7} \(Format.duration(t.movingS))").font(.caption).foregroundStyle(Theme.muted).lineLimit(1).minimumScaleFactor(0.8)
             Text(t.paceSecPerKm.map { "\(Format.paceText($0)) avg" } ?? " ").font(.caption).foregroundStyle(Theme.muted)
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: Theme.r))
+        .panel()
     }
 
     private func totals(_ o: WorkoutsOverview) -> some View {
@@ -81,10 +81,10 @@ struct WorkoutsView: View {
                     VStack(spacing: 4) {
                         ForEach(0 ..< 7, id: \.self) { i in
                             let c = i < col.count ? col[i] : nil
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            RoundedRectangle(cornerRadius: 1)
                                 .fill(c == nil ? Color.clear : (c!.count == 0 ? Theme.raised : Theme.blue.opacity(0.35 + 0.65 * min(1, c!.distanceM / top))))
                                 .frame(width: 21, height: 21)
-                                .overlay { if let c, pickedDay == c.date { RoundedRectangle(cornerRadius: 3, style: .continuous).stroke(Color.white, lineWidth: 1.5) } }
+                                .overlay { if let c, pickedDay == c.date { RoundedRectangle(cornerRadius: 1).stroke(Color.white, lineWidth: 1) } }
                                 .contentShape(Rectangle())
                                 .onTapGesture { if let c { pickedDay = pickedDay == c.date ? nil : c.date } }
                                 .accessibilityLabel(c.map { "\(Format.shortDay($0.date)), \($0.count == 0 ? "rest" : Format.milesText($0.distanceM))" } ?? "")
@@ -106,7 +106,7 @@ struct WorkoutsView: View {
             else {
                 Chart(Array(pts)) { p in
                     LineMark(x: .value("Date", p.date), y: .value("Pace", secPerMile(p))).foregroundStyle(Theme.blue.opacity(0.45)).interpolationMethod(.monotone)
-                    PointMark(x: .value("Date", p.date), y: .value("Pace", secPerMile(p))).foregroundStyle(Theme.sky).symbolSize(30)
+                    PointMark(x: .value("Date", p.date), y: .value("Pace", secPerMile(p))).foregroundStyle(Theme.accent).symbolSize(30)
                     SelectionMark(x: pickedRun, lines: pts.first { $0.date == pickedRun }.map { [Format.shortDay($0.date), Format.paceText($0.paceSecPerKm), Format.milesText($0.distanceM)] } ?? [])
                 }
                 .chartXSelection(value: $pickedRun)

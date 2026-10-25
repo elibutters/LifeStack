@@ -12,6 +12,7 @@ struct TodaySummary: Decodable, Equatable {
 
 enum APIError: LocalizedError {
     case badAddress, unauthorized, needsReadAccess, offline, server, wrongPassword, tooManyAttempts
+    case rejected(String) // the server understood but refused, and says why (a session with no free slot, say)
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +23,7 @@ enum APIError: LocalizedError {
         case .server: "The server had a problem. Try again shortly."
         case .wrongPassword: "Wrong email or password."
         case .tooManyAttempts: "Too many attempts. Try again in 15 minutes."
+        case .rejected(let why): why
         }
     }
 }
@@ -41,7 +43,7 @@ struct APIClient {
         return parts.url
     }
 
-    private func request(_ path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) async throws -> Data {
+    func request(_ path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) async throws -> Data {
         var url = base.appending(path: path)
         if !query.isEmpty { url.append(queryItems: query) }
         var req = URLRequest(url: url, timeoutInterval: 20)
@@ -58,11 +60,14 @@ struct APIClient {
         case 200, 201: return data
         case 401: throw APIError.unauthorized
         case 403: throw APIError.needsReadAccess
+        case 409:
+            let why = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
+            throw APIError.rejected(why ?? "That could not be done.")
         default: throw APIError.server
         }
     }
 
-    private func get<T: Decodable>(_ path: String, _ query: [URLQueryItem] = []) async throws -> T {
+    func get<T: Decodable>(_ path: String, _ query: [URLQueryItem] = []) async throws -> T {
         do { return try JSONDecoder().decode(T.self, from: try await request(path, query: query)) }
         catch let e as APIError { throw e } catch is CancellationError { throw CancellationError() } catch { throw APIError.server }
     }
@@ -93,10 +98,10 @@ struct APIClient {
     // Raw bytes, so a widget can keep the last good answer to show when it is offline.
     func rawGet(_ path: String, _ query: [URLQueryItem] = []) async throws -> Data { try await request(path, query: query) }
     func overview() async throws -> Overview { try await get("api/v1/overview") }
-    func calendar(days: Int = 30) async throws -> [CalendarItem] {
+    // `from` and `to` are inclusive calendar days. The server allows at most 90 days.
+    func calendar(from: Date, to: Date) async throws -> [CalendarItem] {
         struct R: Decodable { let items: [CalendarItem] }
-        let from = Date(), to = Calendar.current.date(byAdding: .day, value: days, to: from) ?? from
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = .current
         let r: R = try await get("api/v1/calendar", [.init(name: "from", value: f.string(from: from)), .init(name: "to", value: f.string(from: to))])
         return r.items
     }

@@ -29,6 +29,7 @@ targets:
         CFBundleDisplayName: Life Stack
         UILaunchScreen: {}
         UIUserInterfaceStyle: Dark
+        NSSupportsLiveActivities: true
         LSBaseURL: $(API_BASE_URL)
         LSKeychainGroup: $(AppIdentifierPrefix)app.lifestack.shared
         UIBackgroundModes: [location]
@@ -51,6 +52,7 @@ targets:
       - LifeStack/Keychain.swift
       - LifeStack/APIClient.swift
       - LifeStack/Models.swift
+      - LifeStack/NextEventAttributes.swift
     entitlements:
       path: LifeStackWidgets/LifeStackWidgets.entitlements
       properties:

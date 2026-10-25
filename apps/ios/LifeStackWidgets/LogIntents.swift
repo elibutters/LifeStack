@@ -100,3 +100,45 @@ struct ToggleSupplementsIntent: AppIntent {
         return .result()
     }
 }
+
+// One supplement from the list: takes it if it is not taken today, otherwise removes today's entries for it.
+struct ToggleSupplementIntent: AppIntent {
+    static var title: LocalizedStringResource = "Take or undo one supplement"
+    @Parameter(title: "Supplement") var name: String
+
+    init() {}
+    init(name: String) { self.name = name }
+
+    func perform() async throws -> some IntentResult {
+        guard let client = WidgetData.client else { return .result() }
+        let n = name
+        let isTaken = (WidgetData.cachedOverview()?.log?.supplements ?? []).contains { $0.name.lowercased() == n.lowercased() && $0.count > 0 }
+        WidgetData.setMenu("supps") // stay open so several can be ticked
+        WidgetData.applyLocal(.supplements(names: [n], taken: !isTaken))
+        WidgetCenter.shared.reloadAllTimelines()
+        defer { WidgetData.endOptimistic(); WidgetCenter.shared.reloadAllTimelines() }
+        if isTaken {
+            let entries = try await client.history(limit: 100).filter { $0.key == "supplement.taken" && Format.isToday($0.at) && $0.name?.lowercased() == n.lowercased() }
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                for e in entries { group.addTask { try await client.deleteEntry(e.id) } }
+                try await group.waitForAll()
+            }
+        } else {
+            _ = try await client.log(["type": "supplement", "name": n])
+        }
+        return .result()
+    }
+}
+
+// The minus beside the drinks: removes the most recent caffeine entry from today.
+struct UndoCaffeineIntent: AppIntent {
+    static var title: LocalizedStringResource = "Remove the last caffeine"
+
+    func perform() async throws -> some IntentResult {
+        guard let client = WidgetData.client else { return .result() }
+        let entries = try await client.history(limit: 100).filter { $0.key == "caffeine" && Format.isToday($0.at) }
+        guard let last = entries.max(by: { (Format.date($0.at) ?? .distantPast) < (Format.date($1.at) ?? .distantPast) }) else { return .result() }
+        try await run(.coffeeRemoved(mg: last.dose ?? 0)) { try await client.deleteEntry(last.id) }
+        return .result()
+    }
+}

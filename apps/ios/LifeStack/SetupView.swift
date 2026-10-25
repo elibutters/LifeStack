@@ -28,7 +28,7 @@ struct SetupView: View {
                     .onSubmit { submit() }
 
                 if let message = model.message {
-                    Text(message).font(.subheadline).foregroundStyle(.red).multilineTextAlignment(.center).padding(.top, 2)
+                    Text(message).font(.subheadline).foregroundStyle(Theme.bad).multilineTextAlignment(.center).padding(.top, 2)
                 }
 
                 Button(action: submit) {
@@ -38,8 +38,8 @@ struct SetupView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 28)
                 }
-                .buttonStyle(.glassProminent)
-                .tint(Theme.blue)
+                .buttonStyle(.borderedProminent)
+                .tint(.white)
                 .controlSize(.large)
                 .disabled(!ready)
                 .padding(.top, 8)
@@ -55,7 +55,7 @@ struct SetupView: View {
         view
             .textInputAutocapitalization(.never).autocorrectionDisabled()
             .padding(.horizontal, 14).frame(height: 48)
-            .glassEffect(.regular, in: .rect(cornerRadius: Theme.rs))
+            .panel(Theme.rs)
     }
 
     private func submit() {

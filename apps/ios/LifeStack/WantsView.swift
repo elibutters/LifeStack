@@ -15,7 +15,7 @@ struct WantsView: View {
 
     var body: some View {
         Screen(title: "Wants", refresh: { await load() }, trailing: {
-            Button { adding = true } label: { Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(Theme.sky) }
+            Button { adding = true } label: { Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(Theme.accent) }
                 .accessibilityLabel("Add a want").accessibilityIdentifier("add-want")
         }) {
             ErrorBanner(text: failure ?? loader.error)
@@ -82,7 +82,7 @@ struct WantsView: View {
             }
             if let note = w.note, !note.isEmpty { Text(note).font(.subheadline).foregroundStyle(Theme.muted) }
             ForEach(w.options) { optionRow($0, live: live, solo: solo) }
-            if live && w.options.isEmpty { Button { optionFor = w } label: { Label("Add an option", systemImage: "plus").font(.subheadline) }.buttonStyle(.plain).foregroundStyle(Theme.sky) }
+            if live && w.options.isEmpty { Button { optionFor = w } label: { Label("Add an option", systemImage: "plus").font(.subheadline) }.buttonStyle(.plain).foregroundStyle(Theme.accent) }
         }
     }
 
@@ -92,8 +92,8 @@ struct WantsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(o.title).font(.subheadline.weight(.medium)).strikethrough(out).foregroundStyle(out ? Theme.muted : .white).lineLimit(2)
-                    if o.status == "chosen" { Text("chosen").font(.caption2).foregroundStyle(Theme.sky) }
-                    if o.atTarget && !out { Text("AT TARGET").font(.caption2.weight(.bold)).foregroundStyle(Theme.good).padding(.horizontal, 6).padding(.vertical, 2).background(Theme.good.opacity(0.16), in: Capsule()) }
+                    if o.status == "chosen" { Text("chosen").font(.caption2).foregroundStyle(Theme.accent) }
+                    if o.atTarget && !out { Text("AT TARGET").font(.caption2.weight(.bold)).foregroundStyle(Theme.good).padding(.horizontal, 6).padding(.vertical, 2).background(Theme.good.opacity(0.16), in: RoundedRectangle(cornerRadius: Theme.rs)) }
                 }
                 Text([o.targetCents.map { "target \(money($0))" } ?? "no target", o.priceCheckedAt.map { "seen \(String($0.prefix(10)))" }].compactMap { $0 }.joined(separator: " \u{00B7} ")).font(.caption).foregroundStyle(Theme.muted)
             }
