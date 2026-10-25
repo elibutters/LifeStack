@@ -7,8 +7,8 @@ import { addDays, startOfDay } from "./dates";
 
 // Calendar events live in the shared `events` table:
 //   domain = "calendar", key = "calendar.event", ts = start instant,
-//   payload = { title, end?, allDay?, location?, kind? }  (end is an ISO timestamp with offset;
-//   kind is "holiday" for items from a holidays calendar, otherwise "event")
+//   payload = { title, end?, allDay?, location?, detail?, kind? }  (end is an ISO timestamp with offset;
+//   kind is "holiday" for a holidays calendar, "workout" or "prep" for the fitness plan, otherwise "event")
 // All-day events start at midnight of their first day in APP_TZ and end at midnight
 // after their last day. A sync worker only has to write rows in this shape.
 const Payload = z.object({
@@ -16,8 +16,11 @@ const Payload = z.object({
   end: z.iso.datetime({ offset: true }).nullish(),
   allDay: z.boolean().nullish(),
   location: z.string().nullish(),
-  kind: z.enum(["event", "holiday"]).nullish(),
+  detail: z.string().nullish(),
+  kind: z.enum(["event", "holiday", "workout", "prep"]).nullish(),
 });
+
+export type CalendarKind = "event" | "holiday" | "workout" | "prep";
 
 export type CalendarItem = {
   id: number;
@@ -25,8 +28,9 @@ export type CalendarItem = {
   start: Date;
   end: Date;
   allDay: boolean;
-  kind: "event" | "holiday";
+  kind: CalendarKind;
   location?: string;
+  detail?: string;
 };
 
 export async function calendarItems(from: Date, to: Date): Promise<CalendarItem[]> {
@@ -43,7 +47,7 @@ export async function calendarItems(from: Date, to: Date): Promise<CalendarItem[
   for (const row of rows) {
     const parsed = Payload.safeParse(row.payload);
     if (!parsed.success) continue;
-    const { title, end, allDay, location, kind } = parsed.data;
+    const { title, end, allDay, location, detail, kind } = parsed.data;
     const start = row.ts;
     const stop = end ? new Date(end) : start;
     const item: CalendarItem = {
@@ -54,6 +58,7 @@ export async function calendarItems(from: Date, to: Date): Promise<CalendarItem[
       allDay: !!allDay,
       kind: kind ?? "event",
       location: location ?? undefined,
+      detail: detail ?? undefined,
     };
     if (overlaps(item, from, to)) items.push(item);
   }

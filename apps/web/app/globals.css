@@ -2,37 +2,37 @@
 
 /* Semantic palette. Hexes must match lib/theme.ts. Change both when retheming. */
 @theme {
-  --color-bg: #0c1018;
-  --color-surface: #161b24;
-  --color-raised: #1e2532;
-  --color-line: #2a3344;
-  --color-muted: #8b97ad;
-  --color-fg: #f4f6fb;
-  --color-wash: #37559d;
-  --color-accent: #5289fe;
-  --color-accent-soft: #77a2ff;
-  --color-accent-mid: #4d6fd6;
-  --color-accent-deep: #2a4c93;
-  --color-holiday: #c4b08a;
-  --color-ok: #3dcc5a;
-  --color-ok-fg: #06210a;
-  --color-danger: #e85d5d;
-  --color-warn: #e0b05a;
-  --color-idle: #2a3344;
-  --color-sleep-deep: #2a4c93;
-  --color-sleep-rem: #4d6fd6;
-  --color-sleep-light: #77a2ff;
-  --color-sleep-awake: #6f85b7;
-  --color-mood-1: #e07090;
-  --color-mood-2: #e09070;
-  --color-mood-3: #e0b05a;
-  --color-mood-4: #7dcc8a;
-  --color-mood-5: #3dcc5a;
+  --color-bg: #000000;
+  --color-surface: #0a0a0a;
+  --color-raised: #141414;
+  --color-line: #2a2a2a;
+  --color-muted: #8a8a8a;
+  --color-fg: #ededed;
+  --color-wash: #000000;
+  --color-accent: #6ea8ff;
+  --color-accent-soft: #b9d4ff;
+  --color-accent-mid: #3d6cb5;
+  --color-accent-deep: #1e3a66;
+  --color-holiday: #d4b483;
+  --color-ok: #3ecf8e;
+  --color-ok-fg: #04140c;
+  --color-danger: #f07178;
+  --color-warn: #e6b15c;
+  --color-idle: #2a2a2a;
+  --color-sleep-deep: #6ea8ff;
+  --color-sleep-rem: #8aa4cc;
+  --color-sleep-light: #4a5568;
+  --color-sleep-awake: #e6b15c;
+  --color-mood-1: #f07178;
+  --color-mood-2: #c4846a;
+  --color-mood-3: #8a8a8a;
+  --color-mood-4: #7dba9a;
+  --color-mood-5: #3ecf8e;
   --radius-sm: 0.125rem;
-  --radius-md: 0.25rem;
-  --radius-lg: 0.25rem;
-  --radius-xl: 0.375rem;
-  --radius-2xl: 0.375rem;
+  --radius-md: 0.125rem;
+  --radius-lg: 0.125rem;
+  --radius-xl: 0.125rem;
+  --radius-2xl: 0.25rem;
 }
 
 html {
@@ -40,10 +40,6 @@ html {
   /* Reserve the scrollbar space so the page does not shift when a day has more or fewer items. */
   scrollbar-gutter: stable;
   background-color: var(--color-bg);
-  background-image:
-    radial-gradient(90rem 36rem at 50% -12%, color-mix(in srgb, var(--color-wash) 55%, transparent) 0%, transparent 62%),
-    linear-gradient(180deg, color-mix(in srgb, var(--color-wash) 38%, var(--color-bg)) 0%, var(--color-bg) 42%);
-  background-attachment: fixed;
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
 }
@@ -58,7 +54,17 @@ button {
   touch-action: manipulation;
 }
 
+a.text-accent {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentcolor 40%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+a.text-accent:hover {
+  text-decoration-color: currentcolor;
+}
+
 /* The map uses OpenStreetMap's light tiles; this darkens them to sit in the app's dark theme. */
 .map-tiles-dark {
-  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92) saturate(0.55);
+  filter: grayscale(1) invert(1) brightness(0.92) contrast(0.92);
 }

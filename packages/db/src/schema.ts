@@ -307,3 +307,25 @@ export const settings = pgTable("settings", {
   value: jsonb("value").$type<unknown>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// The repeating week for Fitness → Plan. weekday 0 is Monday. A null start is all day.
+// Saving a row rewrites calendar events (source "plan") from today through the next eight weeks.
+export const planSlots = pgTable(
+  "plan_slots",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    weekday: integer("weekday").notNull(),
+    kind: text("kind").notNull(), // workout | prep
+    title: text("title").notNull(),
+    notes: text("notes"),
+    startMin: integer("start_min"),
+    durationMin: integer("duration_min"),
+    createdAt,
+  },
+  (t) => [
+    check("plan_slots_weekday", sql`${t.weekday} between 0 and 6`),
+    check("plan_slots_kind", sql`${t.kind} in ('workout', 'prep')`),
+    check("plan_slots_start", sql`${t.startMin} is null or ${t.startMin} between 0 and 1439`),
+    check("plan_slots_duration", sql`${t.durationMin} is null or ${t.durationMin} between 1 and 720`),
+  ],
+);

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Card } from "@/components/card";
+import { LiveRefresh } from "@/components/live-refresh";
 import { QuickLog } from "@/components/quick-log";
 import { requireSession } from "@/lib/auth";
 import { listSupplements, loadToday } from "@/lib/capture";
@@ -33,10 +34,12 @@ export default async function QuickLogPage() {
           </div>
         </dl>
       </Card>
+      <LiveRefresh />
       <QuickLog
         supplements={supplements.map((s) => ({ id: s.id, name: s.name, dose: s.dose, unit: s.unit === "g" ? ("g" as const) : ("mg" as const) }))}
         taken={taken.map((s) => s.name)}
         caffeine={today.entries.filter((e) => e.key === "caffeine").map((e) => ({ id: e.id, drink: e.valueText ?? "Caffeine" }))}
+        mood={mood?.value ?? null}
       />
     </div>
   );

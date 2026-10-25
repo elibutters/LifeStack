@@ -77,7 +77,7 @@ export default async function FinanceOverview() {
           <ul className="space-y-4">
             {list.slice(0, 6).map((i) => (
               <li key={i.id} className="flex gap-3">
-                <span aria-hidden="true" className={`mt-2 h-2 w-2 shrink-0 rounded-full ${TONE[i.tone]}`} />
+                <span aria-hidden="true" className={`mt-2 h-2 w-2 shrink-0 rounded-sm ${TONE[i.tone]}`} />
                 <div>
                   <p className="font-medium">{i.title}</p>
                   <p className="text-sm text-muted">{i.detail}</p>

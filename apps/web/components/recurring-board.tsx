@@ -17,7 +17,7 @@ import {
   type RecurringCadence,
 } from "@/lib/finance-calc";
 
-const pill = "rounded-full border border-line px-2 py-0.5 text-xs";
+const pill = "rounded-sm border border-line px-2 py-0.5 text-xs";
 const field = "h-8 rounded-md border border-line bg-surface px-2 text-xs outline-none focus:border-accent";
 
 export function RecurringBoard({ tagged, merchants }: { tagged: Recurring[]; merchants: MerchantChoice[] }) {
