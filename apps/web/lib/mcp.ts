@@ -16,6 +16,7 @@ import { getEmail, loadAgenda, searchEmails } from "./email";
 import { addPlace, loadHistory } from "./location";
 import { getNote, kickSync, searchNotes } from "./notes";
 import { changeSetting, listSettings, resetSetting } from "./settings";
+import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, pushToCalendar, skipSession, tonight, updateGoal } from "./goals";
 import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
 
@@ -323,6 +324,141 @@ export function buildServer(token: VerifiedToken): McpServer {
           console.error("mcp: reset_setting failed", describeError(e));
           return fail("The tool could not save that.");
         }
+      },
+    );
+  }
+
+  if (has("goals:read")) {
+    server.registerTool(
+      "get_goals",
+      { description: "The owner's goals (a thing they are working toward, with a thesis and a date or pace), each with its planned, done and skipped session counts, and the next session." },
+      guard(async () => ok(await Promise.all((await listGoals()).map(async (g) => (await getGoal(g.id))!)))),
+    );
+    server.registerTool(
+      "get_goal",
+      { description: "One goal with every session (planned, done, skipped).", inputSchema: { id: z.string() } },
+      async ({ id }) => {
+        try {
+          const g = await getGoal(id);
+          return g ? ok(g) : fail("No such goal.");
+        } catch (e) {
+          console.error("mcp: get_goal failed", describeError(e));
+          return fail("The tool could not read the data.");
+        }
+      },
+    );
+    server.registerTool(
+      "find_free_time",
+      {
+        description: "Stretches of real free time in the owner's calendar over the next few days, inside the hours they allow for goal sessions (weekday evenings and weekend days by default, never after the latest end), clear of meetings and of sessions already planned. Use it to see what is possible before proposing a plan.",
+        inputSchema: { days: z.number().int().min(1).max(60).optional(), minMinutes: z.number().int().min(10).max(480).optional() },
+      },
+      async ({ days, minMinutes }) => {
+        try {
+          const from = new Date();
+          const { free } = await findFreeTime({ from, to: new Date(from.getTime() + (days ?? 14) * 86_400_000), minMin: minMinutes ?? 30 });
+          return ok(free.map((f) => ({ start: f.start.toISOString(), end: f.end.toISOString(), minutes: Math.round((f.end.getTime() - f.start.getTime()) / 60000) })));
+        } catch (e) {
+          console.error("mcp: find_free_time failed", describeError(e));
+          return fail("The tool could not read the data.");
+        }
+      },
+    );
+    server.registerTool(
+      "propose_plan",
+      {
+        description:
+          'Drafts the sessions for a goal and fits them into real free time. It saves nothing, so call it as often as you like while brainstorming and show the owner the result. kind "prep": counts back from targetDay (a date, YYYY-MM-DD) with a session every everyDays days (default 2) of durationMin minutes (default 60), the last taperLast ones lighter. kind "progress": a session each day (or only the listed weekdays, Monday is 0) from fromDay (default today) to targetDay. kind "train": a weekly template of {weekday, durationMin, title}, scaled week by week (builds up, steps back every fourth week, tapers the last two) until targetDay. kind "custom": an explicit list of sessions [{day, durationMin, title, flexDays}]. Returns the placed sessions, any that did not fit with the reason, and a feasibility summary (minutes needed, available, short by).',
+        inputSchema: {
+          kind: z.enum(["prep", "progress", "train", "custom"]),
+          title: z.string(),
+          fromDay: z.string().optional(),
+          targetDay: z.string().optional(),
+          everyDays: z.number().int().optional(),
+          durationMin: z.number().int().optional(),
+          taperLast: z.number().int().optional(),
+          weekdays: z.array(z.number().int()).optional(),
+          weeks: z.number().int().optional(),
+          template: z.array(z.object({ weekday: z.number().int(), durationMin: z.number().int(), title: z.string() })).optional(),
+          sessions: z.array(z.object({ day: z.string(), durationMin: z.number().int(), title: z.string(), flexDays: z.number().int().optional() })).optional(),
+          flexDays: z.number().int().optional(),
+        },
+      },
+      async (args) => {
+        try {
+          const r = await proposePlan(args);
+          return r.ok ? ok(r) : fail(r.error);
+        } catch (e) {
+          console.error("mcp: propose_plan failed", describeError(e));
+          return fail("The tool could not build that plan.");
+        }
+      },
+    );
+    server.registerTool(
+      "get_tonight",
+      { description: "Today's sessions, anything that slipped and needs a decision (each with the slot it would move to, or null when there is no room), and how many free minutes are left today. This is what to open with when the owner asks what to do tonight." },
+      guard(async () => ok(await tonight())),
+    );
+  }
+
+  if (has("goals:write")) {
+    const fromResult = <T extends { ok: boolean }>(r: T) => ((r as { ok: boolean }).ok ? ok(r) : fail((r as unknown as { error: string }).error));
+    server.registerTool(
+      "create_goal",
+      {
+        description: 'Starts a goal. thesis is why it matters and what done looks like, in the owner\'s words. kind is prep, progress, train or custom. targetDay is YYYY-MM-DD. mode says what happens when a session slips: "ask" (default, nothing moves without the owner), "slide" or "auto". Creating a goal schedules nothing; build the sessions with propose_plan and commit_plan.',
+        inputSchema: { title: z.string(), thesis: z.string().optional(), kind: z.enum(["prep", "progress", "train", "custom"]).optional(), targetDay: z.string().optional(), mode: z.enum(["ask", "slide", "auto"]).optional(), config: z.record(z.string(), z.unknown()).optional() },
+      },
+      async (args) => {
+        try { return fromResult(await createGoal(args)); } catch (e) { console.error("mcp: create_goal failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "update_goal",
+      {
+        description: "Changes a goal: title, thesis, kind, targetDay (or null), mode, status (draft, active, done, archived), config.",
+        inputSchema: { id: z.string(), title: z.string().optional(), thesis: z.string().optional(), kind: z.enum(["prep", "progress", "train", "custom"]).optional(), targetDay: z.string().nullable().optional(), mode: z.enum(["ask", "slide", "auto"]).optional(), status: z.enum(["draft", "active", "done", "archived"]).optional(), config: z.record(z.string(), z.unknown()).optional() },
+      },
+      async ({ id, ...patch }) => {
+        try { return fromResult(await updateGoal(id, patch)); } catch (e) { console.error("mcp: update_goal failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "commit_plan",
+      {
+        description: "Saves the finalized sessions for a goal and adds them to the owner's Outlook calendar (in the Life Stack category). Only call this after the owner has approved the plan. Each session is {title, start, end, note} with ISO times, normally taken from propose_plan. If anything overlaps a meeting or another session nothing is saved and the conflicts are listed. If Outlook has not been reconnected to allow writing the sessions are still saved here and calendar says needs_reconnect; run push_to_calendar after the owner reconnects.",
+        inputSchema: { goalId: z.string(), sessions: z.array(z.object({ title: z.string(), start: z.string(), end: z.string(), note: z.string().optional() })), allowOverlap: z.boolean().optional() },
+      },
+      async ({ goalId, ...rest }) => {
+        try { return fromResult(await commitPlan(goalId, rest)); } catch (e) { console.error("mcp: commit_plan failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "push_to_calendar",
+      { description: "Adds calendar events for sessions that were saved without one (for example before Outlook was reconnected). Optionally for one goal.", inputSchema: { goalId: z.string().optional() } },
+      async ({ goalId }) => {
+        try { return ok(await pushToCalendar(goalId)); } catch (e) { console.error("mcp: push_to_calendar failed", describeError(e)); return fail("The tool could not update the calendar."); }
+      },
+    );
+    server.registerTool(
+      "complete_session",
+      { description: "Marks a session done. Optionally the minutes actually spent, a note about what was covered, and a 1 to 5 rating of how it went.", inputSchema: { id: z.string(), minutes: z.number().int().optional(), note: z.string().optional(), rating: z.number().int().optional() } },
+      async ({ id, ...rest }) => {
+        try { return fromResult(await completeSession(id, rest)); } catch (e) { console.error("mcp: complete_session failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "skip_session",
+      { description: "Skips a session: it stays in the record and comes off the calendar.", inputSchema: { id: z.string() } },
+      async ({ id }) => {
+        try { return fromResult(await skipSession(id)); } catch (e) { console.error("mcp: skip_session failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "move_session",
+      { description: "Moves a planned session, and its calendar event. Give start (an ISO time) to pick the time, or leave it out to use the next free slot. Refuses an overlap, and says plainly when there is no slot before the goal's last day.", inputSchema: { id: z.string(), start: z.string().optional() } },
+      async ({ id, start }) => {
+        try { return fromResult(await moveSession(id, { start })); } catch (e) { console.error("mcp: move_session failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
   }

@@ -11,12 +11,25 @@ export const EmailRules = z
   .strict();
 export type EmailRulesT = z.infer<typeof EmailRules>;
 
+const Clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const Hours = z.array(z.tuple([Clock, Clock])).min(1).max(4);
+export const GoalSchedule = z
+  .object({ weekday: Hours, weekend: Hours, maxPerDay: z.number().int().min(1).max(6), bufferMin: z.number().int().min(0).max(60), preferredStart: Clock, latestEnd: Clock })
+  .strict();
+export type GoalScheduleT = z.infer<typeof GoalSchedule>;
+
 export const SETTINGS = {
   "email.rules": {
     description:
       'Extra mail sorting rules: for each category (receipt, shipping, bill, appointment, deal, other) a list of phrases. A message whose subject, sender name or sender address contains a phrase goes in that category, ahead of the built-in rules. "other" forces a message out of every category. Example: {"bill":["con edison"],"other":["newsletter"]}. Existing mail is re-sorted when this changes.',
     schema: EmailRules,
     default: {} as EmailRulesT,
+  },
+  "goals.schedule": {
+    description:
+      'When goal sessions may be scheduled (24 hour HH:MM, in your time zone): weekday and weekend windows (up to four each), the most sessions in a day across all goals, the breathing room kept around meetings and other sessions, where in a free stretch a session likes to start, and the latest any session may end. Example: {"weekday":[["18:00","22:30"]],"weekend":[["09:00","21:00"]],"maxPerDay":2,"bufferMin":15,"preferredStart":"19:00","latestEnd":"22:30"}.',
+    schema: GoalSchedule,
+    default: { weekday: [["18:00", "22:30"]], weekend: [["09:00", "21:00"]], maxPerDay: 2, bufferMin: 15, preferredStart: "19:00", latestEnd: "22:30" } as GoalScheduleT,
   },
   "map.style": { description: "Default map background on the web Map page: dark, light, streets, satellite or none (points only).", schema: z.enum(["dark", "light", "streets", "satellite", "none"]), default: "dark" as const },
   "map.lines": { description: "Whether the web Map page draws a line joining the points by default.", schema: z.boolean(), default: true },
