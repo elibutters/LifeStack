@@ -7,6 +7,7 @@ import { db } from "./db";
 import { TZ } from "./dates";
 import { describeError } from "./errors";
 import * as eng from "./goals-core";
+import { notebookUrl } from "./goals-notion-core";
 import { createEvents, deleteEvent, updateEvent, type SessionEvent } from "./outlook-write";
 import { loadOverrides } from "./settings-store";
 import { verifyBearer } from "./tokens";
@@ -119,7 +120,7 @@ export async function getGoal(id: string) {
   const sessions = await sessionsOf(id);
   const done = sessions.filter((s) => s.status === "done");
   const next = sessions.find((s) => s.status === "planned" && s.end > new Date()) ?? null;
-  return { goal, sessions: sessions.map(sessionJson), progress: { planned: sessions.filter((s) => s.status === "planned").length, done: done.length, skipped: sessions.filter((s) => s.status === "skipped").length, minutesDone: done.reduce((n, s) => n + (s.minutes ?? s.durationMin), 0) }, next: next && sessionJson(next) };
+  return { goal, notebook: goal.notionPageId ? notebookUrl(goal.notionPageId) : null, sessions: sessions.map(sessionJson), progress: { planned: sessions.filter((s) => s.status === "planned").length, done: done.length, skipped: sessions.filter((s) => s.status === "skipped").length, minutesDone: done.reduce((n, s) => n + (s.minutes ?? s.durationMin), 0) }, next: next && sessionJson(next) };
 }
 
 export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title: s.title, start: s.start.toISOString(), end: s.end.toISOString(), minutes: s.durationMin, status: s.status, note: s.note, onCalendar: !!s.outlookEventId, movedFrom: s.movedFrom, doneAt: s.doneAt, minutesSpent: s.minutes, rating: s.rating });
@@ -371,7 +372,9 @@ const Action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("skip") }),
   z.object({ action: z.literal("move"), start: z.iso.datetime({ offset: true }).optional() }),
 ]);
-export const handleSessionAction = (req: Request, rawId: string) =>
+export type SessionActionEvent = { action: "done" | "skip" | "move"; session: ReturnType<typeof sessionJson>; note?: string };
+// `after` lets a caller (the route) do something once the action has succeeded, such as logging it to the goal's Notion notebook.
+export const handleSessionAction = (req: Request, rawId: string, after?: (e: SessionActionEvent) => void) =>
   guarded(req, "goals:write", async () => {
     if (!/^[A-Za-z0-9-]{6,80}$/.test(rawId)) return json({ error: "not_found" }, 404);
     const text = await req.text();
@@ -381,6 +384,9 @@ export const handleSessionAction = (req: Request, rawId: string) =>
     const a = Action.safeParse(body);
     if (!a.success) return json({ error: "invalid" }, 400);
     const r = a.data.action === "done" ? await completeSession(rawId, a.data) : a.data.action === "skip" ? await skipSession(rawId) : await moveSession(rawId, { start: a.data.start });
-    if (r.ok) return json(r);
+    if (r.ok) {
+      after?.({ action: a.data.action, session: r.session, note: a.data.action === "done" ? a.data.note : undefined });
+      return json(r);
+    }
     return json({ error: "failed", message: r.error }, r.error === "No such session." ? 404 : 409);
   });
