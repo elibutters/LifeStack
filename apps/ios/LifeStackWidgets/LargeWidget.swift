@@ -8,21 +8,29 @@ struct LargeEntry: TimelineEntry {
     let options: LogOptions?
     let workouts: WorkoutsOverview?
     let signedIn: Bool
+    var menu: String? = nil // which dropdown-style picker is open, if any
 }
 
 struct LargeProvider: TimelineProvider {
     private static let weeks = [URLQueryItem(name: "weeks", value: "8"), URLQueryItem(name: "recent", value: "1")]
     private func load() async -> LargeEntry {
-        async let o = WidgetData.load(Overview.self, path: "api/v1/overview")
-        async let l = WidgetData.load(LogOptions.self, path: "api/v1/log/options")
-        async let w = WidgetData.load(WorkoutsOverview.self, path: "api/v1/workouts", query: Self.weeks)
+        let justTapped = WidgetData.showingOptimistic
+        async let o = WidgetData.load(Overview.self, path: "api/v1/overview", cacheOnly: justTapped)
+        async let l = WidgetData.load(LogOptions.self, path: "api/v1/log/options", maxAge: 60 * 60)
+        async let w = WidgetData.load(WorkoutsOverview.self, path: "api/v1/workouts", query: Self.weeks, maxAge: 15 * 60)
         let (ov, lo, wo) = await (o, l, w)
-        return LargeEntry(date: .now, overview: ov.value, options: lo.value, workouts: wo.value, signedIn: ov.signedIn)
+        return LargeEntry(date: .now, overview: ov.value, options: lo.value, workouts: wo.value, signedIn: ov.signedIn, menu: WidgetData.openMenu)
     }
     func placeholder(in context: Context) -> LargeEntry { LargeEntry(date: .now, overview: nil, options: nil, workouts: nil, signedIn: true) }
     func getSnapshot(in context: Context, completion: @escaping (LargeEntry) -> Void) { Task { completion(await load()) } }
     func getTimeline(in context: Context, completion: @escaping (Timeline<LargeEntry>) -> Void) {
-        Task { completion(Timeline(entries: [await load()], policy: .after(.now.addingTimeInterval(WidgetData.refresh)))) }
+        Task {
+            let now = await load()
+            // An open picker closes itself after 20 seconds, so the widget gets a second, collapsed entry for then.
+            var entries = [now]
+            if now.menu != nil { entries.append(LargeEntry(date: .now.addingTimeInterval(21), overview: now.overview, options: now.options, workouts: now.workouts, signedIn: now.signedIn)) }
+            completion(Timeline(entries: entries, policy: .after(.now.addingTimeInterval(WidgetData.refresh))))
+        }
     }
 }
 
@@ -74,30 +82,73 @@ struct LargeWidgetView: View {
         }
     }
 
+    private static let moodNames = ["Low", "Meh", "Okay", "Good", "Great"]
+    private var pill: Color { Color.white.opacity(0.08) }
+
+    // Mood as a dropdown: one button showing the current mood, which opens into the five choices.
     private var moodRow: some View {
         HStack(spacing: 6) {
             Text("MOOD").font(.caption2.weight(.semibold)).foregroundStyle(WColor.muted).frame(width: 40, alignment: .leading)
-            ForEach(1 ... 5, id: \.self) { v in
-                Button(intent: LogMoodIntent(value: v)) {
-                    Text(["Low", "Meh", "Okay", "Good", "Great"][v - 1]).font(.system(size: 11, weight: .medium)).lineLimit(1).minimumScaleFactor(0.7)
-                        .frame(maxWidth: .infinity).frame(height: 36)
-                        .background(moodNow == v ? AnyShapeStyle(WColor.gradient) : AnyShapeStyle(Color.white.opacity(0.08)), in: Capsule())
+            if entry.menu == "mood" {
+                Button(intent: TogglePickerIntent(name: "mood")) {
+                    Image(systemName: "chevron.up").font(.system(size: 12, weight: .semibold)).frame(width: 30, height: 36).background(pill, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                ForEach(1 ... 5, id: \.self) { v in
+                    Button(intent: LogMoodIntent(value: v)) {
+                        Text(Self.moodNames[v - 1]).font(.system(size: 11, weight: .medium)).lineLimit(1).minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity).frame(height: 36)
+                            .background(moodNow == v ? AnyShapeStyle(WColor.gradient) : AnyShapeStyle(pill), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Button(intent: TogglePickerIntent(name: "mood")) {
+                    HStack {
+                        Text(moodNow.map { Self.moodNames[max(0, min(4, $0 - 1))] } ?? "Log mood").font(.system(size: 14, weight: .semibold))
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold))
+                    }
+                    .padding(.horizontal, 14).frame(maxWidth: .infinity).frame(height: 36).background(pill, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
         }
     }
 
+    private var drinks: [(drink: String, mg: Double)] {
+        let from = entry.options?.caffeine.map { ($0.drink, $0.mg) } ?? []
+        return from.isEmpty ? [("Coffee", 95), ("Espresso", 64), ("Cold brew", 150), ("Tea", 47), ("Energy drink", 80), ("Soda", 34)] : from
+    }
+
+    // Caffeine: the day's total, a one-tap Coffee, and a small chevron that opens the full list of drinks.
     private var caffeineRow: some View {
-        HStack(spacing: 10) {
-            Text("CAFFEINE").font(.caption2.weight(.semibold)).foregroundStyle(WColor.muted)
-            Text("\(Int(o?.log?.caffeine.mg ?? 0)) mg").font(.system(.subheadline, design: .rounded).weight(.semibold)).monospacedDigit()
-            Spacer(minLength: 6)
-            Button(intent: LogCaffeineIntent()) {
-                Label("Coffee", systemImage: "plus").font(.system(size: 12, weight: .semibold))
-                    .padding(.horizontal, 14).frame(height: 34).background(Color.white.opacity(0.08), in: Capsule())
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Text("CAFFEINE").font(.caption2.weight(.semibold)).foregroundStyle(WColor.muted)
+                Text("\(Int(o?.log?.caffeine.mg ?? 0)) mg").font(.system(.subheadline, design: .rounded).weight(.semibold)).monospacedDigit()
+                Spacer(minLength: 6)
+                Button(intent: LogCaffeineIntent()) {
+                    Label("Coffee", systemImage: "plus").font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 14).frame(height: 34).background(pill, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                Button(intent: TogglePickerIntent(name: "drink")) {
+                    Image(systemName: entry.menu == "drink" ? "chevron.up" : "chevron.down").font(.system(size: 12, weight: .semibold)).frame(width: 34, height: 34).background(pill, in: Circle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            if entry.menu == "drink" {
+                HStack(spacing: 5) {
+                    ForEach(drinks.prefix(6), id: \.drink) { d in
+                        Button(intent: LogDrinkIntent(drink: d.drink, mg: d.mg)) {
+                            Text(d.drink == "Energy drink" ? "Energy" : d.drink).font(.system(size: 11, weight: .medium)).lineLimit(1).minimumScaleFactor(0.7)
+                                .frame(maxWidth: .infinity).frame(height: 32).background(pill, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
 

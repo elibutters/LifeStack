@@ -11,8 +11,8 @@ struct OverviewEntry: TimelineEntry {
 struct OverviewProvider: TimelineProvider {
     func placeholder(in context: Context) -> OverviewEntry { OverviewEntry(date: .now, overview: nil, signedIn: true) }
     private func load() async -> OverviewEntry {
-        async let o = WidgetData.load(Overview.self, path: "api/v1/overview")
-        async let l = WidgetData.load(LogOptions.self, path: "api/v1/log/options")
+        async let o = WidgetData.load(Overview.self, path: "api/v1/overview", cacheOnly: WidgetData.showingOptimistic)
+        async let l = WidgetData.load(LogOptions.self, path: "api/v1/log/options", maxAge: 60 * 60)
         let (ov, lo) = await (o, l)
         return OverviewEntry(date: .now, overview: ov.value, options: lo.value, signedIn: ov.signedIn)
     }
