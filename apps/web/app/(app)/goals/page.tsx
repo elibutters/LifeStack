@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { requireSession } from "@/lib/auth";
 import { TZ } from "@/lib/dates";
 import { getGoal, listGoals, tonight } from "@/lib/goals";
-import { doneAction, moveAction, notebookAction, skipAction } from "./actions";
+import { doneAction, moveAction, notebookAction, refreshCalendarAction, skipAction } from "./actions";
 
 export const metadata: Metadata = { title: "Goals" };
 export const dynamic = "force-dynamic";
@@ -167,6 +167,10 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
             );
           })
         )}
+        <form action={refreshCalendarAction} className="flex flex-wrap items-center gap-3 pt-2">
+          <button type="submit" className={small}>Refresh calendar events</button>
+          <span className="text-xs text-muted">Rewrites each session&apos;s Outlook event in the current layout. Press again if some are left.</span>
+        </form>
       </div>
     </>
   );
