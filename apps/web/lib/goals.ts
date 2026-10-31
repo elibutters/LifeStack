@@ -319,8 +319,7 @@ function refreshCalendar() {
 }
 
 const eventBody = (g: Goal, note?: string | null, actual?: Actual | null) => {
-  const lines = [`Goal: ${g.title}`];
-  if (g.thesis) lines.push(g.thesis.slice(0, 500));
+  const lines = [`Goal: ${g.title}`]; // just the name: the thesis does not belong on every event
   const n = splitSessionNote(note);
   if (n.plan.length) lines.push("", "Plan:", noteToText(n.plan));
   if (n.notes.length) lines.push("", "Notes:", noteToText(n.notes));
@@ -329,7 +328,7 @@ const eventBody = (g: Goal, note?: string | null, actual?: Actual | null) => {
 };
 
 // The layout version of the event bodies. Raise it when eventBody changes and refreshEventBodies rewrites every older event once.
-export const BODY_VERSION = 1;
+export const BODY_VERSION = 2;
 
 // Rewrites the Outlook event of every saved session in the current layout, upcoming ones first, within a time budget; call again while
 // `remaining` is above zero. A session is marked with the version it was written at, so this never repeats work.
