@@ -137,7 +137,7 @@ struct TodayView: View {
             LazyVGrid(columns: two, spacing: 8) {
                 ForEach(model.options?.supplements ?? [], id: \.self) { s in
                     let taken = model.taken(s.name) != nil
-                    Button { Task { if await model.toggleSupplement(s) { tapped += 1 } } } label: {
+                    Button { if model.toggleSupplement(s) { tapped += 1 } } label: {
                         HStack(spacing: 8) {
                             Image(systemName: taken ? "checkmark.circle.fill" : "circle").font(.callout).foregroundStyle(taken ? Theme.good : Theme.muted)
                             Text(s.name).font(.subheadline.weight(.medium)).lineLimit(1).minimumScaleFactor(0.75)
@@ -148,12 +148,23 @@ struct TodayView: View {
                         .chip(taken ? Theme.good.opacity(0.45) : nil)
                     }
                     .buttonStyle(.plain)
-                    .disabled(model.pending)
                 }
             }
             if !(model.options?.supplements ?? []).isEmpty {
-                Button("Edit doses") { editingDoses = true }
-                    .font(.footnote.weight(.medium)).foregroundStyle(Theme.accent).buttonStyle(.plain).frame(maxWidth: .infinity, alignment: .trailing)
+                HStack {
+                    if takenCount > 0, takenCount == (model.options?.supplements.count ?? 0) {
+                        Button("Remove all") { model.removeAllSupplements(); tapped += 1 }
+                            .font(.footnote.weight(.medium)).foregroundStyle(Theme.accent).buttonStyle(.plain)
+                            .accessibilityIdentifier("remove-all-supplements")
+                    } else if takenCount < (model.options?.supplements.count ?? 0) {
+                        Button("Select all") { model.takeAllSupplements(); tapped += 1 }
+                            .font(.footnote.weight(.medium)).foregroundStyle(Theme.accent).buttonStyle(.plain)
+                            .accessibilityIdentifier("select-all-supplements")
+                    }
+                    Spacer(minLength: 8)
+                    Button("Edit doses") { editingDoses = true }
+                        .font(.footnote.weight(.medium)).foregroundStyle(Theme.accent).buttonStyle(.plain)
+                }
             }
         }
     }

@@ -16,6 +16,12 @@ final class AppModel {
     var today: TodaySummary?
     var pending = false
     var options: LogOptions?
+    // Supplement taps paint at once and save behind that. These keep a newer tap from being wiped by a refresh
+    // that started earlier, and keep two taps on the same supplement in order.
+    private struct HeldSupplement { let supplement: LogOptions.Supplement; let on: Bool; let epoch: Int; let day: Date? }
+    private var held: [String: HeldSupplement] = [:]
+    private var chains: [String: Task<Int?, Never>] = [:]
+    private var supplementInflight = 0
     var message: String?
     var busy = false
 
@@ -91,7 +97,11 @@ final class AppModel {
         do {
             let summary = try await client.day(asked.map { Self.ymd.string(from: $0) })
             // A slow answer for a day the person has already left is dropped.
-            if asked == pickedDay { today = summary }
+            if asked == pickedDay {
+                today = summary
+                if supplementInflight == 0 { held.removeAll() }
+                else { for item in held.values where item.day == pickedDay { paintSupplement(item.supplement, on: item.on) } }
+            }
             message = nil
         } catch { handle(error) }
         if let opts = await opts { options = opts }
@@ -99,13 +109,17 @@ final class AppModel {
     }
 
     // A log for a past day is placed on that day at the current clock time, so entries keep their order.
-    private func stamped(_ event: [String: Any]) -> [String: Any] {
-        guard !isToday else { return event }
+    private func shownInstant() -> Date {
+        guard !isToday else { return .now }
         let cal = Calendar.current
         let t = cal.dateComponents([.hour, .minute, .second], from: .now)
-        let at = cal.date(bySettingHour: t.hour ?? 12, minute: t.minute ?? 0, second: t.second ?? 0, of: shownDay) ?? shownDay
+        return cal.date(bySettingHour: t.hour ?? 12, minute: t.minute ?? 0, second: t.second ?? 0, of: shownDay) ?? shownDay
+    }
+
+    private func stamped(_ event: [String: Any]) -> [String: Any] {
+        guard !isToday else { return event }
         var e = event
-        e["at"] = ISO8601DateFormatter().string(from: at)
+        e["at"] = ISO8601DateFormatter().string(from: shownInstant())
         return e
     }
 
@@ -125,21 +139,77 @@ final class AppModel {
         (today?.entries ?? []).first { $0.key == "supplement.taken" && ($0.name ?? "").caseInsensitiveCompare(name) == .orderedSame }
     }
 
-    // Tap to take, tap again to un-take, on whichever day is shown.
-    func toggleSupplement(_ s: LogOptions.Supplement) async -> Bool {
-        guard let client, !pending else { return false }
-        pending = true; defer { pending = false }
-        do {
-            if let taken = taken(s.name) {
-                try await client.deleteEntry(taken.id)
-            } else {
-                var event: [String: Any] = ["type": "supplement", "name": s.name]
-                if let d = s.dose { event["dose"] = d }; if let u = s.unit { event["unit"] = u }
-                _ = try await client.log(stamped(event))
+    // Tap to take, tap again to un-take. The check changes immediately; the request follows without dimming the screen.
+    func toggleSupplement(_ s: LogOptions.Supplement) -> Bool {
+        guard client != nil else { return false }
+        startSupplement(s, on: taken(s.name) == nil)
+        return true
+    }
+
+    // Marks every supplement that is not already taken on the shown day.
+    func takeAllSupplements() {
+        let missing = (options?.supplements ?? []).filter { taken($0.name) == nil }
+        for s in missing { startSupplement(s, on: true) }
+    }
+
+    // Clears every supplement taken on the shown day. The checks drop at once.
+    func removeAllSupplements() {
+        let takenOnes = (options?.supplements ?? []).filter { taken($0.name) != nil }
+        for s in takenOnes { startSupplement(s, on: false) }
+    }
+
+    private func startSupplement(_ s: LogOptions.Supplement, on: Bool) {
+        guard client != nil else { return }
+        let key = s.name.lowercased()
+        let epoch = (held[key]?.epoch ?? 0) + 1
+        let knownId = taken(s.name)?.id
+        let day = pickedDay
+        var event: [String: Any] = ["type": "supplement", "name": s.name]
+        if let d = s.dose { event["dose"] = d }; if let u = s.unit { event["unit"] = u }
+        let body = stamped(event)
+        held[key] = HeldSupplement(supplement: s, on: on, epoch: epoch, day: day)
+        paintSupplement(s, on: on)
+        let previous = chains[key]
+        supplementInflight += 1
+        let job = Task { @MainActor () -> Int? in
+            let prior = await previous?.value
+            defer {
+                self.supplementInflight -= 1
+                if self.supplementInflight == 0 { Task { await self.refresh() } }
             }
-            await refresh()
-            return true
-        } catch { handle(error); return false }
+            do {
+                guard let client = self.client else { return nil }
+                if on { return try await client.log(body) }
+                let stored: Int? = if let knownId, knownId > 0 { knownId } else { nil }
+                if let savedId = prior ?? stored { try await client.deleteEntry(savedId) }
+                return nil
+            } catch {
+                if self.held[key]?.epoch == epoch, self.pickedDay == day {
+                    self.held.removeValue(forKey: key)
+                    self.paintSupplement(s, on: !on)
+                    self.handle(error)
+                }
+                return nil
+            }
+        }
+        chains[key] = job
+    }
+
+    // Shows a supplement as taken or not before the server answers. A negative id marks a row the server has not confirmed.
+    private func paintSupplement(_ s: LogOptions.Supplement, on: Bool) {
+        guard var day = today else { return }
+        var entries = day.entries ?? []
+        entries.removeAll { $0.key == "supplement.taken" && ($0.name ?? "").caseInsensitiveCompare(s.name) == .orderedSame }
+        if on {
+            let label: String
+            if let dose = s.dose, let unit = s.unit {
+                let amount = dose == dose.rounded() ? String(Int(dose)) : String(dose)
+                label = "\(s.name) (\(amount) \(unit))"
+            } else { label = s.name }
+            entries.append(HistoryEntry(id: -s.id, at: ISO8601DateFormatter().string(from: shownInstant()), key: "supplement.taken", label: label, source: "app", name: s.name, dose: s.dose, unit: s.unit))
+        }
+        day.entries = entries
+        today = day
     }
 
     func setDose(_ s: LogOptions.Supplement, dose: Double?, unit: String) async {
@@ -148,6 +218,13 @@ final class AppModel {
     }
 
     func remove(_ entry: HistoryEntry) async {
+        if entry.id < 0 {
+            if entry.key == "supplement.taken", let name = entry.name,
+               let s = options?.supplements.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+                startSupplement(s, on: false)
+            }
+            return
+        }
         guard let client else { return }
         do { try await client.deleteEntry(entry.id); await refresh() } catch { handle(error) }
     }

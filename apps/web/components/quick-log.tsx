@@ -26,7 +26,7 @@ export function QuickLog({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [toast, setToast] = useState<{ id: number; label: string } | null>(null);
+  const [toast, setToast] = useState<{ id: number; label: string; supplement?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [mg, setMg] = useState("");
@@ -38,21 +38,29 @@ export function QuickLog({
   const [addedDrinks, setAddedDrinks] = useState<{ id: number; drink: string }[]>([]);
   const [removedDrinks, setRemovedDrinks] = useState<number[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // One chain per supplement, so a quick second tap is applied after the first save instead of racing it.
+  const chains = useRef(new Map<string, Promise<void>>());
+  const generations = useRef(new Map<string, number>());
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+  }, []);
 
   const selected = new Set([...taken.map(drinkKey).filter((n) => !cleared.includes(n)), ...justLogged.filter((n) => !cleared.includes(n))]);
   const anySelected = supplements.some((s) => selected.has(drinkKey(s.name)));
+  const allSelected = supplements.length > 0 && supplements.every((s) => selected.has(drinkKey(s.name)));
   const drinkLogs = [
     ...caffeine.filter((d) => !removedDrinks.includes(d.id)),
     ...addedDrinks.filter((d) => !removedDrinks.includes(d.id) && !caffeine.some((s) => s.id === d.id)),
   ];
   const drinkCount = (drink: string) => drinkLogs.filter((d) => drinkKey(d.drink) === drinkKey(drink)).length;
 
-  function show(r: LogResult) {
+  function show(r: LogResult, supplement?: string) {
     if (timer.current) clearTimeout(timer.current);
     if (r.ok) {
       setError(null);
-      setToast({ id: r.id, label: r.label });
+      setToast({ id: r.id, label: r.label, supplement });
       timer.current = setTimeout(() => setToast(null), 6000);
     } else {
       setToast(null);
@@ -81,31 +89,77 @@ export function QuickLog({
       router.refresh();
     });
   };
-  const logSupp = (s: { name: string }) => {
-    const key = drinkKey(s.name);
-    if (selected.has(key)) {
-      start(async () => {
-        setCleared((c) => (c.includes(key) ? c : [...c, key]));
-        setJustLogged((n) => n.filter((x) => x !== key));
-        await unlogSupplement(s.name);
-        router.refresh();
-      });
-      return;
+  // The chip changes at once. Saving stays in the background, so the page is not dimmed or locked on a tap.
+  function markSupplement(name: string, on: boolean) {
+    const key = drinkKey(name);
+    if (on) {
+      setCleared((c) => c.filter((x) => x !== key));
+      setJustLogged((n) => (n.includes(key) ? n : [...n, key]));
+    } else {
+      setCleared((c) => (c.includes(key) ? c : [...c, key]));
+      setJustLogged((n) => n.filter((x) => x !== key));
     }
-    setCleared((c) => c.filter((x) => x !== key));
-    setJustLogged((n) => (n.includes(key) ? n : [...n, key]));
-    run(() => logSupplement(s.name));
+  }
+  function revertSupplement(name: string, attemptedOn: boolean) {
+    const key = drinkKey(name);
+    if (attemptedOn) {
+      setJustLogged((n) => n.filter((x) => x !== key));
+      setCleared((c) => (c.includes(key) ? c : [...c, key]));
+    } else {
+      setCleared((c) => c.filter((x) => x !== key));
+      setJustLogged((n) => (n.includes(key) ? n : [...n, key]));
+    }
+  }
+  function scheduleRefresh() {
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => router.refresh(), 80);
+  }
+  function persistSupplement(name: string, on: boolean): Promise<LogResult | undefined> {
+    const key = drinkKey(name);
+    const gen = (generations.current.get(key) ?? 0) + 1;
+    generations.current.set(key, gen);
+    markSupplement(name, on);
+    let finish: (r: LogResult | undefined) => void = () => {};
+    const result = new Promise<LogResult | undefined>((resolve) => { finish = resolve; });
+    const prev = chains.current.get(key) ?? Promise.resolve();
+    const job = prev.catch(() => undefined).then(async () => {
+      try {
+        if (on) {
+          const r = await logSupplement(name);
+          if (generations.current.get(key) !== gen) return finish(undefined);
+          if (!r.ok) {
+            revertSupplement(name, true);
+            setError(r.error);
+            return finish(r);
+          }
+          setError(null);
+          scheduleRefresh();
+          return finish(r);
+        }
+        await unlogSupplement(name);
+        if (generations.current.get(key) !== gen) return finish(undefined);
+        setError(null);
+        scheduleRefresh();
+        finish(undefined);
+      } catch {
+        if (generations.current.get(key) !== gen) return finish(undefined);
+        revertSupplement(name, on);
+        setError("Couldn't update that supplement.");
+        finish({ ok: false, error: "Couldn't update that supplement." });
+      }
+    });
+    chains.current.set(key, job.then(() => undefined, () => undefined));
+    return result;
+  }
+  const logSupp = (s: { name: string }) => {
+    const on = !selected.has(drinkKey(s.name));
+    void persistSupplement(s.name, on).then((r) => { if (on && r?.ok) show(r, s.name); });
+  };
+  const selectAll = () => {
+    for (const s of supplements) if (!selected.has(drinkKey(s.name))) void persistSupplement(s.name, true);
   };
   const deselectAll = () => {
-    const names = supplements.filter((s) => selected.has(drinkKey(s.name))).map((s) => s.name);
-    if (!names.length) return;
-    start(async () => {
-      const keys = names.map(drinkKey);
-      setCleared((c) => [...new Set([...c, ...keys])]);
-      setJustLogged((n) => n.filter((x) => !keys.includes(x)));
-      for (const item of names) await unlogSupplement(item);
-      router.refresh();
-    });
+    for (const s of supplements) if (selected.has(drinkKey(s.name))) void persistSupplement(s.name, false);
   };
 
   return (
@@ -182,8 +236,13 @@ export function QuickLog({
         title="Supplements"
         action={
           <span className="flex items-center">
+            {!allSelected && supplements.length > 0 && (
+              <button type="button" disabled={editing} onClick={selectAll} className={linkBtn}>
+                Select all
+              </button>
+            )}
             {anySelected && (
-              <button type="button" disabled={pending || editing} onClick={deselectAll} className={linkBtn}>
+              <button type="button" disabled={editing} onClick={deselectAll} className={linkBtn}>
                 Deselect all
               </button>
             )}
@@ -203,7 +262,7 @@ export function QuickLog({
                 <li key={s.id} className="flex min-w-0 gap-2">
                   <button
                     type="button"
-                    disabled={pending || editing}
+                    disabled={editing}
                     aria-pressed={on}
                     onClick={() => logSupp(s)}
                     className={`flex min-h-14 min-w-0 flex-1 items-center gap-2.5 rounded-md border px-3 text-left text-base transition-colors focus-visible:border-accent disabled:opacity-50 ${on ? "border-ok/40 bg-ok/10 active:bg-ok/20" : "border-line bg-raised active:bg-white/10"}`}
@@ -262,14 +321,19 @@ export function QuickLog({
           <span>Logged: {toast.label}</span>
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
+              const current = toast;
+              setToast(null);
+              if (current.supplement) {
+                void persistSupplement(current.supplement, false);
+                return;
+              }
               start(async () => {
-                await undoLog(toast.id);
-                setRemovedDrinks((ids) => (ids.includes(toast.id) ? ids : [...ids, toast.id]));
-                setToast(null);
+                await undoLog(current.id);
+                setRemovedDrinks((ids) => (ids.includes(current.id) ? ids : [...ids, current.id]));
                 router.refresh();
-              })
-            }
+              });
+            }}
             className="min-h-11 text-sm text-accent"
           >
             Undo
