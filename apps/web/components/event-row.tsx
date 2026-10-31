@@ -23,7 +23,7 @@ export function SessionTag({ session }: { session: SessionDetail }) {
   );
 }
 
-// The plan (a coach-style note: headings and bullets) and what actually happened, divided from one another, each free to run to several lines,
+// The plan (a coach-style note: headings and bullets) and what actually happened, kept apart by their labels and spacing (no rules: those read as the divider between sessions), each free to run to several lines,
 // with the Strava link at the bottom right. Cautions and context come last, collapsed, so the two important parts stay together.
 type Block = SessionDetail["noteBlocks"][number];
 
@@ -52,7 +52,7 @@ export function SessionBody({ noteBlocks, notesBlocks, actual }: { noteBlocks: B
         </div>
       )}
       {actual && (
-        <div className={`grid grid-cols-[3.25rem_1fr] gap-x-2 py-1.5 ${noteBlocks.length ? "border-t border-line" : ""}`}>
+        <div className="grid grid-cols-[3.25rem_1fr] gap-x-2 py-1.5">
           <span className="text-xs text-muted">Actual</span>
           <div className="flex items-end justify-between gap-3">
             <p className="whitespace-pre-line">{actual.summary.replace(/^Actual: /, "").replace(/ \(Strava\)$/, "")}</p>
@@ -61,7 +61,7 @@ export function SessionBody({ noteBlocks, notesBlocks, actual }: { noteBlocks: B
         </div>
       )}
       {notesBlocks.length > 0 && (
-        <details className={`py-1.5 ${noteBlocks.length || actual ? "border-t border-line" : ""}`}>
+        <details className="py-1.5">
           <summary className="cursor-pointer text-xs text-muted">Notes</summary>
           <div className="grid grid-cols-[3.25rem_1fr] gap-x-2 pt-1.5">
             <span />

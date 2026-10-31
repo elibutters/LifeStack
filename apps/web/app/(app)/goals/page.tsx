@@ -24,7 +24,7 @@ type SessionItem = Detail["sessions"][number];
 function SessionRow({ s, now }: { s: SessionItem; now: number }) {
   const late = s.status === "planned" && Date.parse(s.end) < now;
   return (
-    <li className="py-2">
+    <li className="rounded-md border border-line bg-raised/40 px-3 py-2">
       <div className="flex items-start justify-between gap-3">
         <p className={s.status === "skipped" || s.status === "replaced" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
         {s.status === "planned" && !late ? (
@@ -132,12 +132,12 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                     <div className="mt-3 space-y-2">
                       <details>
                         <summary className="cursor-pointer text-sm font-medium">Sessions ({live.length})</summary>
-                        {live.length ? <ul className="mt-1 divide-y divide-line">{live.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul> : <p className="py-2 text-sm text-muted">No sessions yet.</p>}
+                        {live.length ? <ul className="mt-2 space-y-2">{live.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul> : <p className="py-2 text-sm text-muted">No sessions yet.</p>}
                       </details>
                       {skipped.length > 0 && (
                         <details>
                           <summary className="cursor-pointer text-sm text-muted">Skipped ({skipped.length})</summary>
-                          <ul className="mt-1 divide-y divide-line">{skipped.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul>
+                          <ul className="mt-2 space-y-2">{skipped.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul>
                         </details>
                       )}
                     </div>

@@ -194,6 +194,9 @@ struct GoalsView: View {
             Text("\(when(s.start)) \u{00B7} \(s.minutes) min").font(.caption).foregroundStyle(Theme.muted)
             SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url).padding(.top, 2)
         }
-        .frame(maxWidth: .infinity, alignment: .leading).opacity(busy == s.id ? 0.5 : 1)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+        .opacity(busy == s.id ? 0.5 : 1)
     }
 }
