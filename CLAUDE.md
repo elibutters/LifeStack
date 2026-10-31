@@ -63,12 +63,13 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 - Strava (`lib/strava*.ts`): OAuth with a rotating refresh token stored encrypted in `connections`; activities are `events`
   rows (domain `activity`, source `strava`, `source_id` `act:<id>`) and no GPS is stored. The public `/api/webhooks/strava`
   trusts nothing in an event: it only checks the athlete id and runs the normal sync. Scope `fitness:read` guards reads.
-- Notion (`lib/notion*.ts`): a public integration with read-content only. Both tokens are stored encrypted as JSON in
+- Notion (`lib/notion*.ts`): a public integration. Reading is built; the owner has decided agents may also write to Notion (insert and update content),
+  which needs those capabilities enabled on the integration and the connection re-approved, and a `notes:write` scope for agent keys only. Both tokens are stored encrypted as JSON in
   `connections.refresh_token_enc` and rotated with a compare-and-swap on the ciphertext. The sync is a resumable walk
   (search plus child pages and databases, depth 5, 2,000 pages, 40 requests per run) whose queue and generation live in
   `sync_state.cursor`; rows are stamped with the generation and older generations are deleted only when a walk finishes.
   Notes are plain text capped at 6,000 characters in the `notes` table, never backed up, and read through `notes:read`
-  (agent keys only, never the phone key). Nothing is ever written to Notion.
+  (agent keys only, never the phone key). Writes go through one function in `lib/notion*.ts`, are limited to pages the owner shared, and never delete.
 - Settings: preferences that change behaviour without a deploy live in the `settings` table, but only keys registered in
   `lib/settings-core.ts` (zod schema plus default) can be set, so a bad value never reaches the code using it. Read them with
   `listSettings`/`loadEmailRules`; never add an ad hoc key. Scopes: `settings:read` (agent and phone keys) and `settings:write`

@@ -152,8 +152,8 @@ shown in miles on screen.
 
 ### Connect Notion
 
-Copies the text of the Notion pages you choose to share, so agents can search your notes. Read-only: it never writes to
-Notion. Only pages shared with the integration are copied, as plain text capped at 6,000 characters per page; files and
+Copies the text of the Notion pages you choose to share, so agents can search your notes. Agents may also add and update content on those pages (never delete).
+Only pages shared with the integration are copied, as plain text capped at 6,000 characters per page; files and
 images are left out. Disconnecting deletes the copy.
 
 1. At <https://www.notion.so/profile/integrations> create a **public** integration. Under **Capabilities** tick only
