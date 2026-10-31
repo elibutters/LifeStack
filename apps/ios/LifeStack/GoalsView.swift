@@ -68,6 +68,7 @@ struct GoalsView: View {
     @State private var goals = Loader<[GoalDetail]>()
     @State private var busy: String?
     @State private var note: String?
+    @State private var moving: GoalSessionDTO?   // the session whose Move sheet is open
     private let order = ["active": 0, "draft": 1, "done": 2, "archived": 3]
 
     private struct GoalRef: Hashable, Identifiable { let id: String }
@@ -105,6 +106,7 @@ struct GoalsView: View {
             }
         }
         .task { await load() }
+        .sheet(item: $moving) { s in MoveSheet(session: s) { await load() } }
     }
 
     private func load() async {
@@ -166,7 +168,7 @@ struct GoalsView: View {
                     if s.status == "planned" {
                         HStack(spacing: 8) {
                             chipButton("Done", "checkmark", tint: Theme.good.opacity(0.4)) { act(s.id, ["action": "done"]) }
-                            chipButton("Move", "arrow.right") { act(s.id, ["action": "move"]) }
+                            chipButton("Move", "arrow.right") { moving = s }
                             chipButton("Skip", "xmark") { act(s.id, ["action": "skip"]) }
                         }
                     }
@@ -236,7 +238,7 @@ struct GoalsView: View {
                 if s.status == "planned" && !missed {
                     Menu {
                         Button("Done", systemImage: "checkmark") { act(s.id, ["action": "done"]) }
-                        Button("Move", systemImage: "arrow.right") { act(s.id, ["action": "move"]) }
+                        Button("Move", systemImage: "arrow.right") { moving = s }
                         Button("Skip", systemImage: "xmark") { act(s.id, ["action": "skip"]) }
                     } label: { Image(systemName: "ellipsis.circle").foregroundStyle(Theme.muted) }
                 } else {
