@@ -171,8 +171,9 @@ const Spec = z.object({
   start: Clock.optional(),
   weekdays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   weeks: z.number().int().min(1).max(40).optional(),
-  template: z.array(z.object({ weekday: z.number().int().min(0).max(6), durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), start: Clock.optional() })).max(14).optional(),
-  sessions: z.array(z.object({ day: Day, durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), flexDays: z.number().int().min(0).max(7).optional(), start: Clock.optional() })).max(120).optional(),
+  note: z.string().trim().max(500).optional(), // goes on every session that has no note of its own
+  template: z.array(z.object({ weekday: z.number().int().min(0).max(6), durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), start: Clock.optional(), note: z.string().trim().max(500).optional() })).max(14).optional(),
+  sessions: z.array(z.object({ day: Day, durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), flexDays: z.number().int().min(0).max(7).optional(), start: Clock.optional(), note: z.string().trim().max(500).optional() })).max(120).optional(),
   flexDays: z.number().int().min(0).max(7).optional(),
 });
 export type PlanSpec = z.input<typeof Spec>;
@@ -192,11 +193,11 @@ export function desiredFrom(spec: z.infer<typeof Spec>, today: string): { desire
     case "train": {
       if (!target || !spec.template?.length) return { error: "A training plan needs targetDay (race day) and a weekly template of {weekday, durationMin, title}." };
       const weeks = spec.weeks ?? Math.max(1, Math.ceil((eng.daysBetween(from, target) + 1) / 7));
-      return { desired: eng.weeklyPlan({ fromDay: from, toDay: eng.addDay(target, -1), template: spec.template.map((t) => ({ weekday: t.weekday, durationMin: t.durationMin, title: t.title, startMin: toMin(t.start) })), multipliers: eng.trainingMultipliers(weeks), flexDays: spec.flexDays }) };
+      return { desired: eng.weeklyPlan({ fromDay: from, toDay: eng.addDay(target, -1), template: spec.template.map((t) => ({ weekday: t.weekday, durationMin: t.durationMin, title: t.title, startMin: toMin(t.start), note: t.note })), multipliers: eng.trainingMultipliers(weeks), flexDays: spec.flexDays }) };
     }
     default:
       if (!spec.sessions?.length) return { error: "A custom plan needs sessions: a list of {day, durationMin, title}." };
-      return { desired: spec.sessions.map((s) => ({ day: s.day, durationMin: s.durationMin, title: s.title, flexDays: s.flexDays ?? spec.flexDays ?? 1, startMin: toMin(s.start) ?? toMin(spec.start) })) };
+      return { desired: spec.sessions.map((s) => ({ day: s.day, durationMin: s.durationMin, title: s.title, flexDays: s.flexDays ?? spec.flexDays ?? 1, startMin: toMin(s.start) ?? toMin(spec.start), note: s.note })) };
   }
 }
 
@@ -207,6 +208,7 @@ export async function proposePlan(input: unknown, now = new Date()) {
   const today = eng.localDay(now, c.tz);
   const d = desiredFrom(p.data, today);
   if ("error" in d) return { ok: false as const, error: d.error };
+  if (p.data.note) d.desired = d.desired.map((x) => ({ ...x, note: x.note ?? p.data.note }));
   if (d.desired.length === 0) return { ok: false as const, error: "That produces no sessions. Check the dates." };
   if (d.desired.length > 120) return { ok: false as const, error: "That is more than 120 sessions. Narrow it down." };
   const last = d.desired.reduce((m, x) => (x.day > m ? x.day : m), today);
@@ -217,7 +219,7 @@ export async function proposePlan(input: unknown, now = new Date()) {
   const placed = eng.place(d.desired, free, c, ctx.taken);
   return {
     ok: true as const,
-    sessions: placed.placed.map((x) => ({ title: x.title, start: x.start.toISOString(), end: x.end.toISOString(), day: x.placedDay, shiftedDays: x.shiftedDays, minutes: x.durationMin })),
+    sessions: placed.placed.map((x) => ({ title: x.title, start: x.start.toISOString(), end: x.end.toISOString(), day: x.placedDay, shiftedDays: x.shiftedDays, minutes: x.durationMin, ...(x.note ? { note: x.note } : {}) })),
     unplaced: placed.unplaced.map((u) => ({ title: u.desired.title, day: u.desired.day, minutes: u.desired.durationMin, reason: u.reason })),
     feasibility: eng.feasibility(d.desired, free),
   };
@@ -286,9 +288,9 @@ function refreshCalendar() {
 const eventBody = (g: Goal, note?: string | null) => [`Goal: ${g.title}`, g.thesis ? g.thesis.slice(0, 500) : "", note ?? "", "", "Planned by Life Stack."].filter((x, i) => x || i === 3).join("\n");
 
 // Sessions saved before Outlook was ready (or whose event failed) get their calendar events now.
-export async function pushToCalendar(goalId?: string) {
+export async function pushToCalendar(goalId?: string, now = new Date()) {
   const goals = new Map((await listGoals()).map((g) => [g.id, g]));
-  const todo = (await sessionsOf(goalId)).filter((s) => s.status === "planned" && !s.outlookEventId && s.end > new Date());
+  const todo = (await sessionsOf(goalId)).filter((s) => s.status === "planned" && !s.outlookEventId && s.end > now);
   if (todo.length === 0) return { calendar: "ok" as CalendarState, pushed: 0 };
   const cal = await createEvents(todo.map((s) => ({ key: s.id, title: s.title, start: s.start, end: s.end, body: eventBody(goals.get(s.goalId) ?? ({ title: "", thesis: "" } as Goal), s.note) })));
   if (!cal.ok) return { calendar: cal.reason as CalendarState, pushed: 0 };
@@ -311,6 +313,22 @@ export async function completeSession(id: string, input: unknown = {}, now = new
   if (!p.success) return { ok: false as const, error: p.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   await patchPayload(`session:${id}`, { doneAt: now.toISOString(), ...(p.data.minutes ? { minutes: p.data.minutes } : {}), ...(p.data.note ? { logNote: p.data.note } : {}), ...(p.data.rating ? { rating: p.data.rating } : {}) }, { valueText: "done" });
   return { ok: true as const, session: sessionJson((await sessionRow(id))!) };
+}
+
+const NoteBody = z.object({ note: z.string().trim().max(1000) });
+// Replaces a session's note (empty clears it) here and in the Outlook event body, so notes can be added or corrected after the plan was
+// committed, such as how a workout went. The session's status and time are untouched.
+export async function setSessionNote(id: string, input: unknown) {
+  const s = await sessionRow(id);
+  if (!s) return { ok: false as const, error: "No such session." };
+  const p = NoteBody.safeParse(input);
+  if (!p.success) return { ok: false as const, error: p.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
+  const note = p.data.note || null;
+  await patchPayload(`session:${id}`, { note });
+  const goal = (await listGoals()).find((g) => g.id === s.goalId);
+  const cal = s.outlookEventId ? await updateEvent(s.outlookEventId, { body: eventBody(goal ?? ({ title: "", thesis: "" } as Goal), note) }) : null;
+  if (cal && cal.ok) refreshCalendar();
+  return { ok: true as const, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
 }
 
 export async function skipSession(id: string) {
@@ -391,6 +409,7 @@ const Action = z.discriminatedUnion("action", [
   Done.extend({ action: z.literal("done") }),
   z.object({ action: z.literal("skip") }),
   z.object({ action: z.literal("move"), start: z.iso.datetime({ offset: true }).optional() }),
+  NoteBody.extend({ action: z.literal("note") }),
 ]);
 export type SessionActionEvent = { action: "done" | "skip" | "move"; session: ReturnType<typeof sessionJson>; note?: string };
 // `after` lets a caller (the route) do something once the action has succeeded, such as logging it to the goal's Notion notebook.
@@ -403,9 +422,10 @@ export const handleSessionAction = (req: Request, rawId: string, after?: (e: Ses
     try { body = JSON.parse(text); } catch { return json({ error: "invalid_json" }, 400); }
     const a = Action.safeParse(body);
     if (!a.success) return json({ error: "invalid" }, 400);
-    const r = a.data.action === "done" ? await completeSession(rawId, a.data) : a.data.action === "skip" ? await skipSession(rawId) : await moveSession(rawId, { start: a.data.start });
+    const act = a.data;
+    const r = act.action === "done" ? await completeSession(rawId, act) : act.action === "skip" ? await skipSession(rawId) : act.action === "note" ? await setSessionNote(rawId, act) : await moveSession(rawId, { start: act.start });
     if (r.ok) {
-      after?.({ action: a.data.action, session: r.session, note: a.data.action === "done" ? a.data.note : undefined });
+      if (act.action !== "note") after?.({ action: act.action, session: r.session, note: act.action === "done" ? act.note : undefined });
       return json(r);
     }
     return json({ error: "failed", message: r.error }, r.error === "No such session." ? 404 : 409);

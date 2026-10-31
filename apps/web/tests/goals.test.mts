@@ -96,14 +96,29 @@ assert.equal(((await g.getGoal(goal.id)) as any).goal.status, "active", "committ
 assert.equal(calls.length, 0, "nothing was sent anywhere");
 // connected but not approved for writing
 await connect(); tokenMode = "consent";
-assert.equal(((await g.pushToCalendar(goal.id)) as any).calendar, "needs_reconnect"); tokenMode = "ok";
+assert.equal(((await g.pushToCalendar(goal.id, NOW)) as any).calendar, "needs_reconnect"); tokenMode = "ok";
 // then pushed
-const pushed = await g.pushToCalendar(goal.id) as any;
+const pushed = await g.pushToCalendar(goal.id, NOW) as any;
 assert.deepEqual([pushed.calendar, pushed.pushed], ["ok", 3]);
 assert.equal(graph("POST").length, 3); const body0 = JSON.parse(graph("POST")[0]!.body);
 assert.deepEqual([body0.categories, body0.start.timeZone], [["Life Stack"], "UTC"]); assert.match(body0.body.content, /Goal: Interview prep[\s\S]*Topics 1 to 3[\s\S]*Planned by Life Stack/);
 assert.ok((await g.sessionsOf(goal.id)).every((s) => !!s.outlookEventId), "every session now has its event id");
-assert.deepEqual(await g.pushToCalendar(goal.id), { calendar: "ok", pushed: 0 }, "nothing left to push");
+assert.deepEqual(await g.pushToCalendar(goal.id, NOW), { calendar: "ok", pushed: 0 }, "nothing left to push");
+
+// ---- notes: set at planning time and editable after the plan was committed
+const withNotes = await g.proposePlan({ kind: "custom", title: "Notes demo", note: "Default note", sessions: [{ day: "2026-11-04", durationMin: 30, title: "A", note: "Own note" }, { day: "2026-11-05", durationMin: 30, title: "B" }] }, NOW) as any;
+assert.deepEqual(withNotes.sessions.map((x: any) => x.note), ["Own note", "Default note"], "a session note wins; the plan note fills the rest");
+const trainNotes = await g.proposePlan({ kind: "train", title: "T", targetDay: "2026-11-16", weeks: 2, template: [{ weekday: 1, durationMin: 40, title: "Long", note: "Fuel at 45 min" }, { weekday: 3, durationMin: 30, title: "Easy" }] }, NOW) as any;
+assert.ok(trainNotes.sessions.some((x: any) => x.title === "Long" && x.note === "Fuel at 45 min") && trainNotes.sessions.filter((x: any) => x.title === "Easy").every((x: any) => x.note === undefined), "template notes repeat on each occurrence");
+const noteId = (await g.sessionsOf(goal.id))[0]!.id; const patches = graph("PATCH").length;
+const n1 = await g.setSessionNote(noteId, { note: "Easy pace, 4 x 20s strides" }) as any;
+assert.ok(n1.ok); assert.equal(n1.calendar, "ok"); assert.equal(n1.session.note, "Easy pace, 4 x 20s strides");
+const p1 = JSON.parse(graph("PATCH").at(-1)!.body); assert.equal(graph("PATCH").length, patches + 1);
+assert.match(p1.body.content, /Goal: Interview prep[\s\S]*Easy pace, 4 x 20s strides[\s\S]*Planned by Life Stack/); assert.equal(p1.start, undefined, "only the body changes");
+const n2 = await g.setSessionNote(noteId, { note: "" }) as any; assert.equal(n2.session.note, null, "an empty note clears it");
+assert.doesNotMatch(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /strides/);
+assert.equal(((await g.setSessionNote("snope-1234", { note: "x" })) as any).ok, false); assert.equal(((await g.setSessionNote(noteId, { note: "x".repeat(1001) })) as any).ok, false);
+await g.setSessionNote(noteId, { note: "Original note" });
 
 // ---- committing: conflicts and bad input
 const clash = await g.commitPlan(goal.id, { sessions: [{ title: "Clash", start: at("2026-10-29", 18 * 60).toISOString(), end: at("2026-10-29", 19 * 60).toISOString() }] }, NOW) as any;
@@ -169,6 +184,7 @@ assert.equal((await g.handleTonight(rq("GET", "/tonight", read.token))).status, 
 const act = (id: string, body: unknown, key = write.token) => g.handleSessionAction(rq("POST", `/sessions/${id}`, key, body), id);
 const todo = (await g.sessionsOf(goal.id)).find((s) => s.status === "planned")!;
 assert.equal((await act(todo.id, { action: "done", minutes: 30 }, read.token)).status, 403, "reading is not changing");
+assert.equal((await act(todo.id, { action: "note", note: "via api" }, read.token)).status, 403, "reading is not changing"); assert.equal((await act(todo.id, { action: "note", note: "via api" })).status, 200); assert.equal((await act(todo.id, { action: "note" })).status, 400);
 assert.equal((await act(todo.id, { action: "dance" })).status, 400); assert.equal((await act(todo.id, "{nope")).status, 400); assert.equal((await act(todo.id, " ".repeat(5000))).status, 413);
 assert.equal((await act("snope-1234", { action: "skip" })).status, 404); assert.equal((await act("bad id!", { action: "skip" })).status, 404);
 assert.equal((await act(todo.id, { action: "done", minutes: 30, rating: 5 })).status, 200); assert.equal((await act(todo.id, { action: "move" })).status, 409, "moving a finished session is refused");

@@ -195,7 +195,7 @@ export function daily(o: { fromDay: string; toDay: string; durationMin: number; 
   return out;
 }
 
-export type TemplateSlot = { weekday: number; durationMin: number; title: string; startMin?: number };
+export type TemplateSlot = { weekday: number; durationMin: number; title: string; startMin?: number; note?: string };
 
 // A repeating week, scaled week by week (a training block ramps up, deloads and tapers).
 export function weeklyPlan(o: { fromDay: string; toDay: string; template: TemplateSlot[]; multipliers?: number[]; flexDays?: number }): Desired[] {
@@ -206,7 +206,7 @@ export function weeklyPlan(o: { fromDay: string; toDay: string; template: Templa
     for (const t of o.template) {
       const day = addDay(monday, w * 7 + t.weekday);
       if (day < o.fromDay || day > o.toDay) continue;
-      out.push({ title: t.title, day, durationMin: round5(t.durationMin * scale), flexDays: o.flexDays ?? 1, startMin: t.startMin });
+      out.push({ title: t.title, day, durationMin: round5(t.durationMin * scale), flexDays: o.flexDays ?? 1, startMin: t.startMin, ...(t.note ? { note: t.note } : {}) });
     }
   }
   return out;
