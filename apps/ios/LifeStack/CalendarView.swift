@@ -341,6 +341,10 @@ struct CalendarItemSheet: View {
     @State private var logNote = ""
     @State private var busy = false
     @State private var error: String?
+    @State private var suggestions: [Slot] = []
+    @State private var loadingSuggestions = false
+
+    private struct Slot: Hashable { let start: Date; let end: Date }
 
     private var startDate: Date? { Format.date(item.start) }
     private var endDate: Date? { Format.date(item.end) }
@@ -385,6 +389,26 @@ struct CalendarItemSheet: View {
         end = endDate ?? start.addingTimeInterval(3600)
         draft = s.note ?? ""
         editing = true
+        if let id = s.id, s.status != "done" { loadSuggestions(id) }
+    }
+
+    private func loadSuggestions(_ id: String) {
+        Task {
+            guard let client = model.client else { return }
+            loadingSuggestions = true; defer { loadingSuggestions = false }
+            let raw = (try? await client.sessionSuggestions(id)) ?? []
+            suggestions = raw.compactMap { r in
+                guard let a = Format.date(r.start), let b = Format.date(r.end) else { return nil }
+                return Slot(start: a, end: b)
+            }
+        }
+    }
+
+    private func dayName(_ d: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(d) { return "Today" }
+        if cal.isDateInTomorrow(d) { return "Tomorrow" }
+        return d.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
     }
 
     private func saveEdits(_ id: String, _ s: CalendarSession) {
@@ -529,9 +553,32 @@ struct CalendarItemSheet: View {
                 Spacer(minLength: 0)
             }
             .font(.subheadline).tint(Theme.muted)
-            if s.status == "planned" {
-                Button { run(id, [["action": "move"]]) } label: { Label("Move to the next free slot", systemImage: "arrow.right.circle").font(.subheadline.weight(.medium)) }
-                    .foregroundStyle(Theme.accent).disabled(busy)
+            if s.status != "done" {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Free times for it").font(.caption).foregroundStyle(Theme.muted)
+                    if loadingSuggestions {
+                        ProgressView().frame(maxWidth: .infinity, alignment: .leading)
+                    } else if suggestions.isEmpty {
+                        Text("No free time found in the next few weeks. Pick a time above.").font(.subheadline).foregroundStyle(Theme.muted)
+                    }
+                    ForEach(suggestions, id: \.self) { slot in
+                        let chosen = start == slot.start && end == slot.end
+                        Button { start = slot.start; end = slot.end } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(dayName(slot.start)).font(.subheadline.weight(.semibold))
+                                    Text(slot.start.formatted(date: .omitted, time: .shortened) + " \u{2013} " + slot.end.formatted(date: .omitted, time: .shortened)).font(.caption).foregroundStyle(Theme.muted)
+                                }
+                                Spacer()
+                                if chosen { Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good) }
+                            }
+                            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(chosen ? Theme.good.opacity(0.14) : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if !suggestions.isEmpty { Text("Tap one to fill in the times above, then Save changes. Nothing moves until you save.").font(.caption2).foregroundStyle(Theme.muted) }
+                }
             }
         }
         card("Plan") {

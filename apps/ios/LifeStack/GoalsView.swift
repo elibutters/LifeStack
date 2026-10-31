@@ -49,6 +49,12 @@ extension APIClient {
         struct R: Decodable { let goals: [GoalDetail] }
         return (try await get("api/v1/goals") as R).goals
     }
+    // Up to three different days a session could go, each free of meetings and of other sessions. It changes nothing.
+    func sessionSuggestions(_ id: String) async throws -> [(start: String, end: String)] {
+        struct R: Decodable { struct Slot: Decodable { let start: String; let end: String }; let slots: [Slot] }
+        let data = try await request("api/v1/goals/sessions/\(id)", method: "POST", body: try JSONSerialization.data(withJSONObject: ["action": "suggest", "count": 3]))
+        return try JSONDecoder().decode(R.self, from: data).slots.map { ($0.start, $0.end) }
+    }
     // action is done, skip or move; a move may carry the ISO start to move to, otherwise the server picks the next free slot.
     func sessionAction(_ id: String, _ body: [String: Any]) async throws {
         _ = try await request("api/v1/goals/sessions/\(id)", method: "POST", body: try JSONSerialization.data(withJSONObject: body))
