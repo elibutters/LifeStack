@@ -59,6 +59,8 @@ const clock = (s: number) => {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
 };
 
+export const stravaUrl = (id: number) => `https://www.strava.com/activities/${id}`;
+
 // One line for the calendar event and the goal: "Actual: 3.1 mi in 28:40, 9:15 /mi, avg HR 152 (Strava)".
 export function actualLine(a: Actual): string {
   const parts: string[] = [];

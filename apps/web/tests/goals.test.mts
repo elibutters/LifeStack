@@ -205,7 +205,7 @@ assert.equal(await al.autoLinkRecent(SOON), 1, "only the run matches the easy ru
 let easy = (await g.sessionsOf(rg.id)).find((s) => s.id === easyId)!;
 assert.equal(easy.actual?.id, 101); assert.equal(easy.status, "done", "50 of 60 planned minutes counts as done"); assert.equal(easy.minutes, 50);
 assert.match(g.sessionJson(easy).actual!.summary, /^Actual: 5\.0 mi in 50:00, 10:04 \/mi, avg HR 152 \(Strava\)$/);
-assert.match(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /^Goal: Run goal\nActual: 5\.0 mi in 50:00, .*\(Strava\)$/);
+assert.match(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /^Goal: Run goal\nActual: 5\.0 mi in 50:00, .*\(Strava\)\nhttps:\/\/www\.strava\.com\/activities\/101$/);
 assert.equal(await al.autoLinkRecent(SOON), 0, "nothing new to pair the second time");
 const longAct = await g.linkActivity(longId, 102) as any;
 assert.ok(longAct.ok); assert.equal(longAct.completed, false, "25 of 120 minutes leaves the session planned"); assert.equal(longAct.session.status, "planned");

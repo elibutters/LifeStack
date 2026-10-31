@@ -13,7 +13,7 @@ import { loadActivity } from "./activities";
 import { syncOutlook } from "./outlook";
 import { createEvents, deleteEvent, updateEvent, type SessionEvent } from "./outlook-write";
 import { loadOverrides } from "./settings-store";
-import { actualLine, completes, type Actual } from "./strava-link-core";
+import { actualLine, completes, stravaUrl, type Actual } from "./strava-link-core";
 import { verifyBearer } from "./tokens";
 import { resolveAll, valueOf, type GoalScheduleT } from "./settings-core";
 
@@ -295,7 +295,7 @@ function refreshCalendar() {
 }
 
 const eventBody = (g: Goal, note?: string | null, actual?: Actual | null) =>
-  [`Goal: ${g.title}`, g.thesis ? g.thesis.slice(0, 500) : "", note ?? "", actual ? actualLine(actual) : ""].filter(Boolean).join("\n");
+  [`Goal: ${g.title}`, g.thesis ? g.thesis.slice(0, 500) : "", note ?? "", actual ? actualLine(actual) : "", actual ? stravaUrl(actual.id) : ""].filter(Boolean).join("\n");
 
 // Sessions saved before Outlook was ready (or whose event failed) get their calendar events now.
 export async function pushToCalendar(goalId?: string, now = new Date()) {
