@@ -141,6 +141,13 @@
       "when": 1792953680191,
       "tag": "0019_magenta_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793459634578,
+      "tag": "0020_hot_black_bolt",
+      "breakpoints": true
     }
   ]
 }

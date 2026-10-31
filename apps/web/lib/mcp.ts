@@ -19,6 +19,7 @@ import { changeSetting, listSettings, resetSetting } from "./settings";
 import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
 import { logBlocks } from "./goals-notion-core";
 import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, pushToCalendar, skipSession, tonight, updateGoal } from "./goals";
+import { addTodo, listTodos, updateTodo } from "./todos";
 import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
 
@@ -75,6 +76,11 @@ export function buildServer(token: VerifiedToken): McpServer {
 
   if (has("log:read")) {
     server.registerTool(
+      "get_todos",
+      { description: "The owner's to-do list, shared across every agent session. Open items first (soonest due, then oldest), then done and dropped. Each has id, title, note, status open/done/dropped, due (YYYY-MM-DD or null) and who added it. Check it at the start of a session and before saying something is not on the list." },
+      guard(async () => ok(await listTodos())),
+    );
+    server.registerTool(
       "get_wants",
       { description: "The owner's Wants list for deal hunting. Each want (a thing or a kind of thing, e.g. a jacket) has candidate options with link, latest price and target price in cents, atTarget (price at or under target) and status; only one option per want is ever bought. Newest first." },
       guard(async () => ok(await listWants())),
@@ -82,6 +88,39 @@ export function buildServer(token: VerifiedToken): McpServer {
   }
 
   if (has("log:write")) {
+    server.registerTool(
+      "add_todo",
+      {
+        description: "Add an item to the owner's to-do list so it survives this session. Title, optional note and optional due date (YYYY-MM-DD). Returns the todo id. Check get_todos first to avoid duplicates.",
+        inputSchema: { title: z.string(), note: z.string().optional(), due: z.string().optional() },
+      },
+      async (args) => {
+        try {
+          const r = await addTodo(args, "agent");
+          return r.ok ? ok({ id: r.id }) : fail(`Invalid: ${r.issues.map((i) => `${i.path} ${i.message}`).join("; ")}`);
+        } catch (e) {
+          console.error("mcp: add_todo failed", describeError(e));
+          return fail("The tool could not save that.");
+        }
+      },
+    );
+    server.registerTool(
+      "update_todo",
+      {
+        description: "Change a to-do: mark it done, dropped or open again, or edit its title, note or due date (empty string clears a note or date). Mark items done when the work is finished and verified.",
+        inputSchema: { todoId: z.number().int(), status: z.enum(["open", "done", "dropped"]).optional(), title: z.string().optional(), note: z.string().optional(), due: z.string().optional() },
+      },
+      async ({ todoId, ...rest }) => {
+        try {
+          const r = await updateTodo(todoId, rest);
+          if (!r.ok) return fail(`Invalid: ${r.issues.map((i) => `${i.path} ${i.message}`).join("; ")}`);
+          return r.found ? ok({ ok: true }) : fail("No such todo.");
+        } catch (e) {
+          console.error("mcp: update_todo failed", describeError(e));
+          return fail("The tool could not save that.");
+        }
+      },
+    );
     server.registerTool(
       "add_want",
       {

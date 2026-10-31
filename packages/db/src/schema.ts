@@ -215,6 +215,23 @@ export const apiTokens = pgTable("api_tokens", {
   scopesCustom: boolean("scopes_custom").notNull().default(false), // true once the owner edits a phone key's permissions
 });
 
+// The owner's to-do list. Lives here (not in an agent session) so every session and client sees the same list.
+export const todos = pgTable(
+  "todos",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    title: text("title").notNull(),
+    note: text("note"),
+    status: text("status").notNull().default("open"), // open | done | dropped
+    due: date("due"), // plain YYYY-MM-DD, optional
+    source: text("source").notNull().default("web"), // who added it: web | agent | app
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [index("todos_status_idx").on(t.status, t.createdAt)],
+);
+
 // Things the owner is on the lookout for. A want is the need ("a jacket"); its options are the
 // candidates ("this one at that store"). Only one option is ever bought. A want may have a single option.
 export const wants = pgTable("wants", {
