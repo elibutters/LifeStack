@@ -38,7 +38,7 @@ function SessionRow({ s, now }: { s: SessionItem; now: number }) {
         )}
       </div>
       <p className="text-xs text-muted">{when(s.start)} &middot; {s.minutes} min</p>
-      <SessionBody note={s.note} actual={s.actual} />
+      <SessionBody noteBlocks={s.noteBlocks} actual={s.actual} />
     </li>
   );
 }
