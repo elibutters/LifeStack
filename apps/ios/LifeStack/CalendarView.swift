@@ -1,16 +1,17 @@
 import SwiftUI
 
-// Three ways to read the same events. Month is a grid. Week is the calendar week around the
-// selected day. Rolling is seven days starting on the selected day, moved one day at a time.
+// Three ways to read the same events, in the order they are offered. Rolling is seven days starting on the
+// selected day, moved one day at a time, and is where the screen opens. Month is a grid. Week is the
+// calendar week around the selected day.
 private enum CalendarMode: String, CaseIterable {
+    case rolling = "Rolling"
     case month = "Month"
     case week = "Week"
-    case rolling = "Rolling"
 }
 
 struct CalendarView: View {
     @Environment(AppModel.self) private var model
-    @State private var mode: CalendarMode = .month
+    @State private var mode: CalendarMode = .rolling
     @State private var focus = Calendar.current.startOfDay(for: Date())
     @State private var page = Calendar.current.startOfDay(for: Date())
     @State private var items: [CalendarItem] = []
