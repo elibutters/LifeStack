@@ -178,3 +178,28 @@ export function snippetAround(text: string, q: string | undefined, n = 200): str
   const start = Math.max(0, at - Math.floor(n / 3));
   return `${start > 0 ? "..." : ""}${flat.slice(start, start + n)}${start + n < flat.length ? "..." : ""}`;
 }
+
+// ---- writing: plain text to Notion blocks. Lines starting "# ", "## " or "### " become headings and "- " or "* " bullets; every
+// other non-empty line is a paragraph. Notion limits one piece of rich text to 2,000 characters, so long lines are split.
+export const WRITE_MAX_CHARS = 20_000;
+export const WRITE_MAX_BLOCKS = 100;
+
+const pieces = (text: string, size = 1900) => {
+  const out: { type: "text"; text: { content: string } }[] = [];
+  for (let i = 0; i < text.length; i += size) out.push({ type: "text", text: { content: text.slice(i, i + size) } });
+  return out;
+};
+
+export function textToBlocks(input: string): Record<string, unknown>[] | null {
+  if (input.length > WRITE_MAX_CHARS) return null;
+  const blocks: Record<string, unknown>[] = [];
+  for (const raw of input.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = /^(#{1,3}) +(.+)$/.exec(line);
+    const b = /^[-*] +(.+)$/.exec(line);
+    const [type, text] = m ? [`heading_${m[1]!.length}`, m[2]!] : b ? ["bulleted_list_item", b[1]!] : ["paragraph", line];
+    blocks.push({ object: "block", type, [type]: { rich_text: pieces(text) } });
+  }
+  return blocks.length > 0 && blocks.length <= WRITE_MAX_BLOCKS ? blocks : null;
+}

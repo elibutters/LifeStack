@@ -19,6 +19,7 @@ import { changeSetting, listSettings, resetSetting } from "./settings";
 import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
 import { logBlocks } from "./goals-notion-core";
 import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, pushToCalendar, skipSession, tonight, updateGoal } from "./goals";
+import { addNotePage, appendToNote } from "./notes-write";
 import { addTodo, listTodos, updateTodo } from "./todos";
 import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
@@ -324,6 +325,41 @@ export function buildServer(token: VerifiedToken): McpServer {
         } catch (e) {
           console.error("mcp: get_note failed", describeError(e));
           return fail("The tool could not read the data.");
+        }
+      },
+    );
+  }
+
+  if (has("notes:write")) {
+    server.registerTool(
+      "append_to_note",
+      {
+        description: "Adds text to the end of one of the owner's Notion pages (id from search_notes). Plain text: a line starting with #, ## or ### becomes a heading, - a bullet, anything else a paragraph. Never edits or deletes what is there. Returns the page link, or what the owner needs to switch on in Notion.",
+        inputSchema: { id: z.number().int(), text: z.string() },
+      },
+      async ({ id, text }) => {
+        try {
+          const r = await appendToNote(id, text);
+          return r.state === "ok" ? ok(r) : fail(`Not added (${r.state}). ${r.help ?? ""}`.trim());
+        } catch (e) {
+          console.error("mcp: append_to_note failed", describeError(e));
+          return fail("The tool could not reach Notion.");
+        }
+      },
+    );
+    server.registerTool(
+      "add_note_page",
+      {
+        description: "Creates a new Notion page under one of the owner's existing pages (parentId from search_notes), with a title and plain text in the same format as append_to_note. Returns the new page link.",
+        inputSchema: { parentId: z.number().int(), title: z.string(), text: z.string() },
+      },
+      async ({ parentId, title, text }) => {
+        try {
+          const r = await addNotePage(parentId, title, text);
+          return r.state === "ok" ? ok(r) : fail(`Not added (${r.state}). ${r.help ?? ""}`.trim());
+        } catch (e) {
+          console.error("mcp: add_note_page failed", describeError(e));
+          return fail("The tool could not reach Notion.");
         }
       },
     );
