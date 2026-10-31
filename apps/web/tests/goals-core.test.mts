@@ -151,6 +151,13 @@ console.log("goals-core: ok");
   assert.equal(sn.spellOut("1 mi WU, CD to 6, 50 lb DB, bench @ RPE 7.5, WUMPUS"), "1 mi warm-up, cool-down to 6, 50 lb dumbbell, bench @ effort 7.5 out of 10, WUMPUS", "shorthand is written out; whole words are untouched");
   assert.deepEqual(sn.parseSessionNote("Warm-up:\n- WU 5 min\n- Squat RPE 7 w/ pause").map((b) => b.text), ["Warm-up", "warm-up 5 min", "Squat effort 7 out of 10 with pause"]);
   assert.match(sn.NOTE_FORMAT, /warm-up and cool-down \(not WU or CD\)/);
+  // cautions and conditions are kept apart from the plan
+  const legacy = sn.splitSessionNote("8:50–9:30/mi. Only if the toe is pain-free in your shoe; otherwise skip.");
+  assert.deepEqual(legacy.plan, [{ kind: "text", text: "8:50–9:30/mi." }]); assert.deepEqual(legacy.notes, [{ kind: "text", text: "Only if the toe is pain-free in your shoe; otherwise skip." }]);
+  assert.deepEqual(sn.splitSessionNote("Only if the toe is pain-free.").notes, [], "a note that is only a caution is still the plan");
+  const sectioned = sn.splitSessionNote("Warm-up:\n- 5 min jog\nMain set:\n- 4 x 20 s strides\nNotes:\n- Skip the strides if the toe hurts\nCues:\nStay relaxed\nCool-down:\n- 5 min walk");
+  assert.deepEqual(sectioned.plan.map((b) => b.text), ["Warm-up", "5 min jog", "Main set", "4 x 20 s strides", "Cool-down", "5 min walk"]);
+  assert.deepEqual(sectioned.notes.map((b) => b.text), ["Skip the strides if the toe hurts", "Stay relaxed"], "everything under Notes or Cues, and not the headings themselves");
   assert.deepEqual(sn.parseSessionNote("  "), []); assert.deepEqual(sn.parseSessionNote(null), []);
   const coach = sn.parseSessionNote("Warm-up:\n- 5 min easy jog\n- Leg swings\n\n## Main set\n* Back squat: 4 x 5 @ RPE 7, rest 2-3 min\n2) Pull-up 3 x 6\nCues: brace, slow down\nStay smooth.");
   assert.deepEqual(coach.map((b) => b.kind), ["heading", "bullet", "bullet", "heading", "bullet", "bullet", "text", "text"], "headings, bullets and plain lines are told apart");

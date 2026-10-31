@@ -121,6 +121,9 @@ assert.equal(((await g.setSessionNote("snope-1234", { note: "x" })) as any).ok, 
 const n3 = await g.setSessionNote(noteId, { note: "Warm-up:\n- 5 min jog\nMain set:\n- 4 x 20s strides" }) as any;
 assert.deepEqual(n3.session.noteBlocks.map((b: any) => b.kind), ["heading", "bullet", "heading", "bullet"], "the session carries its note as structured blocks");
 assert.match(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /\nPlan:\nWarm-up:\n- 5 min jog\n\nMain set:\n- 4 x 20s strides$/, "the calendar body shows the same structure");
+const n4 = await g.setSessionNote(noteId, { note: "Main set:\n- 4 x 20s strides\nNotes:\n- Only if the toe feels fine" }) as any;
+assert.deepEqual([n4.session.noteBlocks.length, n4.session.notesBlocks.map((b: any) => b.text)], [2, ["Only if the toe feels fine"]], "cautions come back separately from the plan");
+assert.match(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /\nPlan:\nMain set:\n- 4 x 20s strides\n\nNotes:\n- Only if the toe feels fine$/);
 await g.setSessionNote(noteId, { note: "Original note" });
 
 // ---- committing: conflicts and bad input

@@ -41,8 +41,8 @@ function PlanBlocks({ blocks }: { blocks: Block[] }) {
   return <div className="space-y-1">{out}</div>;
 }
 
-export function SessionBody({ noteBlocks, actual }: { noteBlocks: Block[]; actual: SessionDetail["actual"] }) {
-  if (noteBlocks.length === 0 && !actual) return null;
+export function SessionBody({ noteBlocks, notesBlocks, actual }: { noteBlocks: Block[]; notesBlocks: Block[]; actual: SessionDetail["actual"] }) {
+  if (noteBlocks.length === 0 && notesBlocks.length === 0 && !actual) return null;
   return (
     <div className="mt-1.5 whitespace-normal text-sm">
       {noteBlocks.length > 0 && (
@@ -51,8 +51,17 @@ export function SessionBody({ noteBlocks, actual }: { noteBlocks: Block[]; actua
           <PlanBlocks blocks={noteBlocks} />
         </div>
       )}
+      {notesBlocks.length > 0 && (
+        <details className={`py-1.5 ${noteBlocks.length ? "border-t border-line" : ""}`}>
+          <summary className="cursor-pointer text-xs text-muted">Notes</summary>
+          <div className="grid grid-cols-[3.25rem_1fr] gap-x-2 pt-1.5">
+            <span />
+            <PlanBlocks blocks={notesBlocks} />
+          </div>
+        </details>
+      )}
       {actual && (
-        <div className={`grid grid-cols-[3.25rem_1fr] gap-x-2 py-1.5 ${noteBlocks.length ? "border-t border-line" : ""}`}>
+        <div className={`grid grid-cols-[3.25rem_1fr] gap-x-2 py-1.5 ${noteBlocks.length || notesBlocks.length ? "border-t border-line" : ""}`}>
           <span className="text-xs text-muted">Actual</span>
           <div className="flex items-end justify-between gap-3">
             <p className="whitespace-pre-line">{actual.summary.replace(/^Actual: /, "").replace(/ \(Strava\)$/, "")}</p>
@@ -85,7 +94,7 @@ export function EventRow({ item, day, showDate = false, session }: { item: Calen
           {session && <SessionTag session={session} />}
         </div>
         {detail && <p className="text-sm text-muted">{detail}</p>}
-        {session && <SessionBody noteBlocks={session.noteBlocks} actual={session.actual} />}
+        {session && <SessionBody noteBlocks={session.noteBlocks} notesBlocks={session.notesBlocks} actual={session.actual} />}
       </div>
     </li>
   );

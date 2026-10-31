@@ -11,6 +11,7 @@ struct GoalSessionDTO: Decodable, Identifiable, Equatable {
     let status: String   // planned | done | skipped
     let onCalendar: Bool
     let noteBlocks: [NoteBlock]?
+    let notesBlocks: [NoteBlock]?
     let actual: Actual?
     struct Actual: Decodable, Equatable { let summary: String; let url: String }
 }
@@ -132,7 +133,7 @@ struct GoalsView: View {
                         .font(.caption2).lineLimit(1)
                     }
                     Text("\(span(s)) \u{00B7} \(s.minutes) min").font(.caption).foregroundStyle(Theme.muted)
-                    SessionBody(blocks: s.noteBlocks, summary: s.actual?.summary, url: s.actual?.url)
+                    SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url)
                     if s.status == "planned" {
                         HStack(spacing: 8) {
                             chipButton("Done", "checkmark", tint: Theme.good.opacity(0.4)) { act(s.id, ["action": "done"]) }
@@ -191,7 +192,7 @@ struct GoalsView: View {
                 }
             }
             Text("\(when(s.start)) \u{00B7} \(s.minutes) min").font(.caption).foregroundStyle(Theme.muted)
-            SessionBody(blocks: s.noteBlocks, summary: s.actual?.summary, url: s.actual?.url).padding(.top, 2)
+            SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url).padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading).opacity(busy == s.id ? 0.5 : 1)
     }

@@ -3,9 +3,14 @@
 //   Warm-up:
 //   - 5 min easy jog
 //   Main set:
-//   - Bench press: 4 x 5-6 @ RPE 7, rest 2-3 min
+//   - Bench press: 4 x 5-6 at effort 7 out of 10, rest 2-3 minutes
 //   Cool-down:
 //   - 5 min walk
+//   Notes:
+//   - Only if the toe is pain-free; otherwise skip.
+//
+// Everything under a "Notes:" heading (or cues, cautions, reminders) is kept apart from the plan so the plan stays short; the screens show it
+// collapsed.
 //
 // Older notes were written as one comma-separated line; a line with three or more items is split into bullets so those read the same way.
 export type NoteBlock = { kind: "heading" | "bullet" | "text"; text: string };
@@ -39,9 +44,36 @@ function topLevelParts(line: string): string[] {
 const BULLET = /^(?:[-*•]|\d{1,2}[.)])\s+(.*)$/;
 const HEADING = /^(?:#{1,3}\s+(.+?):?|([^:]{1,40}):)$/;
 
-export function parseSessionNote(note: string | null | undefined): NoteBlock[] {
-  return rawBlocks(note).map((b) => ({ ...b, text: spellOut(b.text) }));
+export type SplitNote = { plan: NoteBlock[]; notes: NoteBlock[] };
+
+const NOTES_HEADING = /^(?:notes?|coach(?:'s|es)? notes?|cues?|cautions?|reminders?|why|heads[- ]up|safety|modifications?|adjustments?)$/i;
+// In an older one-line note, a sentence that starts like this is a caution or condition, not part of the workout.
+const CAVEAT = /^(?:only if|if |otherwise|skip |unless|toe |watch |stop |listen )/i;
+
+export function splitSessionNote(note: string | null | undefined): SplitNote {
+  const text = (note ?? "").replace(/\r\n?/g, "\n").trim();
+  const plan: NoteBlock[] = [], notes: NoteBlock[] = [];
+  if (!text) return { plan, notes };
+  const spell = (bs: NoteBlock[]) => bs.map((b) => ({ ...b, text: spellOut(b.text) }));
+  if (!text.includes("\n")) {
+    const sentences = text.split(/(?<=[.!?])\s+/);
+    const side = sentences.filter((x) => CAVEAT.test(x));
+    const main = sentences.filter((x) => !CAVEAT.test(x));
+    if (main.length === 0 || side.length === 0) return { plan: spell(rawBlocks(text)), notes };
+    return { plan: spell(rawBlocks(main.join(" "))), notes: spell(side.map((x) => ({ kind: "text" as const, text: x }))) };
+  }
+  let inNotes = false;
+  for (const b of rawBlocks(text)) {
+    if (b.kind === "heading") {
+      inNotes = NOTES_HEADING.test(b.text);
+      if (inNotes) continue; // the section itself is labelled "Notes" on screen
+    }
+    (inNotes ? notes : plan).push(b);
+  }
+  return { plan: spell(plan), notes: spell(notes) };
 }
+
+export const parseSessionNote = (note: string | null | undefined): NoteBlock[] => splitSessionNote(note).plan;
 
 function rawBlocks(note: string | null | undefined): NoteBlock[] {
   const text = (note ?? "").replace(/\r\n?/g, "\n").trim();
@@ -76,4 +108,4 @@ export function noteToText(blocks: NoteBlock[]): string {
 
 // What a coach would want an agent to write, shown in the tool descriptions.
 export const NOTE_FORMAT =
-  'Write the note like a coach, as short sections and one bullet per movement or step, each on its own line: a heading line ending in a colon ("Warm-up:", "Main set:", "Cool-down:", "Targets:", "Cues:"), then "- " bullets under it. Strength: "- Back squat: 4 x 5 @ RPE 7, rest 2-3 min". Running: "- 3 x 1 mi @ 7:10-7:20, 2:00 jog between". Put the load, reps or pace, and rest on the bullet, and keep cues and why to a final section. No run-on comma lists. Use plain words, never shorthand: write warm-up and cool-down (not WU or CD), "with" (not w/), and "effort 7 out of 10" (not RPE 7). Up to 2,000 characters.';
+  'Write the note like a coach, as short sections and one bullet per movement or step, each on its own line: a heading line ending in a colon ("Warm-up:", "Main set:", "Cool-down:", "Targets:", "Cues:"), then "- " bullets under it. Strength: "- Back squat: 4 x 5 @ RPE 7, rest 2-3 min". Running: "- 3 x 1 mi @ 7:10-7:20, 2:00 jog between". Put the load, reps or pace, and rest on the bullet, and keep cues and why to a final section. Put reasons, cautions and conditions (\"only if...\", cues, what to watch for) under a final \"Notes:\" heading so the plan above stays short; the screens show those notes collapsed. No run-on comma lists. Use plain words, never shorthand: write warm-up and cool-down (not WU or CD), "with" (not w/), and "effort 7 out of 10" (not RPE 7). Up to 2,000 characters.';

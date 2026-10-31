@@ -19,6 +19,7 @@ struct CalendarSession: Decodable, Equatable {
     let status: String   // planned | done | skipped
     let goal: String?
     let noteBlocks: [NoteBlock]?
+    let notesBlocks: [NoteBlock]?   // cautions and context, shown collapsed
     let actual: Actual?
 }
 
