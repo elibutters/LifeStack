@@ -125,9 +125,8 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                   {goal.kind}{goal.targetDay ? ` · by ${goal.targetDay}` : ""} &middot; when a session slips: {goal.mode}{next ? ` · next: ${when(next.start)}` : ""}
                 </p>
                 {(() => {
-                  const live = sessions.filter((s) => s.status !== "skipped" && s.status !== "replaced");
+                  const live = sessions.filter((s) => s.status !== "skipped");
                   const skipped = sessions.filter((s) => s.status === "skipped");
-                  const replaced = sessions.filter((s) => s.status === "replaced");
                   const now = Date.now();
                   return (
                     <div className="mt-3 space-y-2">
@@ -139,12 +138,6 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                         <details>
                           <summary className="cursor-pointer text-sm text-muted">Skipped ({skipped.length})</summary>
                           <ul className="mt-1 divide-y divide-line">{skipped.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul>
-                        </details>
-                      )}
-                      {replaced.length > 0 && (
-                        <details>
-                          <summary className="cursor-pointer text-sm text-muted">Earlier versions of the plan ({replaced.length})</summary>
-                          <ul className="mt-1 divide-y divide-line">{replaced.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul>
                         </details>
                       )}
                     </div>

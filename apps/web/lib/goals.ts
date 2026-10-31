@@ -39,7 +39,8 @@ export const GoalInput = z.object({
 export const GoalPatch = z.object({ title: z.string().trim().min(1).max(120), thesis: z.string().trim().max(2000), kind: z.enum(GOAL_KINDS), targetDay: Day.nullable(), mode: z.enum(GOAL_MODES), status: z.enum(GOAL_STATUSES), config: z.record(z.string(), z.unknown()), notionPageId: z.string().max(100).nullable() }).partial().refine((o) => Object.keys(o).length > 0, "nothing to change");
 
 export type Goal = { id: string; title: string; thesis: string; kind: (typeof GOAL_KINDS)[number]; targetDay: string | null; mode: (typeof GOAL_MODES)[number]; status: (typeof GOAL_STATUSES)[number]; config: Record<string, unknown>; notionPageId: string | null; createdAt: string };
-// "replaced" is a session that was dropped because the plan changed: it is not something the owner skipped, so it is kept out of the calendar and the counts.
+// "replaced" is a session that was dropped because the plan changed: it is not something the owner skipped, so it is kept out of the calendar, the
+// counts and the goal's session list. Only the current plan is shown anywhere.
 export type SessionStatus = "planned" | "done" | "skipped" | "replaced";
 export type Session = { id: string; goalId: string; title: string; start: Date; end: Date; durationMin: number; status: SessionStatus; day: string; note: string | null; outlookEventId: string | null; movedFrom: string[]; doneAt: string | null; minutes: number | null; rating: number | null; actual: Actual | null; skippedAt: string | null };
 
@@ -141,7 +142,7 @@ export async function getGoal(id: string) {
   const sessions = await sessionsOf(id);
   const done = sessions.filter((s) => s.status === "done");
   const next = sessions.find((s) => s.status === "planned" && s.end > new Date()) ?? null;
-  return { goal, notebook: goal.notionPageId ? notebookUrl(goal.notionPageId) : null, sessions: sessions.map(sessionJson), progress: { replaced: sessions.filter((s) => s.status === "replaced").length, planned: sessions.filter((s) => s.status === "planned").length, done: done.length, skipped: sessions.filter((s) => s.status === "skipped").length, minutesDone: done.reduce((n, s) => n + (s.minutes ?? s.durationMin), 0) }, next: next && sessionJson(next) };
+  return { goal, notebook: goal.notionPageId ? notebookUrl(goal.notionPageId) : null, sessions: sessions.filter((s) => s.status !== "replaced").map(sessionJson), progress: { replaced: sessions.filter((s) => s.status === "replaced").length, planned: sessions.filter((s) => s.status === "planned").length, done: done.length, skipped: sessions.filter((s) => s.status === "skipped").length, minutesDone: done.reduce((n, s) => n + (s.minutes ?? s.durationMin), 0) }, next: next && sessionJson(next) };
 }
 
 const noteParts = (note: string | null) => {

@@ -163,19 +163,14 @@ struct GoalsView: View {
     // Every session of the goal, in order: status top right (a menu while it is still planned), the time, and the note and run on one line.
     @ViewBuilder private func sessionList(_ g: GoalDetail) -> some View {
         let all = g.sessions ?? []
-        let live = all.filter { $0.status != "skipped" && $0.status != "replaced" }
+        let live = all.filter { $0.status != "skipped" }
         let skipped = all.filter { $0.status == "skipped" }
-        let replaced = all.filter { $0.status == "replaced" }
         if !live.isEmpty {
             DisclosureGroup("Sessions (\(live.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(live) { sessionRow($0) } }.padding(.top, 6) }
                 .font(.subheadline.weight(.medium)).tint(Theme.muted)
         }
         if !skipped.isEmpty {
             DisclosureGroup("Skipped (\(skipped.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(skipped) { sessionRow($0) } }.padding(.top, 6) }
-                .font(.subheadline).foregroundStyle(Theme.muted).tint(Theme.muted)
-        }
-        if !replaced.isEmpty {
-            DisclosureGroup("Earlier versions of the plan (\(replaced.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(replaced) { sessionRow($0) } }.padding(.top, 6) }
                 .font(.subheadline).foregroundStyle(Theme.muted).tint(Theme.muted)
         }
     }

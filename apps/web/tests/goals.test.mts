@@ -258,6 +258,7 @@ assert.equal(afterSwap.find((x) => x.id === hillId)!.status, "replaced"); assert
 assert.equal((await cs.skippedItems(at("2026-11-18", 0), at("2026-11-19", 0))).items.length, 0, "a replaced session is not on the calendar");
 const progress = (await g.getGoal(rg.id))!.progress as any;
 assert.equal(progress.replaced, 1); assert.ok(progress.skipped >= 1, "replaced is counted apart from skipped");
+assert.ok(!(await g.getGoal(rg.id))!.sessions.some((x: any) => x.id === hillId || x.status === "replaced"), "the goal shows only the current plan");
 assert.equal(((await g.replaceSession(easyId)) as any).ok, false, "a session already done stays"); assert.equal(((await g.replaceSession("snope-1234")) as any).ok, false);
 assert.equal(((await g.replaceSession(afterSwap.find((x) => x.title === "Hill run v2")!.id, "gother")) as any).ok, false, "only within its own goal");
 const viaApi = afterSwap.find((x) => x.title === "Hill run v2")!.id;
