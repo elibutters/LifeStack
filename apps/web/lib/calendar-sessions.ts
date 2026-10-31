@@ -1,5 +1,6 @@
 import "server-only";
 import type { CalendarItem } from "./calendar";
+import { addDays, startOfDay, ymd } from "./dates";
 import { listGoals, sessionJson, sessionsOf } from "./goals";
 
 // A goal session that has an Outlook event is the same thing as that calendar item. Matching on the event id lets the calendar show what
@@ -23,17 +24,19 @@ export async function sessionsForItems(items: CalendarItem[]): Promise<Map<numbe
 // Skipping a session takes its event off Outlook so the calendar is not cluttered, so a skipped session would otherwise vanish from the
 // calendar altogether. These put it back as an item of its own, shown struck through and marked Skipped. A skipped session whose event could
 // not be removed is still an Outlook item (and already marked by the join above), and one that was replaced by a session at the same time is
-// not shown: the replacement stands for it.
+// not shown: the replacement stands for it. Only days up to and including today are shown: a future session that was skipped is nearly always a
+// plan revision, and listing those would fill the coming days with sessions that were never going to happen.
 const syntheticId = (sessionId: string) => {
   let h = 0;
   for (const ch of sessionId) h = (h * 31 + ch.charCodeAt(0)) | 0;
   return -(Math.abs(h) % 2_000_000_000) - 1; // negative, so it never collides with a stored event id
 };
 
-export async function skippedItems(from: Date, to: Date): Promise<{ items: CalendarItem[]; sessions: Map<number, SessionDetail> }> {
+export async function skippedItems(from: Date, to: Date, now = new Date()): Promise<{ items: CalendarItem[]; sessions: Map<number, SessionDetail> }> {
   const [all, goals] = await Promise.all([sessionsOf(), listGoals()]);
   const names = new Map(goals.map((g) => [g.id, g.title]));
-  const inRange = all.filter((s) => s.start < to && s.end > from);
+  const cutoff = startOfDay(addDays(ymd(now), 1)); // the end of today
+  const inRange = all.filter((s) => s.start < to && s.end > from && s.start < cutoff);
   const key = (s: (typeof all)[number]) => `${s.goalId}|${s.start.getTime()}`;
   const replaced = new Set(inRange.filter((s) => s.status !== "skipped").map(key));
   const shown = new Set<string>();
