@@ -294,6 +294,14 @@ assert.equal((await act(lateId, { action: "reopen" })).status, 200);
 const reopened = (await g.sessionsOf(rg.id, NOW)).find((x) => x.id === lateId)!;
 assert.deepEqual([reopened.status, reopened.doneAt, reopened.minutes, reopened.skippedAt], ["planned", null, null, null], "undone, as if it had never been marked");
 assert.equal(((await g.reopenSession("snope-1234")) as any).ok, false);
+// suggested times: a few different days, free of meetings and of other sessions, none of them right now; nothing is changed
+const sug = await g.suggestSlots(lateId, 3, NOW) as any;
+assert.ok(sug.ok); assert.equal(sug.slots.length, 3, "three suggestions");
+assert.equal(new Set(sug.slots.map((x: any) => eng.localDay(new Date(x.start), TZ))).size, 3, "on three different days");
+assert.ok(sug.slots.every((x: any) => new Date(x.start).getTime() >= NOW.getTime() + 30 * 60000 && new Date(x.end).getTime() - new Date(x.start).getTime() === 60 * 60000), "later than now, and as long as the session");
+assert.equal(((await g.suggestSlots("snope-1234")) as any).ok, false);
+const viaSuggest = await act(lateId, { action: "suggest", count: 2 }); assert.equal(viaSuggest.status, 200); assert.equal(((await viaSuggest.json()) as any).slots.length, 2);
+assert.equal((await act(lateId, { action: "suggest" }, read.token)).status, 403);
 // editing the title and time of a session; the calendar event follows
 const patchesE = graph("PATCH").length;
 const ed = await g.editSession(lateId, { title: "Tempo run (moved)", start: at("2026-12-03", 6 * 60).toISOString() }) as any;

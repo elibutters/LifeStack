@@ -427,6 +427,26 @@ async function retire(s: Session, status: "skipped" | "replaced") {
   return { ok: true as const, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(s.id))!) };
 }
 
+// A few different days a session could go, each a time that is free of meetings and of the owner's other sessions. It changes nothing: the
+// app shows them and the owner picks one (or any other time) and saves.
+export async function suggestSlots(id: string, count = 3, now = new Date()) {
+  const s = await sessionRow(id);
+  if (!s) return { ok: false as const, error: "No such session." };
+  const goal = (await listGoals()).find((g) => g.id === s.goalId);
+  const horizon = new Date(now.getTime() + 21 * 86_400_000);
+  const ctx = await context(now, horizon, id);
+  const free = eng.freeSlots(now, horizon, [...ctx.busy, ...ctx.taken], ctx.c, now, 15);
+  let existing: eng.Interval[] = ctx.taken.slice();
+  const slots: { start: string; end: string }[] = [];
+  for (let i = 0; i < count; i++) {
+    const slot = eng.reschedule({ durationMin: s.durationMin, free, c: ctx.c, existing, now, lastDay: goal?.targetDay ?? undefined });
+    if (!slot) break;
+    slots.push({ start: slot.start.toISOString(), end: slot.end.toISOString() });
+    for (let k = 0; k < ctx.c.maxPerDay; k++) existing = [...existing, slot]; // that day is now full, so the next suggestion is another day
+  }
+  return { ok: true as const, slots };
+}
+
 // Undoes a done or a skip: the session is planned again (and put back on the calendar if it is still ahead), for a mark made by mistake.
 export async function reopenSession(id: string) {
   const s = await sessionRow(id);
@@ -545,6 +565,7 @@ const Action = z.discriminatedUnion("action", [
   NoteBody.extend({ action: z.literal("note") }),
   z.object({ action: z.literal("replace") }),
   z.object({ action: z.literal("reopen") }),
+  z.object({ action: z.literal("suggest"), count: z.number().int().min(1).max(5).optional() }),
   EditFields.extend({ action: z.literal("edit") }),
   z.object({ action: z.literal("link"), activityId: z.number().int().positive().nullable() }),
 ]);
@@ -560,6 +581,10 @@ export const handleSessionAction = (req: Request, rawId: string, after?: (e: Ses
     const a = Action.safeParse(body);
     if (!a.success) return json({ error: "invalid" }, 400);
     const act = a.data;
+    if (act.action === "suggest") {
+      const sug = await suggestSlots(rawId, act.count);
+      return sug.ok ? json(sug) : json({ error: "failed", message: sug.error }, 404); // it only reads: nothing to log or refresh
+    }
     const r = act.action === "done" ? await completeSession(rawId, act) : act.action === "skip" ? await skipSession(rawId) : act.action === "note" ? await setSessionNote(rawId, act) : act.action === "replace" ? await replaceSession(rawId) : act.action === "reopen" ? await reopenSession(rawId) : act.action === "edit" ? await editSession(rawId, act) : act.action === "link" ? await linkActivity(rawId, act.activityId) : await moveSession(rawId, { start: act.start });
     if (r.ok) {
       if (act.action === "link") {
