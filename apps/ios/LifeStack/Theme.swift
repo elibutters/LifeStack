@@ -207,10 +207,9 @@ struct SessionBody: View {
         let more = extra ?? []
         let actual = summary?.replacingOccurrences(of: "Actual: ", with: "").replacingOccurrences(of: " (Strava)", with: "")
         if !note.isEmpty || !more.isEmpty || actual != nil {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 if !note.isEmpty { HStack(alignment: .top, spacing: 8) { label("Plan"); plan(note) } }
                 if let actual {
-                    if !note.isEmpty { Divider().overlay(Color.white.opacity(0.12)) }
                     HStack(alignment: .top, spacing: 8) {
                         label("Actual")
                         HStack(alignment: .bottom, spacing: 8) {
@@ -220,7 +219,6 @@ struct SessionBody: View {
                     }
                 }
                 if !more.isEmpty {
-                    if !note.isEmpty || actual != nil { Divider().overlay(Color.white.opacity(0.12)) }
                     DisclosureGroup("Notes") { plan(more).padding(.top, 4) }.tint(Theme.muted).foregroundStyle(Theme.muted)
                 }
             }

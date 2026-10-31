@@ -16,7 +16,7 @@ const time = (iso: string) => new Intl.DateTimeFormat("en-US", { timeZone: TZ, h
 const when = (iso: string) => new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 const hours = (min: number) => (min >= 60 ? `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}` : `${min} min`);
 
-const TONE: Record<string, string> = { done: "bg-ok/15 text-ok", skipped: "bg-fg/10 text-muted", planned: "bg-warn/15 text-warn" };
+const TONE: Record<string, string> = { done: "bg-ok/15 text-ok", skipped: "bg-fg/10 text-muted", replaced: "bg-fg/10 text-muted", planned: "bg-warn/15 text-warn" };
 type Detail = NonNullable<Awaited<ReturnType<typeof getGoal>>>;
 type SessionItem = Detail["sessions"][number];
 
@@ -24,9 +24,9 @@ type SessionItem = Detail["sessions"][number];
 function SessionRow({ s, now }: { s: SessionItem; now: number }) {
   const late = s.status === "planned" && Date.parse(s.end) < now;
   return (
-    <li className="py-2">
+    <li className="rounded-md border border-line bg-raised/40 px-3 py-2">
       <div className="flex items-start justify-between gap-3">
-        <p className={s.status === "skipped" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
+        <p className={s.status === "skipped" || s.status === "replaced" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
         {s.status === "planned" && !late ? (
           <div className="flex shrink-0 gap-2">
             <Btn action={doneAction} id={s.id} label="Done" />
@@ -132,12 +132,12 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                     <div className="mt-3 space-y-2">
                       <details>
                         <summary className="cursor-pointer text-sm font-medium">Sessions ({live.length})</summary>
-                        {live.length ? <ul className="mt-1 divide-y divide-line">{live.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul> : <p className="py-2 text-sm text-muted">No sessions yet.</p>}
+                        {live.length ? <ul className="mt-2 space-y-2">{live.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul> : <p className="py-2 text-sm text-muted">No sessions yet.</p>}
                       </details>
                       {skipped.length > 0 && (
                         <details>
                           <summary className="cursor-pointer text-sm text-muted">Skipped ({skipped.length})</summary>
-                          <ul className="mt-1 divide-y divide-line">{skipped.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul>
+                          <ul className="mt-2 space-y-2">{skipped.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul>
                         </details>
                       )}
                     </div>

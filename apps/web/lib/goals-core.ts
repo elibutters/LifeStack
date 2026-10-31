@@ -235,7 +235,7 @@ export function feasibility(desired: Desired[], free: Interval[]) {
   return { neededMin, availableMin, shortMin: Math.max(0, neededMin - availableMin) };
 }
 
-export type SessionStatus = "planned" | "done" | "skipped" | "missed";
+export type SessionStatus = "planned" | "done" | "skipped" | "replaced" | "missed";
 
 // A planned session whose end passed more than `graceMin` ago without a Done is missed.
 export const statusAt = (s: { status: SessionStatus; end: Date }, now: Date, graceMin = 60): SessionStatus => (s.status === "planned" && now.getTime() > s.end.getTime() + graceMin * 60000 ? "missed" : s.status);

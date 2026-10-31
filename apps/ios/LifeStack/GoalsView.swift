@@ -8,7 +8,7 @@ struct GoalSessionDTO: Decodable, Identifiable, Equatable {
     let start: String
     let end: String
     let minutes: Int
-    let status: String   // planned | done | skipped
+    let status: String   // planned | done | skipped | replaced
     let onCalendar: Bool
     let noteBlocks: [NoteBlock]?
     let notesBlocks: [NoteBlock]?
@@ -179,7 +179,7 @@ struct GoalsView: View {
         let missed = s.status == "planned" && (Format.date(s.end).map { $0 < Date() } ?? false)
         return VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
-                Text(s.title).font(.subheadline.weight(.medium)).strikethrough(s.status == "skipped").foregroundStyle(s.status == "skipped" ? Theme.muted : .white)
+                Text(s.title).font(.subheadline.weight(.medium)).strikethrough(s.status == "skipped" || s.status == "replaced").foregroundStyle(s.status == "skipped" || s.status == "replaced" ? Theme.muted : .white)
                 Spacer(minLength: 0)
                 if s.status == "planned" && !missed {
                     Menu {
@@ -194,6 +194,9 @@ struct GoalsView: View {
             Text("\(when(s.start)) \u{00B7} \(s.minutes) min").font(.caption).foregroundStyle(Theme.muted)
             SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url).padding(.top, 2)
         }
-        .frame(maxWidth: .infinity, alignment: .leading).opacity(busy == s.id ? 0.5 : 1)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+        .opacity(busy == s.id ? 0.5 : 1)
     }
 }

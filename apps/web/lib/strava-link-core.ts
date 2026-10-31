@@ -35,7 +35,7 @@ export function matchesWindow(s: Pick<LinkSession, "start" | "end" | "title">, a
 export function matchSessions(sessions: LinkSession[], activities: Actual[], linkedIds: Set<number>): { sessionId: string; activityId: number }[] {
   const pairs: { sessionId: string; activityId: number; diff: number }[] = [];
   for (const s of sessions) {
-    if (s.actual || s.status === "skipped") continue;
+    if (s.actual || s.status === "skipped" || s.status === "replaced") continue;
     for (const a of activities) {
       if (linkedIds.has(a.id) || !matchesWindow(s, a)) continue;
       pairs.push({ sessionId: s.id, activityId: a.id, diff: Math.abs(Date.parse(a.start) - s.start.getTime()) });

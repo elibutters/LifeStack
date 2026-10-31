@@ -39,8 +39,10 @@ export const GoalInput = z.object({
 export const GoalPatch = z.object({ title: z.string().trim().min(1).max(120), thesis: z.string().trim().max(2000), kind: z.enum(GOAL_KINDS), targetDay: Day.nullable(), mode: z.enum(GOAL_MODES), status: z.enum(GOAL_STATUSES), config: z.record(z.string(), z.unknown()), notionPageId: z.string().max(100).nullable() }).partial().refine((o) => Object.keys(o).length > 0, "nothing to change");
 
 export type Goal = { id: string; title: string; thesis: string; kind: (typeof GOAL_KINDS)[number]; targetDay: string | null; mode: (typeof GOAL_MODES)[number]; status: (typeof GOAL_STATUSES)[number]; config: Record<string, unknown>; notionPageId: string | null; createdAt: string };
-export type SessionStatus = "planned" | "done" | "skipped";
-export type Session = { id: string; goalId: string; title: string; start: Date; end: Date; durationMin: number; status: SessionStatus; day: string; note: string | null; outlookEventId: string | null; movedFrom: string[]; doneAt: string | null; minutes: number | null; rating: number | null; actual: Actual | null };
+// "replaced" is a session that was dropped because the plan changed: it is not something the owner skipped, so it is kept out of the calendar, the
+// counts and the goal's session list. Only the current plan is shown anywhere.
+export type SessionStatus = "planned" | "done" | "skipped" | "replaced";
+export type Session = { id: string; goalId: string; title: string; start: Date; end: Date; durationMin: number; status: SessionStatus; day: string; note: string | null; outlookEventId: string | null; movedFrom: string[]; doneAt: string | null; minutes: number | null; rating: number | null; actual: Actual | null; skippedAt: string | null };
 
 const newId = (prefix: string) => `${prefix}${randomBytes(4).toString("hex")}`;
 type Row = typeof events.$inferSelect;
@@ -68,7 +70,7 @@ function sessionOf(r: Row): Session {
     id: r.sourceId!.slice("session:".length), goalId: String(p.goalId), title: String(p.title ?? ""), start: r.ts, end, durationMin: Math.round((end.getTime() - r.ts.getTime()) / 60000),
     status: (r.valueText as SessionStatus) ?? "planned", day: typeof p.day === "string" ? p.day : eng.localDay(r.ts, TZ), note: typeof p.note === "string" ? p.note : null,
     outlookEventId: typeof p.outlookEventId === "string" ? p.outlookEventId : null, movedFrom: Array.isArray(p.movedFrom) ? p.movedFrom.map(String) : [],
-    doneAt: typeof p.doneAt === "string" ? p.doneAt : null, minutes: typeof p.minutes === "number" ? p.minutes : null, rating: typeof p.rating === "number" ? p.rating : null, actual: actualOf(p.actual),
+    doneAt: typeof p.doneAt === "string" ? p.doneAt : null, minutes: typeof p.minutes === "number" ? p.minutes : null, rating: typeof p.rating === "number" ? p.rating : null, actual: actualOf(p.actual), skippedAt: typeof p.skippedAt === "string" ? p.skippedAt : null,
   };
 }
 
@@ -120,9 +122,17 @@ export async function listGoals(): Promise<Goal[]> {
   return rows.map(goalOf);
 }
 
-export async function sessionsOf(goalId?: string): Promise<Session[]> {
+export async function sessionsOf(goalId?: string, now = new Date()): Promise<Session[]> {
   const rows = await db().select().from(events).where(and(eq(events.source, SRC), eq(events.key, "goal.session"), goalId ? sql`${events.payload}->>'goalId' = ${goalId}` : undefined)).orderBy(asc(events.ts));
-  return rows.map(sessionOf);
+  return markReplaced(rows.map(sessionOf), now);
+}
+
+// Before there was a "replaced" status, a plan change skipped the old sessions. Those have no skippedAt, so a skipped session of that kind that
+// is still in the future, or has a live session at the same time, is read as replaced. A skip made now (it has a skippedAt) is always a skip.
+export function markReplaced(list: Session[], now: Date): Session[] {
+  const key = (s: Session) => `${s.goalId}|${s.start.getTime()}`;
+  const live = new Set(list.filter((s) => s.status !== "skipped" && s.status !== "replaced").map(key));
+  return list.map((s) => (s.status === "skipped" && !s.skippedAt && (s.start > now || live.has(key(s))) ? { ...s, status: "replaced" as const } : s));
 }
 
 export async function getGoal(id: string) {
@@ -132,7 +142,7 @@ export async function getGoal(id: string) {
   const sessions = await sessionsOf(id);
   const done = sessions.filter((s) => s.status === "done");
   const next = sessions.find((s) => s.status === "planned" && s.end > new Date()) ?? null;
-  return { goal, notebook: goal.notionPageId ? notebookUrl(goal.notionPageId) : null, sessions: sessions.map(sessionJson), progress: { planned: sessions.filter((s) => s.status === "planned").length, done: done.length, skipped: sessions.filter((s) => s.status === "skipped").length, minutesDone: done.reduce((n, s) => n + (s.minutes ?? s.durationMin), 0) }, next: next && sessionJson(next) };
+  return { goal, notebook: goal.notionPageId ? notebookUrl(goal.notionPageId) : null, sessions: sessions.filter((s) => s.status !== "replaced").map(sessionJson), progress: { replaced: sessions.filter((s) => s.status === "replaced").length, planned: sessions.filter((s) => s.status === "planned").length, done: done.length, skipped: sessions.filter((s) => s.status === "skipped").length, minutesDone: done.reduce((n, s) => n + (s.minutes ?? s.durationMin), 0) }, next: next && sessionJson(next) };
 }
 
 const noteParts = (note: string | null) => {
@@ -157,9 +167,10 @@ async function busyBetween(from: Date, to: Date, ownEventIds: Set<string>): Prom
   return out;
 }
 
-async function context(from: Date, to: Date, excludeSessionId?: string) {
+async function context(from: Date, to: Date, exclude?: string | string[]) {
   const [c, all] = await Promise.all([loadConstraints(), sessionsOf()]);
-  const planned = all.filter((s) => s.status === "planned" && s.id !== excludeSessionId);
+  const skip = new Set(Array.isArray(exclude) ? exclude : exclude ? [exclude] : []);
+  const planned = all.filter((s) => s.status === "planned" && !skip.has(s.id));
   const own = new Set(all.map((s) => s.outlookEventId).filter((x): x is string => !!x));
   const busy = await busyBetween(from, to, own);
   const taken = planned.filter((s) => s.end > from && s.start < to).map((s) => ({ start: s.start, end: s.end }));
@@ -244,6 +255,7 @@ export async function proposePlan(input: unknown, now = new Date()) {
 const Commit = z.object({
   sessions: z.array(z.object({ title: z.string().trim().min(1).max(200), start: z.iso.datetime({ offset: true }), end: z.iso.datetime({ offset: true }), note: z.string().trim().max(2000).optional() })).min(1).max(120),
   allowOverlap: z.boolean().optional(),
+  replaces: z.array(z.string().max(80)).max(200).optional(), // ids of sessions this plan takes the place of
 });
 export type CalendarState = "ok" | "not_connected" | "needs_reconnect" | "failed" | "skipped";
 
@@ -262,7 +274,7 @@ export async function commitPlan(goalId: string, input: unknown, now = new Date(
   }
   const from = new Date(Math.min(...list.map((s) => s.startD.getTime())));
   const to = new Date(Math.max(...list.map((s) => s.endD.getTime())));
-  const ctx = await context(from, to);
+  const ctx = await context(from, to, p.data.replaces);
   const conflicts: { title: string; start: string; with: string }[] = [];
   if (!p.data.allowOverlap) {
     const blockers = [...ctx.busy.map((b) => ({ ...b, what: "a meeting" })), ...ctx.taken.map((t) => ({ ...t, what: "another session" }))];
@@ -285,8 +297,13 @@ export async function commitPlan(goalId: string, input: unknown, now = new Date(
     });
   }
   if (goal.status === "draft") await patchPayload(`goal:${goalId}`, { status: "active" });
-  if (cal.ok) refreshCalendar();
-  return { ok: true as const, saved: made.length, calendar: (cal.ok ? "ok" : cal.reason) as CalendarState, sessions: (await sessionsOf(goalId)).filter((s) => made.some((m) => m.id === s.id)).map(sessionJson) };
+  let replaced = 0;
+  for (const old of p.data.replaces ?? []) {
+    const r = await replaceSession(old, goalId);
+    if (r.ok) replaced++;
+  }
+  if (cal.ok || replaced) refreshCalendar();
+  return { ok: true as const, saved: made.length, replaced, calendar: (cal.ok ? "ok" : cal.reason) as CalendarState, sessions: (await sessionsOf(goalId)).filter((s) => made.some((m) => m.id === s.id)).map(sessionJson) };
 }
 
 // After Outlook has been written to, copy the calendar back so the site shows the change now rather than at the next daily sync.
@@ -376,14 +393,28 @@ export async function linkActivity(id: string, activityId: number | null) {
   return { ok: true as const, completed: done, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
 }
 
+// Takes a session off the calendar and keeps its record under a new status. Used for both a skip and a plan change.
+async function retire(s: Session, status: "skipped" | "replaced") {
+  const cal = s.outlookEventId ? await deleteEvent(s.outlookEventId) : null;
+  await patchPayload(`session:${s.id}`, { ...(cal && cal.ok ? { outlookEventId: null } : {}), ...(status === "skipped" ? { skippedAt: new Date().toISOString() } : {}) }, { valueText: status });
+  if (cal && cal.ok) refreshCalendar();
+  return { ok: true as const, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(s.id))!) };
+}
+
 export async function skipSession(id: string) {
   const s = await sessionRow(id);
   if (!s) return { ok: false as const, error: "No such session." };
   // A skipped session comes off the calendar so it does not clutter it; the record stays.
-  const cal = s.outlookEventId ? await deleteEvent(s.outlookEventId) : null;
-  await patchPayload(`session:${id}`, cal && cal.ok ? { outlookEventId: null } : {}, { valueText: "skipped" });
-  if (cal && cal.ok) refreshCalendar();
-  return { ok: true as const, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
+  return retire(s, "skipped");
+}
+
+// For a session the plan no longer includes: it is not counted as skipped, and it does not show on the calendar. `goalId`, when given, makes
+// sure it belongs to that goal.
+export async function replaceSession(id: string, goalId?: string) {
+  const s = await sessionRow(id);
+  if (!s || (goalId && s.goalId !== goalId)) return { ok: false as const, error: "No such session." };
+  if (s.status === "done") return { ok: false as const, error: "That session is already done, so it stays." };
+  return retire(s, "replaced");
 }
 
 export async function moveSession(id: string, input: { start?: string } = {}, now = new Date()) {
@@ -419,7 +450,7 @@ export async function tonight(now = new Date()) {
   const start = eng.localToDate(today, 0, c.tz);
   const end = eng.localToDate(eng.addDay(today, 1), 0, c.tz);
   const all = await sessionsOf();
-  const todays = all.filter((s) => s.start >= start && s.start < end && s.status !== "skipped").map(sessionJson);
+  const todays = all.filter((s) => s.start >= start && s.start < end && s.status !== "skipped" && s.status !== "replaced").map(sessionJson);
   const missed = all.filter((s) => eng.statusAt({ status: s.status, end: s.end }, now) === "missed");
   const ctx = await context(now, new Date(now.getTime() + 21 * 86_400_000));
   const free = eng.freeSlots(now, new Date(now.getTime() + 21 * 86_400_000), [...ctx.busy, ...ctx.taken], c, now, 15);
@@ -455,6 +486,7 @@ const Action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("skip") }),
   z.object({ action: z.literal("move"), start: z.iso.datetime({ offset: true }).optional() }),
   NoteBody.extend({ action: z.literal("note") }),
+  z.object({ action: z.literal("replace") }),
   z.object({ action: z.literal("link"), activityId: z.number().int().positive().nullable() }),
 ]);
 export type SessionActionEvent = { action: "done" | "skip" | "move"; session: ReturnType<typeof sessionJson>; note?: string };
@@ -469,11 +501,11 @@ export const handleSessionAction = (req: Request, rawId: string, after?: (e: Ses
     const a = Action.safeParse(body);
     if (!a.success) return json({ error: "invalid" }, 400);
     const act = a.data;
-    const r = act.action === "done" ? await completeSession(rawId, act) : act.action === "skip" ? await skipSession(rawId) : act.action === "note" ? await setSessionNote(rawId, act) : act.action === "link" ? await linkActivity(rawId, act.activityId) : await moveSession(rawId, { start: act.start });
+    const r = act.action === "done" ? await completeSession(rawId, act) : act.action === "skip" ? await skipSession(rawId) : act.action === "note" ? await setSessionNote(rawId, act) : act.action === "replace" ? await replaceSession(rawId) : act.action === "link" ? await linkActivity(rawId, act.activityId) : await moveSession(rawId, { start: act.start });
     if (r.ok) {
       if (act.action === "link") {
         if ("completed" in r && r.completed) after?.({ action: "done", session: r.session });
-      } else if (act.action !== "note") after?.({ action: act.action, session: r.session, note: act.action === "done" ? act.note : undefined });
+      } else if (act.action !== "note" && act.action !== "replace") after?.({ action: act.action, session: r.session, note: act.action === "done" ? act.note : undefined });
       return json(r);
     }
     return json({ error: "failed", message: r.error }, r.error === "No such session." ? 404 : 409);
