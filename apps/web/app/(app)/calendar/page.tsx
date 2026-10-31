@@ -134,7 +134,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
         <Card title={fmtDayLong(selected)}>
           {dayItems.length > 0 ? (
-            <ul className="w-max min-w-full divide-y divide-line">
+            <ul className="w-full divide-y divide-line">
               {dayItems.map((i) => (
                 <EventRow key={i.id} item={i} day={selected} session={sessions.get(i.id)} />
               ))}

@@ -65,10 +65,10 @@ export function EventRow({ item, day, showDate = false, session }: { item: Calen
       <span aria-hidden="true" className={`mt-2 h-2 w-2 shrink-0 rounded-sm ${tone.dot}`} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="whitespace-nowrap">{item.title}</p>
+          <p className="min-w-0 break-words">{item.title}</p>
           {session && <SessionTag session={session} />}
         </div>
-        {detail && <p className="whitespace-nowrap text-sm text-muted">{detail}</p>}
+        {detail && <p className="text-sm text-muted">{detail}</p>}
         {session && <SessionBody note={session.note} actual={session.actual} />}
       </div>
     </li>
