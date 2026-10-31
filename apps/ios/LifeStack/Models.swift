@@ -10,6 +10,16 @@ struct CalendarItem: Decodable, Identifiable, Equatable {
     let allDay: Bool
     let kind: String
     let location: String?
+    let session: CalendarSession?   // set when this event is one of a goal's sessions
+}
+
+// What a goal knows about a calendar event that is one of its sessions.
+struct CalendarSession: Decodable, Equatable {
+    struct Actual: Decodable, Equatable { let summary: String; let url: String }
+    let status: String   // planned | done | skipped
+    let goal: String?
+    let note: String?
+    let actual: Actual?
 }
 
 struct Night: Decodable, Identifiable, Equatable {

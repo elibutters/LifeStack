@@ -134,7 +134,7 @@ export async function getGoal(id: string) {
   return { goal, notebook: goal.notionPageId ? notebookUrl(goal.notionPageId) : null, sessions: sessions.map(sessionJson), progress: { planned: sessions.filter((s) => s.status === "planned").length, done: done.length, skipped: sessions.filter((s) => s.status === "skipped").length, minutesDone: done.reduce((n, s) => n + (s.minutes ?? s.durationMin), 0) }, next: next && sessionJson(next) };
 }
 
-export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title: s.title, start: s.start.toISOString(), end: s.end.toISOString(), minutes: s.durationMin, status: s.status, note: s.note, onCalendar: !!s.outlookEventId, movedFrom: s.movedFrom, doneAt: s.doneAt, minutesSpent: s.minutes, rating: s.rating, actual: s.actual && { ...s.actual, summary: actualLine(s.actual) } });
+export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title: s.title, start: s.start.toISOString(), end: s.end.toISOString(), minutes: s.durationMin, status: s.status, note: s.note, onCalendar: !!s.outlookEventId, movedFrom: s.movedFrom, doneAt: s.doneAt, minutesSpent: s.minutes, rating: s.rating, actual: s.actual && { ...s.actual, summary: actualLine(s.actual), url: stravaUrl(s.actual.id) } });
 
 // ---- free time
 // Meetings (not all-day events, not holidays) as busy time, leaving out the Outlook copies of Life Stack's own sessions: those are

@@ -10,6 +10,9 @@ struct GoalSessionDTO: Decodable, Identifiable, Equatable {
     let minutes: Int
     let status: String   // planned | done | skipped
     let onCalendar: Bool
+    let note: String?
+    let actual: Actual?
+    struct Actual: Decodable, Equatable { let summary: String; let url: String }
 }
 
 struct GoalsTonight: Decodable, Equatable {
@@ -35,6 +38,7 @@ struct GoalDetail: Decodable, Identifiable, Equatable {
     let notebook: String?
     let progress: Progress
     let next: GoalSessionDTO?
+    let sessions: [GoalSessionDTO]?
 }
 
 // The goals calls live here, not in APIClient.swift, because that file is also built into the widgets, which do not have these types.
@@ -61,7 +65,7 @@ struct GoalsView: View {
     var body: some View {
         Screen(title: "Goals", refresh: { await load() }) {
             ErrorBanner(text: note ?? tonight.error ?? goals.error)
-            if let t = tonight.value { tonightCard(t) } else if tonight.loading { ProgressView().padding(.top, 40) }
+            if let t = tonight.value { tonightCard(t, names: Dictionary(uniqueKeysWithValues: (goals.value ?? []).map { ($0.goal.id, $0.goal.title) })) } else if tonight.loading { ProgressView().padding(.top, 40) }
             if let list = goals.value {
                 if list.isEmpty {
                     Card(title: "Your goals") { Empty(text: "No goals yet. Tell your assistant what you are working toward and when, and it fits sessions into your real free time. Try: set up interview prep, interview on Nov 9, an hour every other day.") }
@@ -99,7 +103,7 @@ struct GoalsView: View {
             .buttonStyle(.plain)
     }
 
-    private func tonightCard(_ t: GoalsTonight) -> some View {
+    private func tonightCard(_ t: GoalsTonight, names: [String: String]) -> some View {
         Card(title: "Tonight", trailing: "\(hours(t.freeMinutesLeftToday)) free left") {
             ForEach(t.needsDecision) { d in
                 VStack(alignment: .leading, spacing: 8) {
@@ -118,8 +122,17 @@ struct GoalsView: View {
             let rest = t.sessions.filter { s in !t.needsDecision.contains { $0.session.id == s.id } }
             ForEach(rest) { s in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(s.title).font(.headline).strikethrough(s.status == "done").foregroundStyle(s.status == "done" ? Theme.muted : .white)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(s.title).font(.headline).strikethrough(s.status == "done").foregroundStyle(s.status == "done" ? Theme.muted : .white)
+                        Spacer(minLength: 0)
+                        HStack(spacing: 6) {
+                            if let goal = names[s.goalId] { Text(goal).foregroundStyle(Theme.muted) }
+                            Text(s.status.capitalized).foregroundStyle(sessionTint(s.status))
+                        }
+                        .font(.caption2).lineLimit(1)
+                    }
                     Text("\(span(s)) \u{00B7} \(s.minutes) min").font(.caption).foregroundStyle(Theme.muted)
+                    SessionBody(note: s.note, summary: s.actual?.summary, url: s.actual?.url)
                     if s.status == "planned" {
                         HStack(spacing: 8) {
                             chipButton("Done", "checkmark", tint: Theme.good.opacity(0.4)) { act(s.id, ["action": "done"]) }
@@ -141,7 +154,45 @@ struct GoalsView: View {
             ProgressView(value: total == 0 ? 0 : Double(g.progress.done) / Double(total)).tint(Theme.sky)
             Text("\(g.progress.done) of \(total) sessions done" + (g.progress.skipped > 0 ? ", \(g.progress.skipped) skipped" : "") + (g.progress.minutesDone > 0 ? " \u{00B7} \(hours(g.progress.minutesDone)) so far" : "")).font(.subheadline).monospacedDigit()
             Text([g.goal.kind, g.goal.targetDay.map { "by \($0)" }, "when a session slips: \(g.goal.mode)", g.next.map { "next: \(when($0.start))" }].compactMap { $0 }.joined(separator: " \u{00B7} ")).font(.caption).foregroundStyle(Theme.muted)
+            sessionList(g)
             if let url = g.notebook.flatMap(URL.init(string:)) { Link(destination: url) { Label("Open notebook", systemImage: "book").font(.subheadline.weight(.medium)).padding(.horizontal, 12).frame(height: 36).chip() } }
         }
+    }
+
+    // Every session of the goal, in order: status top right (a menu while it is still planned), the time, and the note and run on one line.
+    @ViewBuilder private func sessionList(_ g: GoalDetail) -> some View {
+        let all = g.sessions ?? []
+        let live = all.filter { $0.status != "skipped" }
+        let skipped = all.filter { $0.status == "skipped" }
+        if !live.isEmpty {
+            DisclosureGroup("Sessions (\(live.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(live) { sessionRow($0) } }.padding(.top, 6) }
+                .font(.subheadline.weight(.medium)).tint(Theme.muted)
+        }
+        if !skipped.isEmpty {
+            DisclosureGroup("Skipped (\(skipped.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(skipped) { sessionRow($0) } }.padding(.top, 6) }
+                .font(.subheadline).foregroundStyle(Theme.muted).tint(Theme.muted)
+        }
+    }
+
+    private func sessionRow(_ s: GoalSessionDTO) -> some View {
+        let missed = s.status == "planned" && (Format.date(s.end).map { $0 < Date() } ?? false)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(s.title).font(.subheadline.weight(.medium)).strikethrough(s.status == "skipped").foregroundStyle(s.status == "skipped" ? Theme.muted : .white)
+                Spacer(minLength: 0)
+                if s.status == "planned" && !missed {
+                    Menu {
+                        Button("Done", systemImage: "checkmark") { act(s.id, ["action": "done"]) }
+                        Button("Move", systemImage: "arrow.right") { act(s.id, ["action": "move"]) }
+                        Button("Skip", systemImage: "xmark") { act(s.id, ["action": "skip"]) }
+                    } label: { Image(systemName: "ellipsis.circle").foregroundStyle(Theme.muted) }
+                } else {
+                    Text(missed ? "Missed" : s.status.capitalized).font(.caption2).foregroundStyle(missed ? Theme.warm : sessionTint(s.status))
+                }
+            }
+            Text("\(when(s.start)) \u{00B7} \(s.minutes) min").font(.caption).foregroundStyle(Theme.muted)
+            SessionBody(note: s.note, summary: s.actual?.summary, url: s.actual?.url).padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading).opacity(busy == s.id ? 0.5 : 1)
     }
 }

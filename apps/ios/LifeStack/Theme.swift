@@ -175,6 +175,37 @@ struct StageBar: View {
     }
 }
 
+// Under a session, two sections that can each run to several lines and are divided from one another: the plan (its note), then what
+// actually happened with the Strava link at the bottom right.
+struct SessionBody: View {
+    let note: String?
+    let summary: String?
+    let url: String?
+    private func section(_ label: String, _ text: String, link: URL? = nil) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label).foregroundStyle(Theme.muted).frame(width: 44, alignment: .leading)
+            HStack(alignment: .bottom, spacing: 8) {
+                Text(text).frame(maxWidth: .infinity, alignment: .leading)
+                if let link { Link("Strava", destination: link).font(.caption2).foregroundStyle(Theme.accent) }
+            }
+        }
+    }
+    var body: some View {
+        let plan = (note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let actual = summary?.replacingOccurrences(of: "Actual: ", with: "").replacingOccurrences(of: " (Strava)", with: "")
+        if !plan.isEmpty || actual != nil {
+            VStack(alignment: .leading, spacing: 6) {
+                if !plan.isEmpty { section("Plan", plan) }
+                if !plan.isEmpty, actual != nil { Divider().overlay(Color.white.opacity(0.12)) }
+                if let actual { section("Actual", actual, link: url.flatMap(URL.init(string:))) }
+            }
+            .font(.caption)
+        }
+    }
+}
+
+func sessionTint(_ status: String) -> Color { status == "done" ? Theme.good : status == "planned" ? Theme.warm : Theme.muted }
+
 struct EventRow: View {
     let item: CalendarItem
     // Ordinary events stay quiet. Colour marks a holiday, a workout, or a prep day.
@@ -189,11 +220,22 @@ struct EventRow: View {
         HStack(alignment: .top, spacing: 12) {
             Rectangle().fill(mark).frame(width: 2)
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title).font(.body.weight(.medium))
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(item.title).font(.body.weight(.medium))
+                    Spacer(minLength: 0)
+                    if let s = item.session {
+                        HStack(spacing: 6) {
+                            if let goal = s.goal { Text(goal).foregroundStyle(Theme.muted) }
+                            Text(s.status.capitalized).foregroundStyle(sessionTint(s.status))
+                        }
+                        .font(.caption2).lineLimit(1)
+                    }
+                }
                 HStack(spacing: 6) {
                     Text(Format.time(item)).font(.caption).foregroundStyle(Theme.muted)
                     if let place = item.location, !place.isEmpty { Text("· \(place)").font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
                 }
+                if let s = item.session { SessionBody(note: s.note, summary: s.actual?.summary, url: s.actual?.url).padding(.top, 2) }
             }
             Spacer(minLength: 0)
         }

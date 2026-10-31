@@ -1,6 +1,7 @@
 import "server-only";
 import { addDays, startOfDay, ymd } from "./dates";
 import { calendarItems, loadCalendar, systemStatus, type CalendarItem } from "./calendar";
+import { sessionsForItems, type SessionDetail } from "./calendar-sessions";
 import { loadToday } from "./capture";
 import { accountLabel, cashflowSeries, classify, insights, lastMonths, merchantName, monthOf, netWorth, shiftMonthKey, summarizeMonth } from "./finance-calc";
 import { loadFinance, loadHoldings } from "./finance-data";
@@ -13,7 +14,7 @@ import { loadActivities, totals } from "./activities";
 // credentials are never stored.
 export const MAX_RANGE_DAYS = 90;
 
-export const calendarJson = (i: CalendarItem) => ({
+export const calendarJson = (i: CalendarItem, session?: SessionDetail) => ({
   id: i.id,
   title: i.title,
   start: i.allDay ? ymd(i.start) : i.start.toISOString(),
@@ -21,10 +22,13 @@ export const calendarJson = (i: CalendarItem) => ({
   allDay: i.allDay,
   kind: i.kind,
   location: i.location ?? null,
+  session: session ?? null, // the goal session this event is, when it is one
 });
 
 export async function calendarRange(from: string, to: string) {
-  return (await calendarItems(startOfDay(from), startOfDay(addDays(to, 1)))).map(calendarJson);
+  const items = await calendarItems(startOfDay(from), startOfDay(addDays(to, 1)));
+  const sessions = await sessionsForItems(items).catch(() => new Map<number, SessionDetail>());
+  return items.map((i) => calendarJson(i, sessions.get(i.id)));
 }
 
 export async function sleepNights(limit: number) {
@@ -95,9 +99,9 @@ export async function overview(has: (scope: string) => boolean, now = new Date()
   return {
     date: today,
     calendar: todayRes && soonRes && {
-      today: todayRes.items.map(calendarJson),
+      today: todayRes.items.map((i) => calendarJson(i)),
       // Things already under way belong to today; "soon" lists what starts later.
-      soon: soonRes.items.filter((i) => i.start >= tomorrow).map(calendarJson),
+      soon: soonRes.items.filter((i) => i.start >= tomorrow).map((i) => calendarJson(i)),
       failed: todayRes.failed || soonRes.failed,
       connected: status?.ok ? status.calendarConnected : false,
     },
