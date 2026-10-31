@@ -60,6 +60,21 @@ a.text-accent {
   text-underline-offset: 0.18em;
 }
 
+/* Tailwind 4 resets buttons to the arrow. Anything that can be pressed shows the pointing hand; disabled things keep the arrow. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  select:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="range"]:not(:disabled),
+  label[for] {
+    cursor: pointer;
+  }
+}
+
 a.text-accent:hover {
   text-decoration-color: currentcolor;
 }
