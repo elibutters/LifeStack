@@ -280,6 +280,20 @@ assert.ok(bodies.some((b) => b.includes("https://www.strava.com/activities/101")
 assert.ok(bodies.every((b) => !b.includes("Be ready to talk through any case")), "the goal's thesis is not copied onto its events");
 const again = await g.refreshEventBodies({ now: NOW });
 assert.deepEqual([again.updated, again.remaining], [0, 0], "nothing is rewritten twice");
+// ---- editing from the calendar: a missed or skipped session can be marked done afterwards, and a mark can be undone
+const tempoPlan = await g.commitPlan(rg.id, { sessions: [{ title: "Tempo run", start: at("2026-12-02", 7 * 60).toISOString(), end: at("2026-12-02", 8 * 60).toISOString() }] }, NOW) as any;
+const lateId = tempoPlan.sessions[0].id;
+assert.ok(((await g.skipSession(lateId)) as any).ok);
+let sd = await cs.skippedItems(at("2026-12-02", 0), at("2026-12-03", 0)); assert.equal(sd.sessions.get(sd.items[0]!.id)!.status, "skipped");
+const doneLate = await g.completeSession(lateId, {}, at("2026-12-03", 9 * 60)) as any;
+assert.equal(doneLate.session.status, "done", "a skipped session can be marked done afterwards"); assert.equal(doneLate.session.minutesSpent, 60, "it counts for its planned length");
+sd = await cs.skippedItems(at("2026-12-02", 0), at("2026-12-03", 0)); assert.equal(sd.items.length, 1, "a done session with no event stays on the calendar");
+assert.equal(sd.sessions.get(sd.items[0]!.id)!.status, "done");
+assert.equal((await act(lateId, { action: "reopen" }, read.token)).status, 403);
+assert.equal((await act(lateId, { action: "reopen" })).status, 200);
+const reopened = (await g.sessionsOf(rg.id, NOW)).find((x) => x.id === lateId)!;
+assert.deepEqual([reopened.status, reopened.doneAt, reopened.minutes, reopened.skippedAt], ["planned", null, null, null], "undone, as if it had never been marked");
+assert.equal(((await g.reopenSession("snope-1234")) as any).ok, false);
 await db().delete(events).where(sql`${events.payload}->>'goalId' = ${rg.id} or ${events.sourceId} = ${`goal:${rg.id}`} or ${events.source} = 'strava'`);
 
 await wipe();

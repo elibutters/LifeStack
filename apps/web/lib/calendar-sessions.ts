@@ -21,7 +21,8 @@ export async function sessionsForItems(items: CalendarItem[]): Promise<Map<numbe
 }
 
 // Skipping a session takes its event off Outlook so the calendar is not cluttered, so a skipped session would otherwise vanish from the
-// calendar altogether. These put it back as an item of its own, shown struck through and marked Skipped. A skipped session whose event could
+// calendar altogether, and so would one that was marked done after being skipped. These put them back as items of their own (a skipped one
+// struck through and marked Skipped). A skipped session whose event could
 // not be removed is still an Outlook item (and already marked by the join above), and one that was replaced by a session at the same time is
 // not shown: the replacement stands for it. A session dropped because the plan changed is "replaced", not skipped, and is never shown.
 const syntheticId = (sessionId: string) => {
@@ -40,7 +41,9 @@ export async function skippedItems(from: Date, to: Date): Promise<{ items: Calen
   const items: CalendarItem[] = [];
   const sessions = new Map<number, SessionDetail>();
   for (const s of inRange) {
-    if (s.status !== "skipped" || s.outlookEventId || replaced.has(key(s)) || shown.has(key(s))) continue;
+    // A session with no event of its own: a skipped one (its event was taken off), or one that was marked done afterwards.
+    const wanted = s.status === "skipped" ? !replaced.has(key(s)) : s.status === "done";
+    if (!wanted || s.outlookEventId || shown.has(key(s))) continue;
     shown.add(key(s));
     const id = syntheticId(s.id);
     items.push({ id, title: s.title, start: s.start, end: s.end, allDay: false, kind: "event" });
