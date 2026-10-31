@@ -57,7 +57,11 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
   await requireSession();
   const note = (await searchParams).note;
   const [ton, goals] = await Promise.all([tonight().catch(() => null), listGoals().catch(() => null)]);
-  const details = goals ? (await Promise.all(goals.map((g) => getGoal(g.id)))).filter((d): d is NonNullable<typeof d> => !!d) : null;
+  // Active goals lead, then drafts, then anything finished or put away.
+  const ORDER: Record<string, number> = { active: 0, draft: 1, done: 2, archived: 3 };
+  const details = goals
+    ? (await Promise.all(goals.map((g) => getGoal(g.id)))).filter((d): d is NonNullable<typeof d> => !!d).sort((a, b) => (ORDER[a.goal.status] ?? 9) - (ORDER[b.goal.status] ?? 9))
+    : null;
   const names = new Map((goals ?? []).map((g) => [g.id, g.title]));
 
   return (
@@ -113,9 +117,9 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
           </Card>
         ) : (
           details.map(({ goal, progress, next, notebook, sessions }) => {
-            const total = progress.done + progress.planned + progress.skipped;
+            const total = progress.done + progress.planned; // the sessions still in the plan; skipped ones are not part of the count
             return (
-              <Card key={goal.id} title={goal.title} action={<span className="text-xs text-muted">{goal.status}</span>}>
+              <Card key={goal.id} title={goal.title} action={<span className={`rounded-sm px-1.5 py-0.5 text-xs capitalize ${goal.status === "active" ? "bg-ok/15 text-ok" : "bg-fg/10 text-muted"}`}>{goal.status}</span>}>
                 {goal.thesis && <p className="mb-2 text-sm text-muted">{goal.thesis.length > 220 ? `${goal.thesis.slice(0, 220)}...` : goal.thesis}</p>}
                 <div className="h-1.5 rounded-sm bg-raised"><div className="h-full rounded-sm bg-accent/70" style={{ width: `${total ? Math.round((progress.done / total) * 100) : 0}%` }} /></div>
                 <p className="mt-1.5 text-sm tabular-nums">
@@ -131,7 +135,13 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                   return (
                     <div className="mt-3 space-y-2">
                       <details>
-                        <summary className="cursor-pointer text-sm font-medium">Sessions ({live.length})</summary>
+                        <summary className="flex cursor-pointer items-center gap-3 text-sm font-medium">
+                          Sessions
+                          <span className="font-normal text-muted tabular-nums">{live.filter((x) => x.status === "done").length} / {live.length} done</span>
+                          <span aria-hidden="true" className="h-1.5 w-24 overflow-hidden rounded-sm bg-raised">
+                            <span className="block h-full rounded-sm bg-accent/70" style={{ width: `${live.length ? Math.round((live.filter((x) => x.status === "done").length / live.length) * 100) : 0}%` }} />
+                          </span>
+                        </summary>
                         {live.length ? <ul className="mt-2 space-y-2">{live.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul> : <p className="py-2 text-sm text-muted">No sessions yet.</p>}
                       </details>
                       {skipped.length > 0 && (

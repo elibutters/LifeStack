@@ -62,6 +62,7 @@ struct GoalsView: View {
     @State private var goals = Loader<[GoalDetail]>()
     @State private var busy: String?
     @State private var note: String?
+    private let order = ["active": 0, "draft": 1, "done": 2, "archived": 3]
 
     var body: some View {
         Screen(title: "Goals", refresh: { await load() }) {
@@ -71,7 +72,8 @@ struct GoalsView: View {
                 if list.isEmpty {
                     Card(title: "Your goals") { Empty(text: "No goals yet. Tell your assistant what you are working toward and when, and it fits sessions into your real free time. Try: set up interview prep, interview on Nov 9, an hour every other day.") }
                 } else {
-                    ForEach(list) { goalCard($0) }
+                    // Active goals first, then drafts, then anything finished or put away.
+                    ForEach(list.sorted { (order[$0.goal.status] ?? 9) < (order[$1.goal.status] ?? 9) }) { goalCard($0) }
                 }
             }
         }
@@ -149,8 +151,8 @@ struct GoalsView: View {
     }
 
     private func goalCard(_ g: GoalDetail) -> some View {
-        let total = g.progress.done + g.progress.planned + g.progress.skipped
-        return Card(title: g.goal.title, trailing: g.goal.status) {
+        let total = g.progress.done + g.progress.planned   // skipped sessions are not part of the count
+        return Card(title: g.goal.title, trailing: g.goal.status.capitalized, trailingTint: g.goal.status == "active" ? Theme.good : Theme.muted) {
             if !g.goal.thesis.isEmpty { Text(g.goal.thesis).font(.subheadline).foregroundStyle(Theme.muted).lineLimit(4) }
             ProgressView(value: total == 0 ? 0 : Double(g.progress.done) / Double(total)).tint(Theme.sky)
             Text("\(g.progress.done) of \(total) sessions done" + (g.progress.skipped > 0 ? ", \(g.progress.skipped) skipped" : "") + (g.progress.minutesDone > 0 ? " \u{00B7} \(hours(g.progress.minutesDone)) so far" : "")).font(.subheadline).monospacedDigit()
@@ -166,7 +168,7 @@ struct GoalsView: View {
         let live = all.filter { $0.status != "skipped" }
         let skipped = all.filter { $0.status == "skipped" }
         if !live.isEmpty {
-            DisclosureGroup("Sessions (\(live.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(live) { sessionRow($0) } }.padding(.top, 6) }
+            DisclosureGroup("Sessions \u{00B7} \(live.filter { $0.status == "done" }.count) / \(live.count) done") { VStack(alignment: .leading, spacing: 10) { ForEach(live) { sessionRow($0) } }.padding(.top, 6) }
                 .font(.subheadline.weight(.medium)).tint(Theme.muted)
         }
         if !skipped.isEmpty {
