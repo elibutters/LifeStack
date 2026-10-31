@@ -19,6 +19,8 @@ struct CalendarSession: Decodable, Equatable {
     let id: String?
     let note: String?    // the plan as written, for editing
     let minutes: Int?
+    let minutesSpent: Int?
+    let rating: Int?
     let status: String   // planned | done | skipped
     let goal: String?
     let noteBlocks: [NoteBlock]?
