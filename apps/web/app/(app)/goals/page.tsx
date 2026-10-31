@@ -16,7 +16,7 @@ const time = (iso: string) => new Intl.DateTimeFormat("en-US", { timeZone: TZ, h
 const when = (iso: string) => new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 const hours = (min: number) => (min >= 60 ? `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}` : `${min} min`);
 
-const TONE: Record<string, string> = { done: "bg-ok/15 text-ok", skipped: "bg-fg/10 text-muted", planned: "bg-warn/15 text-warn" };
+const TONE: Record<string, string> = { done: "bg-ok/15 text-ok", skipped: "bg-fg/10 text-muted", replaced: "bg-fg/10 text-muted", planned: "bg-warn/15 text-warn" };
 type Detail = NonNullable<Awaited<ReturnType<typeof getGoal>>>;
 type SessionItem = Detail["sessions"][number];
 
@@ -26,7 +26,7 @@ function SessionRow({ s, now }: { s: SessionItem; now: number }) {
   return (
     <li className="py-2">
       <div className="flex items-start justify-between gap-3">
-        <p className={s.status === "skipped" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
+        <p className={s.status === "skipped" || s.status === "replaced" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
         {s.status === "planned" && !late ? (
           <div className="flex shrink-0 gap-2">
             <Btn action={doneAction} id={s.id} label="Done" />
@@ -125,8 +125,9 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                   {goal.kind}{goal.targetDay ? ` · by ${goal.targetDay}` : ""} &middot; when a session slips: {goal.mode}{next ? ` · next: ${when(next.start)}` : ""}
                 </p>
                 {(() => {
-                  const live = sessions.filter((s) => s.status !== "skipped");
+                  const live = sessions.filter((s) => s.status !== "skipped" && s.status !== "replaced");
                   const skipped = sessions.filter((s) => s.status === "skipped");
+                  const replaced = sessions.filter((s) => s.status === "replaced");
                   const now = Date.now();
                   return (
                     <div className="mt-3 space-y-2">
@@ -138,6 +139,12 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                         <details>
                           <summary className="cursor-pointer text-sm text-muted">Skipped ({skipped.length})</summary>
                           <ul className="mt-1 divide-y divide-line">{skipped.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul>
+                        </details>
+                      )}
+                      {replaced.length > 0 && (
+                        <details>
+                          <summary className="cursor-pointer text-sm text-muted">Earlier versions of the plan ({replaced.length})</summary>
+                          <ul className="mt-1 divide-y divide-line">{replaced.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul>
                         </details>
                       )}
                     </div>

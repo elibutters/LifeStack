@@ -8,7 +8,7 @@ struct GoalSessionDTO: Decodable, Identifiable, Equatable {
     let start: String
     let end: String
     let minutes: Int
-    let status: String   // planned | done | skipped
+    let status: String   // planned | done | skipped | replaced
     let onCalendar: Bool
     let noteBlocks: [NoteBlock]?
     let notesBlocks: [NoteBlock]?
@@ -163,8 +163,9 @@ struct GoalsView: View {
     // Every session of the goal, in order: status top right (a menu while it is still planned), the time, and the note and run on one line.
     @ViewBuilder private func sessionList(_ g: GoalDetail) -> some View {
         let all = g.sessions ?? []
-        let live = all.filter { $0.status != "skipped" }
+        let live = all.filter { $0.status != "skipped" && $0.status != "replaced" }
         let skipped = all.filter { $0.status == "skipped" }
+        let replaced = all.filter { $0.status == "replaced" }
         if !live.isEmpty {
             DisclosureGroup("Sessions (\(live.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(live) { sessionRow($0) } }.padding(.top, 6) }
                 .font(.subheadline.weight(.medium)).tint(Theme.muted)
@@ -173,13 +174,17 @@ struct GoalsView: View {
             DisclosureGroup("Skipped (\(skipped.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(skipped) { sessionRow($0) } }.padding(.top, 6) }
                 .font(.subheadline).foregroundStyle(Theme.muted).tint(Theme.muted)
         }
+        if !replaced.isEmpty {
+            DisclosureGroup("Earlier versions of the plan (\(replaced.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(replaced) { sessionRow($0) } }.padding(.top, 6) }
+                .font(.subheadline).foregroundStyle(Theme.muted).tint(Theme.muted)
+        }
     }
 
     private func sessionRow(_ s: GoalSessionDTO) -> some View {
         let missed = s.status == "planned" && (Format.date(s.end).map { $0 < Date() } ?? false)
         return VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
-                Text(s.title).font(.subheadline.weight(.medium)).strikethrough(s.status == "skipped").foregroundStyle(s.status == "skipped" ? Theme.muted : .white)
+                Text(s.title).font(.subheadline.weight(.medium)).strikethrough(s.status == "skipped" || s.status == "replaced").foregroundStyle(s.status == "skipped" || s.status == "replaced" ? Theme.muted : .white)
                 Spacer(minLength: 0)
                 if s.status == "planned" && !missed {
                     Menu {

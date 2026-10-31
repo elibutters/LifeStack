@@ -25,11 +25,11 @@ export const calendarJson = (i: CalendarItem, session?: SessionDetail) => ({
   session: session ?? null, // the goal session this event is, when it is one
 });
 
-export async function calendarRange(from: string, to: string, now = new Date()) {
+export async function calendarRange(from: string, to: string) {
   const a = startOfDay(from), b = startOfDay(addDays(to, 1));
   const items = await calendarItems(a, b);
   const sessions = await sessionsForItems(items).catch(() => new Map<number, SessionDetail>());
-  const skipped = await skippedItems(a, b, now).catch(() => ({ items: [] as CalendarItem[], sessions: new Map<number, SessionDetail>() }));
+  const skipped = await skippedItems(a, b).catch(() => ({ items: [] as CalendarItem[], sessions: new Map<number, SessionDetail>() }));
   return [...items.map((i) => calendarJson(i, sessions.get(i.id))), ...skipped.items.map((i) => calendarJson(i, skipped.sessions.get(i.id)))].sort((x, y) => x.start.localeCompare(y.start));
 }
 

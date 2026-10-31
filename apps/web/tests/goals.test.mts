@@ -231,23 +231,44 @@ assert.deepEqual([...hits.keys()], [1], "only the item whose event id belongs to
 assert.equal(hits.get(1)!.goal, "Run goal"); assert.equal(hits.get(1)!.status, "done"); assert.equal(hits.get(1)!.actual?.url, "https://www.strava.com/activities/101");
 assert.equal((await cs.sessionsForItems([asItem(3)])).size, 0);
 // a skipped session comes back onto the calendar as an item of its own, struck through
-const skipRange = [at("2026-11-11", 0), at("2026-11-12", 0), at("2026-11-12", 12 * 60)] as const; // from, to, and a "now" after the day
+const skipRange = [at("2026-11-11", 0), at("2026-11-12", 0)] as const;
 assert.equal((await cs.skippedItems(...skipRange)).items.length, 0, "nothing skipped yet");
 const skippedLong = await g.skipSession(longId) as any; assert.ok(skippedLong.ok);
 let sk = await cs.skippedItems(...skipRange);
 assert.equal(sk.items.length, 1); assert.ok(sk.items[0]!.id < 0, "a made-up id that cannot clash with a stored event");
 assert.deepEqual([sk.items[0]!.title, sk.sessions.get(sk.items[0]!.id)!.status, sk.sessions.get(sk.items[0]!.id)!.goal], ["Long run", "skipped", "Run goal"]);
-assert.equal((await cs.skippedItems(at("2026-11-12", 0), at("2026-11-13", 0), skipRange[2])).items.length, 0, "only in its own days");
+assert.equal((await cs.skippedItems(at("2026-11-12", 0), at("2026-11-13", 0))).items.length, 0, "only in its own days");
 const ad = await import("../lib/app-data.ts");
-const cr = await ad.calendarRange("2026-11-11", "2026-11-11", skipRange[2]) as any[];
+const cr = await ad.calendarRange("2026-11-11", "2026-11-11") as any[];
 assert.deepEqual(cr.filter((i) => i.session?.status === "skipped").map((i) => i.title), ["Long run"], "the app's calendar call includes it");
 // a session that replaced it at the same time stands for it; two skipped at one time show once
 const twin = await g.commitPlan(rg.id, { sessions: [{ title: "Long run v2", start: at("2026-11-11", 7 * 60).toISOString(), end: at("2026-11-11", 9 * 60).toISOString() }], allowOverlap: true }, NOW) as any;
 assert.ok(twin.ok); assert.equal((await cs.skippedItems(...skipRange)).items.length, 0, "hidden while a replacement is planned");
 await g.skipSession(twin.sessions[0].id);
 assert.equal((await cs.skippedItems(...skipRange)).items.length, 1, "both skipped: one is shown");
-assert.equal((await cs.skippedItems(skipRange[0], skipRange[1], at("2026-11-10", 12 * 60))).items.length, 0, "a skipped session in the future is not shown");
-assert.equal((await cs.skippedItems(skipRange[0], skipRange[1], at("2026-11-11", 22 * 60))).items.length, 1, "it is shown on its own day");
+assert.equal((await cs.skippedItems(...skipRange)).items.length, 1, "a skip made now shows even for a future day: it is a real skip");
+// ---- a plan change replaces sessions; it is not a skip
+const hill = await g.commitPlan(rg.id, { sessions: [{ title: "Hill run", start: at("2026-11-18", 7 * 60).toISOString(), end: at("2026-11-18", 8 * 60).toISOString() }] }, NOW) as any;
+const hillId = hill.sessions[0].id; const deletes = graph("DELETE").length;
+const swap = await g.commitPlan(rg.id, { sessions: [{ title: "Hill run v2", start: at("2026-11-18", 7 * 60).toISOString(), end: at("2026-11-18", 8 * 60).toISOString(), note: "Warm-up:\n- 10 minutes easy" }], replaces: [hillId, "snope-1234"] }, NOW) as any;
+assert.ok(swap.ok, "the session being replaced does not block the new one at the same time"); assert.equal(swap.replaced, 1, "an id that is not a session is ignored");
+assert.equal(graph("DELETE").length, deletes + 1, "the old session's calendar event was removed");
+const afterSwap = await g.sessionsOf(rg.id, NOW);
+assert.equal(afterSwap.find((x) => x.id === hillId)!.status, "replaced"); assert.equal(afterSwap.find((x) => x.title === "Hill run v2")!.status, "planned");
+assert.equal((await cs.skippedItems(at("2026-11-18", 0), at("2026-11-19", 0))).items.length, 0, "a replaced session is not on the calendar");
+const progress = (await g.getGoal(rg.id))!.progress as any;
+assert.equal(progress.replaced, 1); assert.ok(progress.skipped >= 1, "replaced is counted apart from skipped");
+assert.equal(((await g.replaceSession(easyId)) as any).ok, false, "a session already done stays"); assert.equal(((await g.replaceSession("snope-1234")) as any).ok, false);
+assert.equal(((await g.replaceSession(afterSwap.find((x) => x.title === "Hill run v2")!.id, "gother")) as any).ok, false, "only within its own goal");
+const viaApi = afterSwap.find((x) => x.title === "Hill run v2")!.id;
+assert.equal((await act(viaApi, { action: "replace" }, read.token)).status, 403); assert.equal((await act(viaApi, { action: "replace" })).status, 200);
+assert.equal((await g.sessionsOf(rg.id, NOW)).find((x) => x.id === viaApi)!.status, "replaced");
+// sessions skipped before there was a "replaced" status are read as replaced when they are future or were swapped for another
+const legacy = (id: string, ts: Date, status: string, extra: object = {}) => db().insert(events).values({ ts, domain: "goal", key: "goal.session", valueText: status, payload: { goalId: rg.id, title: id, end: new Date(ts.getTime() + 3_600_000).toISOString(), ...extra }, source: "goals", sourceId: `session:${id}` });
+await legacy("old-future", at("2026-12-20", 7 * 60), "skipped"); await legacy("old-future-real", at("2026-12-21", 7 * 60), "skipped", { skippedAt: "2026-10-26T12:00:00.000Z" });
+await legacy("old-past", at("2026-10-05", 7 * 60), "skipped"); await legacy("old-swapped", at("2026-10-06", 7 * 60), "skipped"); await legacy("old-swap-new", at("2026-10-06", 7 * 60), "planned");
+const read2 = new Map((await g.sessionsOf(rg.id, NOW)).map((x) => [x.id, x.status]));
+assert.deepEqual(["old-future", "old-future-real", "old-past", "old-swapped"].map((k) => read2.get(k)), ["replaced", "skipped", "skipped", "replaced"], "a recent skip is a skip; an old one that was a plan change is replaced");
 await db().delete(events).where(sql`${events.payload}->>'goalId' = ${rg.id} or ${events.sourceId} = ${`goal:${rg.id}`} or ${events.source} = 'strava'`);
 
 await wipe();

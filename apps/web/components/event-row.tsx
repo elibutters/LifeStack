@@ -10,7 +10,7 @@ export function eventTone(kind: CalendarItem["kind"]) {
 }
 
 // `day` is the day being listed; an event that began earlier is shown as continuing.
-const STATUS_TONE: Record<string, string> = { done: "bg-ok/15 text-ok", skipped: "bg-fg/10 text-muted", planned: "bg-warn/15 text-warn" };
+const STATUS_TONE: Record<string, string> = { done: "bg-ok/15 text-ok", skipped: "bg-fg/10 text-muted", replaced: "bg-fg/10 text-muted", planned: "bg-warn/15 text-warn" };
 
 // What the goal knows about a calendar item that is one of its sessions. The goal and the status sit together at the top right of the row, the goal just left of the status; the note and
 // the linked run share one line underneath.

@@ -5,6 +5,7 @@ import { AGENT_SCOPES, EventInput, type Scope } from "./capture-core";
 import { insertLog, loadToday } from "./capture";
 import { loadOverview, loadWeekSummary } from "./overview";
 import { calendarItems } from "./calendar";
+import { connectionsStatus } from "./app-data";
 import { addDays, isValidDay, startOfDay, ymd } from "./dates";
 import { describeError } from "./errors";
 import { classify, fmtMoney, insights, merchantName, monthOf, netWorth, shiftMonthKey, summarizeMonth, accountLabel } from "./finance-calc";
@@ -18,7 +19,7 @@ import { getNote, kickSync, searchNotes } from "./notes";
 import { changeSetting, listSettings, resetSetting } from "./settings";
 import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
 import { logBlocks } from "./goals-notion-core";
-import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
+import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, replaceSession, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
 import { addNotePage, appendToNote } from "./notes-write";
 import { NOTE_FORMAT } from "./session-note-core";
 import { addTodo, listTodos, updateTodo } from "./todos";
@@ -56,6 +57,14 @@ export function buildServer(token: VerifiedToken): McpServer {
       "get_week_summary",
       { description: "The last seven local calendar days: mood average, caffeine, supplement days, sleep, event count and spending. Fields the key cannot read are empty or zero." },
       guard(async () => ok(await loadWeekSummary(token.scopes))),
+    );
+  }
+
+  if (has("account:read")) {
+    server.registerTool(
+      "get_connections",
+      { description: "Which accounts are linked: Outlook calendar, Eight Sleep, and each bank (institution, status, last error, last sync). No tokens or account numbers." },
+      guard(async () => ok(await connectionsStatus())),
     );
   }
 
@@ -414,7 +423,7 @@ export function buildServer(token: VerifiedToken): McpServer {
     );
     server.registerTool(
       "get_goal",
-      { description: "One goal with every session (planned, done, skipped).", inputSchema: { id: z.string() } },
+      { description: "One goal with every session (planned, done, skipped, or replaced when the plan changed and the session was dropped).", inputSchema: { id: z.string() } },
       async ({ id }) => {
         try {
           const g = await getGoal(id);
@@ -510,8 +519,8 @@ export function buildServer(token: VerifiedToken): McpServer {
     server.registerTool(
       "commit_plan",
       {
-        description: "Saves the finalized sessions for a goal and adds them to the owner's Outlook calendar (in the Life Stack category). Only call this after the owner has approved the plan. Each session is {title, start, end, note} with ISO times, normally taken from propose_plan. If anything overlaps a meeting or another session nothing is saved and the conflicts are listed. If Outlook has not been reconnected to allow writing the sessions are still saved here and calendar says needs_reconnect; run push_to_calendar after the owner reconnects. A session's note is its plan. " + NOTE_FORMAT,
-        inputSchema: { goalId: z.string(), sessions: z.array(z.object({ title: z.string(), start: z.string(), end: z.string(), note: z.string().optional() })), allowOverlap: z.boolean().optional() },
+        description: "Saves the finalized sessions for a goal and adds them to the owner's Outlook calendar (in the Life Stack category). Only call this after the owner has approved the plan. Each session is {title, start, end, note} with ISO times, normally taken from propose_plan. If anything overlaps a meeting or another session nothing is saved and the conflicts are listed. If Outlook has not been reconnected to allow writing the sessions are still saved here and calendar says needs_reconnect; run push_to_calendar after the owner reconnects. A session's note is its plan. When this plan takes the place of sessions already saved (the owner changed the plan), list their ids in replaces: they are marked replaced in the same call, are not counted as skipped, and no longer block the new times. " + NOTE_FORMAT,
+        inputSchema: { goalId: z.string(), sessions: z.array(z.object({ title: z.string(), start: z.string(), end: z.string(), note: z.string().optional() })), allowOverlap: z.boolean().optional(), replaces: z.array(z.string()).optional() },
       },
       async ({ goalId, ...rest }) => {
         try {
@@ -580,13 +589,22 @@ export function buildServer(token: VerifiedToken): McpServer {
     );
     server.registerTool(
       "skip_session",
-      { description: "Skips a session: it stays in the record and comes off the calendar.", inputSchema: { id: z.string() } },
+      { description: "Skips a session the owner did not do or chose not to do: it stays in the record, counted as skipped, and comes off the calendar. If the PLAN changed and the session is simply no longer wanted, do not skip it: use replace_session, or list it in commit_plan's replaces, because the owner did not skip it.", inputSchema: { id: z.string() } },
       async ({ id }) => {
         try {
           const r = await skipSession(id);
           if (r.ok) afterResponse(() => notebookHook({ type: "skipped", session: r.session }));
           return fromResult(r);
         } catch (e) { console.error("mcp: skip_session failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "replace_session",
+      { description: "Drops a session because the plan changed. It is kept as a record of an earlier version of the plan, but it is not counted as skipped, it does not show on the calendar and its Outlook event is removed. Use this (or commit_plan's replaces) whenever you rewrite part of a plan; use skip_session only for something the owner chose not to do. A session already done is refused.", inputSchema: { id: z.string() } },
+      async ({ id }) => {
+        try {
+          return fromResult(await replaceSession(id));
+        } catch (e) { console.error("mcp: replace_session failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
     server.registerTool(
