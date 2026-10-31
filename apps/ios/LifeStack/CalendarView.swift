@@ -323,7 +323,7 @@ struct CalendarView: View {
 }
 
 // What opens when an event is tapped. A goal session can be marked done (also long after the fact), skipped, moved, undone and have its plan
-// edited; any other event comes from Outlook and is shown as it is.
+// edited, with its title and times; any other event comes from Outlook and is shown as it is.
 private struct CalendarItemSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -331,6 +331,9 @@ private struct CalendarItemSheet: View {
     let changed: () async -> Void
     @State private var editing = false
     @State private var draft = ""
+    @State private var title = ""
+    @State private var start = Date()
+    @State private var end = Date()
     @State private var busy = false
     @State private var error: String?
 
@@ -340,6 +343,37 @@ private struct CalendarItemSheet: View {
             busy = true; defer { busy = false }
             do { try await client.sessionAction(id, body); await changed(); dismiss() }
             catch is CancellationError { return }
+            catch { self.error = error.localizedDescription }
+        }
+    }
+
+    private func iso(_ d: Date) -> String { ISO8601DateFormatter().string(from: d) }
+
+    private func beginEditing(_ s: CalendarSession) {
+        title = item.title
+        start = Format.date(item.start) ?? Date()
+        end = Format.date(item.end) ?? start.addingTimeInterval(3600)
+        draft = s.note ?? ""
+        editing = true
+    }
+
+    // Sends only what changed: the title and times in one call, the plan in another.
+    private func save(_ id: String, _ s: CalendarSession) {
+        Task {
+            guard let client = model.client else { return }
+            busy = true; defer { busy = false }
+            let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let timesChanged = Format.date(item.start) != start || Format.date(item.end) != end
+            do {
+                if (!name.isEmpty && name != item.title) || timesChanged {
+                    var body: [String: Any] = ["action": "edit"]
+                    if !name.isEmpty && name != item.title { body["title"] = name }
+                    if timesChanged { body["start"] = iso(start); body["end"] = iso(end) }
+                    try await client.sessionAction(id, body)
+                }
+                if draft != (s.note ?? "") { try await client.sessionAction(id, ["action": "note", "note": draft]) }
+                await changed(); dismiss()
+            } catch is CancellationError { return }
             catch { self.error = error.localizedDescription }
         }
     }
@@ -370,12 +404,15 @@ private struct CalendarItemSheet: View {
                     if let s = item.session, let id = s.id {
                         SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url)
                         if editing {
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                TextField("Title", text: $title).padding(10).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+                                DatePicker("Starts", selection: $start).datePickerStyle(.compact)
+                                DatePicker("Ends", selection: $end).datePickerStyle(.compact)
                                 Text("Plan").font(.caption).foregroundStyle(Theme.muted)
                                 TextEditor(text: $draft).frame(minHeight: 140).scrollContentBackground(.hidden).padding(8).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
                                 Text("One step per line. Start a line with - for a bullet and end a heading with a colon.").font(.caption2).foregroundStyle(Theme.muted)
                                 HStack(spacing: 8) {
-                                    button("Save", "checkmark", tint: Theme.good.opacity(0.4)) { run(id, ["action": "note", "note": draft]) }
+                                    button("Save", "checkmark", tint: Theme.good.opacity(0.4)) { save(id, s) }
                                     button("Cancel", "xmark") { editing = false }
                                 }
                             }
@@ -390,7 +427,7 @@ private struct CalendarItemSheet: View {
                                         button("Undo", "arrow.uturn.backward") { run(id, ["action": "reopen"]) }
                                     }
                                 }
-                                button("Edit plan", "pencil") { draft = s.note ?? ""; editing = true }
+                                button("Edit", "pencil") { beginEditing(s) }
                             }
                         }
                     } else {

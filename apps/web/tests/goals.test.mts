@@ -294,6 +294,18 @@ assert.equal((await act(lateId, { action: "reopen" })).status, 200);
 const reopened = (await g.sessionsOf(rg.id, NOW)).find((x) => x.id === lateId)!;
 assert.deepEqual([reopened.status, reopened.doneAt, reopened.minutes, reopened.skippedAt], ["planned", null, null, null], "undone, as if it had never been marked");
 assert.equal(((await g.reopenSession("snope-1234")) as any).ok, false);
+// editing the title and time of a session; the calendar event follows
+const patchesE = graph("PATCH").length;
+const ed = await g.editSession(lateId, { title: "Tempo run (moved)", start: at("2026-12-03", 6 * 60).toISOString() }) as any;
+assert.ok(ed.ok); assert.deepEqual([ed.session.title, ed.session.start, ed.session.minutes], ["Tempo run (moved)", at("2026-12-03", 6 * 60).toISOString(), 60], "moving the start keeps the length");
+assert.equal(ed.session.movedFrom.length, 1);
+const ed2 = await g.editSession(lateId, { end: at("2026-12-03", 7 * 60 + 30).toISOString() }) as any; assert.equal(ed2.session.minutes, 90, "a new end changes the length");
+assert.equal(graph("PATCH").length, patchesE + (ed.calendar === "ok" ? 2 : 0), "the Outlook event follows when there is one");
+assert.equal(((await g.editSession(lateId, { end: at("2026-12-03", 5 * 60).toISOString() })) as any).ok, false, "an end before the start is refused");
+assert.equal(((await g.editSession(lateId, {})) as any).ok, false); assert.equal(((await g.editSession("snope-1234", { title: "x" })) as any).ok, false);
+assert.equal((await act(lateId, { action: "edit", title: "Via API" }, read.token)).status, 403); assert.equal((await act(lateId, { action: "edit", title: "Via API" })).status, 200);
+assert.equal((await g.sessionsOf(rg.id, NOW)).find((x) => x.id === lateId)!.title, "Via API");
+
 await db().delete(events).where(sql`${events.payload}->>'goalId' = ${rg.id} or ${events.sourceId} = ${`goal:${rg.id}`} or ${events.source} = 'strava'`);
 
 await wipe();
