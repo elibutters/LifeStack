@@ -246,7 +246,7 @@ struct EventRow: View {
             Rectangle().fill(mark).frame(width: 2)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(item.title).font(.body.weight(.medium))
+                    Text(item.title).font(.body.weight(.medium)).strikethrough(item.session?.status == "skipped").foregroundStyle(item.session?.status == "skipped" ? Theme.muted : .white)
                     Spacer(minLength: 0)
                     if let s = item.session {
                         HStack(spacing: 6) {

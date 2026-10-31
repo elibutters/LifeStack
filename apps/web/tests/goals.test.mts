@@ -230,6 +230,22 @@ const hits = await cs.sessionsForItems([asItem(1, easyNow.outlookEventId!), asIt
 assert.deepEqual([...hits.keys()], [1], "only the item whose event id belongs to a session is matched");
 assert.equal(hits.get(1)!.goal, "Run goal"); assert.equal(hits.get(1)!.status, "done"); assert.equal(hits.get(1)!.actual?.url, "https://www.strava.com/activities/101");
 assert.equal((await cs.sessionsForItems([asItem(3)])).size, 0);
+// a skipped session comes back onto the calendar as an item of its own, struck through
+const skipRange = [at("2026-11-11", 0), at("2026-11-12", 0)] as const;
+assert.equal((await cs.skippedItems(...skipRange)).items.length, 0, "nothing skipped yet");
+const skippedLong = await g.skipSession(longId) as any; assert.ok(skippedLong.ok);
+let sk = await cs.skippedItems(...skipRange);
+assert.equal(sk.items.length, 1); assert.ok(sk.items[0]!.id < 0, "a made-up id that cannot clash with a stored event");
+assert.deepEqual([sk.items[0]!.title, sk.sessions.get(sk.items[0]!.id)!.status, sk.sessions.get(sk.items[0]!.id)!.goal], ["Long run", "skipped", "Run goal"]);
+assert.equal((await cs.skippedItems(at("2026-11-12", 0), at("2026-11-13", 0))).items.length, 0, "only in its own days");
+const ad = await import("../lib/app-data.ts");
+const cr = await ad.calendarRange("2026-11-11", "2026-11-11") as any[];
+assert.deepEqual(cr.filter((i) => i.session?.status === "skipped").map((i) => i.title), ["Long run"], "the app's calendar call includes it");
+// a session that replaced it at the same time stands for it; two skipped at one time show once
+const twin = await g.commitPlan(rg.id, { sessions: [{ title: "Long run v2", start: at("2026-11-11", 7 * 60).toISOString(), end: at("2026-11-11", 9 * 60).toISOString() }], allowOverlap: true }, NOW) as any;
+assert.ok(twin.ok); assert.equal((await cs.skippedItems(...skipRange)).items.length, 0, "hidden while a replacement is planned");
+await g.skipSession(twin.sessions[0].id);
+assert.equal((await cs.skippedItems(...skipRange)).items.length, 1, "both skipped: one is shown");
 await db().delete(events).where(sql`${events.payload}->>'goalId' = ${rg.id} or ${events.sourceId} = ${`goal:${rg.id}`} or ${events.source} = 'strava'`);
 
 await wipe();
