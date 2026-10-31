@@ -31,6 +31,7 @@ enum Theme {
 struct Card<Content: View>: View {
     var title: String? = nil
     var trailing: String? = nil
+    var trailingTint: Color = Theme.muted
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -39,7 +40,7 @@ struct Card<Content: View>: View {
                 HStack {
                     if let title { Text(title.uppercased()).font(.caption.weight(.semibold)).tracking(0.8).foregroundStyle(Theme.muted) }
                     Spacer()
-                    if let trailing { Text(trailing).font(.caption).foregroundStyle(Theme.muted) }
+                    if let trailing { Text(trailing).font(.caption).foregroundStyle(trailingTint) }
                 }
             }
             content
