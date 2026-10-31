@@ -19,9 +19,20 @@ export type NoteBlock = { kind: "heading" | "bullet" | "text"; text: string };
 const SPELLINGS: [RegExp, string][] = [
   [/\bWU\b/g, "warm-up"],
   [/\bCD\b/g, "cool-down"],
+  [/\bw\/o\b/gi, "without"],
   [/\bw\//gi, "with"],
   [/\bRPE\s*(\d+(?:\.\d+)?)/gi, "effort $1 out of 10"],
-  [/\bDBs?\b/g, "dumbbell"],
+  [/\bRIR\s*(\d+)/gi, "$1 reps in reserve"],
+  [/\bOHP\b/g, "overhead press"],
+  [/\bRDL(s?)\b/g, "Romanian deadlift$1"],
+  [/\bDB(s?)\b/g, "dumbbell$1"],
+  [/\bBB\b/g, "barbell"],
+  [/\bKB(s?)\b/g, "kettlebell$1"],
+  [/\bBW\b/g, "bodyweight"],
+  [/\bSL\b/g, "single-leg"],
+  [/\bAMRAP\b/g, "as many reps as possible"],
+  [/\bEMOM\b/g, "every minute on the minute"],
+  [/\bHR\b/g, "heart rate"],
 ];
 export const spellOut = (text: string) => SPELLINGS.reduce((t, [re, to]) => t.replace(re, to), text);
 
@@ -108,4 +119,4 @@ export function noteToText(blocks: NoteBlock[]): string {
 
 // What a coach would want an agent to write, shown in the tool descriptions.
 export const NOTE_FORMAT =
-  'Write the note like a coach, as short sections and one bullet per movement or step, each on its own line: a heading line ending in a colon ("Warm-up:", "Main set:", "Cool-down:", "Targets:", "Cues:"), then "- " bullets under it. Strength: "- Back squat: 4 x 5 @ RPE 7, rest 2-3 min". Running: "- 3 x 1 mi @ 7:10-7:20, 2:00 jog between". Put the load, reps or pace, and rest on the bullet, and keep cues and why to a final section. Put reasons, cautions and conditions (\"only if...\", cues, what to watch for) under a final \"Notes:\" heading so the plan above stays short; the screens show those notes collapsed. No run-on comma lists. Use plain words, never shorthand: write warm-up and cool-down (not WU or CD), "with" (not w/), and "effort 7 out of 10" (not RPE 7). Up to 2,000 characters.';
+  'Write the note like a coach, as short sections and one bullet per movement or step, each on its own line: a heading line ending in a colon ("Warm-up:", "Main set:", "Cool-down:", "Targets:"), then "- " bullets under it. Strength: "- Back squat: 4 sets of 5 at effort 7 out of 10, rest 2 to 3 minutes". Running: "- 3 repetitions of 1 mile at 7:10 to 7:20 per mile, 2 minutes of easy jogging between". Put the load, repetitions or pace, and rest on the bullet. Put reasons, cautions and conditions ("only if...", cues, what to watch for) under a final "Notes:" heading so the plan above stays short; the screens show those notes collapsed. No run-on comma lists. Use plain words everywhere, in the title too, never gym shorthand or abbreviations: write warm-up and cool-down (not WU or CD), overhead press (not OHP), Romanian deadlift (not RDL), dumbbell (not DB), single-leg (not SL), "with" (not w/), "effort 7 out of 10" (not RPE 7), heart rate (not HR). If you are about to type letters that only a gym regular would know, write the full words instead. Up to 2,000 characters.';

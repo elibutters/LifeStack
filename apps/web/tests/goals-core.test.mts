@@ -149,6 +149,8 @@ console.log("goals-core: ok");
   assert.deepEqual(sn.parseSessionNote("1 mi WU, 2×1.5 mi @ 7:10–7:20 w/ 2:00 jog, 1 mi CD.").map((b) => b.text), ["1 mi warm-up", "2×1.5 mi @ 7:10–7:20 with 2:00 jog", "1 mi cool-down"]);
   assert.deepEqual(sn.parseSessionNote("Easy pace, then 4×20 s strides."), [{ kind: "text", text: "Easy pace, then 4×20 s strides." }], "two parts stay a sentence");
   assert.equal(sn.spellOut("1 mi WU, CD to 6, 50 lb DB, bench @ RPE 7.5, WUMPUS"), "1 mi warm-up, cool-down to 6, 50 lb dumbbell, bench @ effort 7.5 out of 10, WUMPUS", "shorthand is written out; whole words are untouched");
+  assert.equal(sn.spellOut("OHP 3×6, SL RDLs, incline DBs, BB row, KB swing, BW dips, RIR 2, AMRAP, EMOM, HR 150, w/o rest, TOHPIC"), "overhead press 3×6, single-leg Romanian deadlifts, incline dumbbells, barbell row, kettlebell swing, bodyweight dips, 2 reps in reserve, as many reps as possible, every minute on the minute, heart rate 150, without rest, TOHPIC", "gym shorthand is written out; longer words are untouched");
+  assert.match(sn.NOTE_FORMAT, /overhead press \(not OHP\)/);
   assert.deepEqual(sn.parseSessionNote("Warm-up:\n- WU 5 min\n- Squat RPE 7 w/ pause").map((b) => b.text), ["Warm-up", "warm-up 5 min", "Squat effort 7 out of 10 with pause"]);
   assert.match(sn.NOTE_FORMAT, /warm-up and cool-down \(not WU or CD\)/);
   // cautions and conditions are kept apart from the plan
