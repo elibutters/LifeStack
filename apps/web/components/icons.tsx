@@ -70,6 +70,13 @@ export const WantsIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const TodoIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <rect x="5" y="5" width="14" height="14" rx="2.5" />
+    <path d="m8.8 12.2 2.3 2.3 4.2-4.6" />
+  </Icon>
+);
+
 export const MapIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10Z" />

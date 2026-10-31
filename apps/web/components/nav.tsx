@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
-import { CalendarIcon, FinanceIcon, LogIcon, OverviewIcon, SleepIcon, GoalsIcon, MapIcon, NotesIcon, PreferencesIcon, WantsIcon, WorkoutsIcon } from "./icons";
+import { CalendarIcon, FinanceIcon, LogIcon, OverviewIcon, SleepIcon, GoalsIcon, MapIcon, NotesIcon, PreferencesIcon, TodoIcon, WantsIcon, WorkoutsIcon } from "./icons";
 
 type Item = { href: string; label: string; Icon: ComponentType<SVGProps<SVGSVGElement>>; tint: string; desktopOnly?: boolean };
 
@@ -18,6 +18,7 @@ const NAV: Item[] = [
   { href: "/log", label: "Log", Icon: LogIcon, tint: "text-[#c4a08a]" },
   { href: "/wants", label: "Wants", Icon: WantsIcon, tint: "text-[#d4a0a8]" },
   { href: "/goals", label: "Goals", Icon: GoalsIcon, tint: "text-[#b7a4d4]", desktopOnly: true },
+  { href: "/todos", label: "To do", Icon: TodoIcon, tint: "text-[#9fb88a]", desktopOnly: true },
   { href: "/map", label: "Map", Icon: MapIcon, tint: "text-[#7aabbe]", desktopOnly: true }, // the phone bar is full
   { href: "/notes", label: "Notes", Icon: NotesIcon, tint: "text-[#a3a8c4]", desktopOnly: true },
   { href: "/preferences", label: "Preferences", Icon: PreferencesIcon, tint: "text-[#a39e96]", desktopOnly: true },
