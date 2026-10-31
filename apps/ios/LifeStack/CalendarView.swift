@@ -15,6 +15,7 @@ struct CalendarView: View {
     @State private var focus = Calendar.current.startOfDay(for: Date())
     @State private var page = Calendar.current.startOfDay(for: Date())
     @State private var items: [CalendarItem] = []
+    @State private var selected: CalendarItem?
     @State private var error: String?
     @State private var loading = false
     @State private var generation = 0
@@ -41,6 +42,7 @@ struct CalendarView: View {
             if items.isEmpty && loading { ProgressView().padding(.top, 24) }
         }
         .task(id: loadKey) { await load() }
+        .sheet(item: $selected) { item in CalendarItemSheet(item: item) { await load() } }
     }
 
     private var modePicker: some View {
@@ -162,7 +164,7 @@ struct CalendarView: View {
             if list.isEmpty {
                 Empty(text: "Nothing scheduled.")
             } else {
-                ForEach(list) { EventRow(item: $0) }
+                ForEach(list) { item in Button { selected = item } label: { EventRow(item: item) }.buttonStyle(.plain) }
             }
         }
     }
@@ -181,7 +183,7 @@ struct CalendarView: View {
             if list.isEmpty {
                 Text("Nothing scheduled").font(.subheadline).foregroundStyle(Theme.muted)
             } else {
-                ForEach(list) { EventRow(item: $0) }
+                ForEach(list) { item in Button { selected = item } label: { EventRow(item: item) }.buttonStyle(.plain) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -317,5 +319,128 @@ struct CalendarView: View {
         } catch {
             if gen == generation { self.error = error.localizedDescription; model.handle(error) }
         }
+    }
+}
+
+// What opens when an event is tapped. A goal session can be marked done (also long after the fact), skipped, moved, undone and have its plan
+// edited, with its title and times; any other event comes from Outlook and is shown as it is.
+private struct CalendarItemSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let item: CalendarItem
+    let changed: () async -> Void
+    @State private var editing = false
+    @State private var draft = ""
+    @State private var title = ""
+    @State private var start = Date()
+    @State private var end = Date()
+    @State private var busy = false
+    @State private var error: String?
+
+    private func run(_ id: String, _ body: [String: Any]) {
+        Task {
+            guard let client = model.client else { return }
+            busy = true; defer { busy = false }
+            do { try await client.sessionAction(id, body); await changed(); dismiss() }
+            catch is CancellationError { return }
+            catch { self.error = error.localizedDescription }
+        }
+    }
+
+    private func iso(_ d: Date) -> String { ISO8601DateFormatter().string(from: d) }
+
+    private func beginEditing(_ s: CalendarSession) {
+        title = item.title
+        start = Format.date(item.start) ?? Date()
+        end = Format.date(item.end) ?? start.addingTimeInterval(3600)
+        draft = s.note ?? ""
+        editing = true
+    }
+
+    // Sends only what changed: the title and times in one call, the plan in another.
+    private func save(_ id: String, _ s: CalendarSession) {
+        Task {
+            guard let client = model.client else { return }
+            busy = true; defer { busy = false }
+            let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let timesChanged = Format.date(item.start) != start || Format.date(item.end) != end
+            do {
+                if (!name.isEmpty && name != item.title) || timesChanged {
+                    var body: [String: Any] = ["action": "edit"]
+                    if !name.isEmpty && name != item.title { body["title"] = name }
+                    if timesChanged { body["start"] = iso(start); body["end"] = iso(end) }
+                    try await client.sessionAction(id, body)
+                }
+                if draft != (s.note ?? "") { try await client.sessionAction(id, ["action": "note", "note": draft]) }
+                await changed(); dismiss()
+            } catch is CancellationError { return }
+            catch { self.error = error.localizedDescription }
+        }
+    }
+
+    private func button(_ label: String, _ icon: String, tint: Color? = nil, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { Label(label, systemImage: icon).font(.subheadline.weight(.medium)).padding(.horizontal, 12).frame(height: 38).chip(tint) }
+            .buttonStyle(.plain).disabled(busy)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(item.title).font(.title3.weight(.semibold)).strikethrough(item.session?.status == "skipped")
+                            Spacer(minLength: 0)
+                            if let s = item.session {
+                                HStack(spacing: 6) {
+                                    if let goal = s.goal { Text(goal).foregroundStyle(Theme.muted) }
+                                    Text(s.status.capitalized).foregroundStyle(sessionTint(s.status))
+                                }
+                                .font(.caption).lineLimit(1)
+                            }
+                        }
+                        Text(Format.time(item) + (item.location.map { $0.isEmpty ? "" : " \u{00B7} \($0)" } ?? "")).font(.subheadline).foregroundStyle(Theme.muted)
+                    }
+                    if let s = item.session, let id = s.id {
+                        SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url)
+                        if editing {
+                            VStack(alignment: .leading, spacing: 10) {
+                                TextField("Title", text: $title).padding(10).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+                                DatePicker("Starts", selection: $start).datePickerStyle(.compact)
+                                DatePicker("Ends", selection: $end).datePickerStyle(.compact)
+                                Text("Plan").font(.caption).foregroundStyle(Theme.muted)
+                                TextEditor(text: $draft).frame(minHeight: 140).scrollContentBackground(.hidden).padding(8).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+                                Text("One step per line. Start a line with - for a bullet and end a heading with a colon.").font(.caption2).foregroundStyle(Theme.muted)
+                                HStack(spacing: 8) {
+                                    button("Save", "checkmark", tint: Theme.good.opacity(0.4)) { save(id, s) }
+                                    button("Cancel", "xmark") { editing = false }
+                                }
+                            }
+                        } else {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    if s.status != "done" { button("Mark done", "checkmark", tint: Theme.good.opacity(0.4)) { run(id, ["action": "done"]) } }
+                                    if s.status == "planned" {
+                                        button("Move", "arrow.right") { run(id, ["action": "move"]) }
+                                        button("Skip", "xmark") { run(id, ["action": "skip"]) }
+                                    } else {
+                                        button("Undo", "arrow.uturn.backward") { run(id, ["action": "reopen"]) }
+                                    }
+                                }
+                                button("Edit", "pencil") { beginEditing(s) }
+                            }
+                        }
+                    } else {
+                        Text("This event comes from your Outlook calendar, so it is changed there.").font(.subheadline).foregroundStyle(Theme.muted)
+                    }
+                    ErrorBanner(text: error)
+                }
+                .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(Ambient())
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Close") { dismiss() } } }
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
     }
 }

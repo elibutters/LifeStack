@@ -16,6 +16,9 @@ struct CalendarItem: Decodable, Identifiable, Equatable {
 // What a goal knows about a calendar event that is one of its sessions.
 struct CalendarSession: Decodable, Equatable {
     struct Actual: Decodable, Equatable { let summary: String; let url: String }
+    let id: String?
+    let note: String?    // the plan as written, for editing
+    let minutes: Int?
     let status: String   // planned | done | skipped
     let goal: String?
     let noteBlocks: [NoteBlock]?
@@ -127,6 +130,9 @@ struct HistoryEntry: Decodable, Equatable, Identifiable {
     let name: String?
     let dose: Double?
     let unit: String?
+
+    // Caffeine rows name the drink in `name` when the app just added one, and in the label ("Coffee (95 mg)") otherwise.
+    var drinkName: String { name ?? String(label.split(separator: "(").first ?? "").trimmingCharacters(in: .whitespaces) }
 }
 
 // What the quick log offers, with default amounts, as the server defines it.

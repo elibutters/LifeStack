@@ -376,7 +376,8 @@ export async function completeSession(id: string, input: unknown = {}, now = new
   if (!s) return { ok: false as const, error: "No such session." };
   const p = Done.safeParse(input ?? {});
   if (!p.success) return { ok: false as const, error: p.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
-  await patchPayload(`session:${id}`, { doneAt: now.toISOString(), ...(p.data.minutes ? { minutes: p.data.minutes } : {}), ...(p.data.note ? { logNote: p.data.note } : {}), ...(p.data.rating ? { rating: p.data.rating } : {}) }, { valueText: "done" });
+  // With no minutes given the planned length counts, so a session marked done afterwards still adds to the goal's time.
+  await patchPayload(`session:${id}`, { doneAt: now.toISOString(), minutes: p.data.minutes ?? s.durationMin, ...(p.data.note ? { logNote: p.data.note } : {}), ...(p.data.rating ? { rating: p.data.rating } : {}) }, { valueText: "done" });
   return { ok: true as const, session: sessionJson((await sessionRow(id))!) };
 }
 
@@ -424,6 +425,37 @@ async function retire(s: Session, status: "skipped" | "replaced") {
   await patchPayload(`session:${s.id}`, { ...(cal && cal.ok ? { outlookEventId: null } : {}), ...(status === "skipped" ? { skippedAt: new Date().toISOString() } : {}) }, { valueText: status });
   if (cal && cal.ok) refreshCalendar();
   return { ok: true as const, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(s.id))!) };
+}
+
+// Undoes a done or a skip: the session is planned again (and put back on the calendar if it is still ahead), for a mark made by mistake.
+export async function reopenSession(id: string) {
+  const s = await sessionRow(id);
+  if (!s) return { ok: false as const, error: "No such session." };
+  if (s.status === "replaced") return { ok: false as const, error: "That session was replaced by a plan change." };
+  if (s.status !== "planned") await patchPayload(`session:${id}`, { doneAt: null, minutes: null, rating: null, skippedAt: null }, { valueText: "planned" });
+  const cal = !s.outlookEventId && s.end > new Date() ? await pushToCalendar(s.goalId) : null;
+  return { ok: true as const, calendar: (cal ? cal.calendar : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
+}
+
+// Changing a session's title or time. Moving the start keeps its length unless an end is given. The Outlook event follows. Nothing is checked
+// against meetings: this is the owner's own edit.
+const EditFields = z.object({ title: z.string().trim().min(1).max(200).optional(), start: z.iso.datetime({ offset: true }).optional(), end: z.iso.datetime({ offset: true }).optional() });
+export async function editSession(id: string, input: unknown) {
+  const s = await sessionRow(id);
+  if (!s) return { ok: false as const, error: "No such session." };
+  const p = EditFields.refine((o) => Object.keys(o).length > 0, "nothing to change").safeParse(input);
+  if (!p.success) return { ok: false as const, error: p.error.issues.map((i) => `${i.path.join(".") || "value"}: ${i.message}`).join("; ") };
+  const start = p.data.start ? new Date(p.data.start) : s.start;
+  const end = p.data.end ? new Date(p.data.end) : p.data.start ? new Date(start.getTime() + s.durationMin * 60000) : s.end;
+  if (!(end > start)) return { ok: false as const, error: "It ends before it starts." };
+  if ((end.getTime() - start.getTime()) / 60000 > 12 * 60) return { ok: false as const, error: "It is longer than 12 hours." };
+  const title = p.data.title ?? s.title;
+  const tz = (await loadConstraints()).tz;
+  const moved = start.getTime() !== s.start.getTime();
+  await patchPayload(`session:${id}`, { title, end: end.toISOString(), day: eng.localDay(start, tz), ...(moved ? { movedFrom: [...s.movedFrom, s.start.toISOString()].slice(-10) } : {}) }, { ts: start, valueNum: (end.getTime() - start.getTime()) / 60000 });
+  const cal = s.outlookEventId ? await updateEvent(s.outlookEventId, { title, start, end }) : null;
+  if (cal && cal.ok) refreshCalendar();
+  return { ok: true as const, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
 }
 
 export async function skipSession(id: string) {
@@ -512,6 +544,8 @@ const Action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("move"), start: z.iso.datetime({ offset: true }).optional() }),
   NoteBody.extend({ action: z.literal("note") }),
   z.object({ action: z.literal("replace") }),
+  z.object({ action: z.literal("reopen") }),
+  EditFields.extend({ action: z.literal("edit") }),
   z.object({ action: z.literal("link"), activityId: z.number().int().positive().nullable() }),
 ]);
 export type SessionActionEvent = { action: "done" | "skip" | "move"; session: ReturnType<typeof sessionJson>; note?: string };
@@ -526,11 +560,11 @@ export const handleSessionAction = (req: Request, rawId: string, after?: (e: Ses
     const a = Action.safeParse(body);
     if (!a.success) return json({ error: "invalid" }, 400);
     const act = a.data;
-    const r = act.action === "done" ? await completeSession(rawId, act) : act.action === "skip" ? await skipSession(rawId) : act.action === "note" ? await setSessionNote(rawId, act) : act.action === "replace" ? await replaceSession(rawId) : act.action === "link" ? await linkActivity(rawId, act.activityId) : await moveSession(rawId, { start: act.start });
+    const r = act.action === "done" ? await completeSession(rawId, act) : act.action === "skip" ? await skipSession(rawId) : act.action === "note" ? await setSessionNote(rawId, act) : act.action === "replace" ? await replaceSession(rawId) : act.action === "reopen" ? await reopenSession(rawId) : act.action === "edit" ? await editSession(rawId, act) : act.action === "link" ? await linkActivity(rawId, act.activityId) : await moveSession(rawId, { start: act.start });
     if (r.ok) {
       if (act.action === "link") {
         if ("completed" in r && r.completed) after?.({ action: "done", session: r.session });
-      } else if (act.action !== "note" && act.action !== "replace") after?.({ action: act.action, session: r.session, note: act.action === "done" ? act.note : undefined });
+      } else if (act.action !== "note" && act.action !== "replace" && act.action !== "reopen" && act.action !== "edit") after?.({ action: act.action, session: r.session, note: act.action === "done" ? act.note : undefined });
       return json(r);
     }
     return json({ error: "failed", message: r.error }, r.error === "No such session." ? 404 : 409);

@@ -50,30 +50,38 @@ export type WriteResult<T> = { ok: true; value: T } | { ok: false; reason: "not_
 
 // One access token with write access, rotating the stored refresh token the same careful way the syncs do.
 async function withWriteToken<T>(fn: (token: string) => Promise<T>): Promise<WriteResult<T>> {
-  const [conn] = await db().select().from(connections).where(eq(connections.provider, "outlook"));
-  if (!conn) return { ok: false, reason: "not_connected" };
-  let tokens;
-  try {
-    tokens = await refreshTokens(decrypt(conn.refreshTokenEnc), WRITE_SCOPES);
-  } catch (e) {
-    if (e instanceof TokenError) return { ok: false, reason: "needs_reconnect" }; // never approved writing, or sign-in expired
-    throw e;
+  // Two tasks can refresh at once (a background sync, a calendar write). The one that loses the swap reads the connection again, which now
+  // holds the other's refresh token, and goes round once more, rather than reporting a connection that is in fact still there.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const [conn] = await db().select().from(connections).where(eq(connections.provider, "outlook"));
+    if (!conn) return { ok: false, reason: "not_connected" };
+    let tokens;
+    try {
+      tokens = await refreshTokens(decrypt(conn.refreshTokenEnc), WRITE_SCOPES);
+    } catch (e) {
+      if (e instanceof TokenError) return { ok: false, reason: "needs_reconnect" }; // never approved writing, or sign-in expired
+      throw e;
+    }
+    if (tokens.refresh_token) {
+      const swapped = await db()
+        .update(connections)
+        .set({ refreshTokenEnc: encrypt(tokens.refresh_token), updatedAt: new Date() })
+        .where(and(eq(connections.provider, "outlook"), eq(connections.refreshTokenEnc, conn.refreshTokenEnc)))
+        .returning({ p: connections.provider });
+      if (swapped.length === 0) {
+        if (attempt === 0) continue; // another task rotated it first
+        return { ok: false, reason: "not_connected" }; // disconnected or reconnected meanwhile
+      }
+    }
+    try {
+      return { ok: true, value: await fn(tokens.access_token) };
+    } catch (e) {
+      if (e instanceof GraphError && (e.status === 401 || e.status === 403)) return { ok: false, reason: "needs_reconnect" };
+      console.error("outlook: calendar write failed", describeError(e));
+      return { ok: false, reason: "failed" };
+    }
   }
-  if (tokens.refresh_token) {
-    const swapped = await db()
-      .update(connections)
-      .set({ refreshTokenEnc: encrypt(tokens.refresh_token), updatedAt: new Date() })
-      .where(and(eq(connections.provider, "outlook"), eq(connections.refreshTokenEnc, conn.refreshTokenEnc)))
-      .returning({ p: connections.provider });
-    if (swapped.length === 0) return { ok: false, reason: "not_connected" }; // disconnected or reconnected meanwhile
-  }
-  try {
-    return { ok: true, value: await fn(tokens.access_token) };
-  } catch (e) {
-    if (e instanceof GraphError && (e.status === 401 || e.status === 403)) return { ok: false, reason: "needs_reconnect" };
-    console.error("outlook: calendar write failed", describeError(e));
-    return { ok: false, reason: "failed" };
-  }
+  return { ok: false, reason: "not_connected" };
 }
 
 const Id = (v: unknown): string => {

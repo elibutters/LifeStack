@@ -27,10 +27,11 @@ function SessionRow({ s, now }: { s: SessionItem; now: number }) {
     <li className="rounded-md border border-line bg-raised/40 px-3 py-2">
       <div className="flex items-start justify-between gap-3">
         <p className={s.status === "skipped" || s.status === "replaced" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
-        {s.status === "planned" && !late ? (
-          <div className="flex shrink-0 gap-2">
+        {s.status === "planned" ? (
+          <div className="flex shrink-0 items-center gap-2">
+            {late && <span className="rounded-sm bg-danger/15 px-1.5 py-0.5 text-xs text-danger">Missed</span>}
             <Btn action={doneAction} id={s.id} label="Done" />
-            <Btn action={moveAction} id={s.id} label="Move" />
+            {!late && <Btn action={moveAction} id={s.id} label="Move" />}
             <Btn action={skipAction} id={s.id} label="Skip" />
           </div>
         ) : (
