@@ -64,17 +64,38 @@ struct GoalsView: View {
     @State private var note: String?
     private let order = ["active": 0, "draft": 1, "done": 2, "archived": 3]
 
+    private struct GoalRef: Hashable, Identifiable { let id: String }
+    @State private var open: GoalRef?
+
     var body: some View {
-        Screen(title: "Goals", refresh: { await load() }) {
-            ErrorBanner(text: note ?? tonight.error ?? goals.error)
-            if let t = tonight.value { tonightCard(t, names: Dictionary(uniqueKeysWithValues: (goals.value ?? []).map { ($0.goal.id, $0.goal.title) })) } else if tonight.loading { ProgressView().padding(.top, 40) }
-            if let list = goals.value {
-                if list.isEmpty {
-                    Card(title: "Your goals") { Empty(text: "No goals yet. Tell your assistant what you are working toward and when, and it fits sessions into your real free time. Try: set up interview prep, interview on Nov 9, an hour every other day.") }
-                } else {
-                    // Active goals first, then drafts, then anything finished or put away.
-                    ForEach(list.sorted { (order[$0.goal.status] ?? 9) < (order[$1.goal.status] ?? 9) }) { goalCard($0) }
+        NavigationStack {
+            Screen(title: "Goals", refresh: { await load() }) {
+                ErrorBanner(text: note ?? tonight.error ?? goals.error)
+                if let t = tonight.value { tonightCard(t, names: Dictionary(uniqueKeysWithValues: (goals.value ?? []).map { ($0.goal.id, $0.goal.title) })) } else if tonight.loading { ProgressView().padding(.top, 40) }
+                if let list = goals.value {
+                    if list.isEmpty {
+                        Card(title: "Your goals") { Empty(text: "No goals yet. Tell your assistant what you are working toward and when, and it fits sessions into your real free time. Try: set up interview prep, interview on Nov 9, an hour every other day.") }
+                    } else {
+                        // Active goals first, then drafts, then anything finished or put away. Each is one short row; tap for the whole goal.
+                        ForEach(list.sorted { (order[$0.goal.status] ?? 9) < (order[$1.goal.status] ?? 9) }) { goalRow($0) }
+                    }
                 }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(item: $open) { ref in
+                Group {
+                    if let g = goals.value?.first(where: { $0.id == ref.id }) {
+                        Screen(title: "Goal", refresh: { await load() }) {
+                            ErrorBanner(text: note ?? goals.error)
+                            goalCard(g)
+                        }
+                    } else {
+                        Screen(title: "Goal") { Empty(text: "That goal is no longer here.") }
+                    }
+                }
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationBarBackButtonHidden(true)
+                .environment(\.screenBack, { open = nil })
             }
         }
         .task { await load() }
@@ -148,6 +169,29 @@ struct GoalsView: View {
             }
             if rest.isEmpty && t.needsDecision.isEmpty { Empty(text: "Nothing planned for today. Ask your assistant to plan something, or take the evening.") }
         }
+    }
+
+    // One short row per goal: name and status, a progress bar, and how far along it is. It opens the full goal.
+    private func goalRow(_ g: GoalDetail) -> some View {
+        let total = g.progress.done + g.progress.planned
+        return Button { open = GoalRef(id: g.id) } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(g.goal.title).font(.headline).lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text(g.goal.status.capitalized).font(.caption2).foregroundStyle(g.goal.status == "active" ? Theme.good : Theme.muted)
+                    }
+                    ProgressView(value: total == 0 ? 0 : Double(g.progress.done) / Double(total)).tint(Theme.sky)
+                    Text("\(g.progress.done) / \(total) done" + (g.next.map { " \u{00B7} next \(when($0.start))" } ?? "")).font(.caption).foregroundStyle(Theme.muted).lineLimit(1).monospacedDigit()
+                }
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Theme.muted)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .panel()
+        }
+        .buttonStyle(.plain)
     }
 
     private func goalCard(_ g: GoalDetail) -> some View {
