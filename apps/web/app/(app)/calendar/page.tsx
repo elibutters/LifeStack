@@ -6,7 +6,7 @@ import { EventRow, eventTone } from "@/components/event-row";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { itemsOnDay, loadCalendar, systemStatus } from "@/lib/calendar";
-import { sessionsForItems, type SessionDetail } from "@/lib/calendar-sessions";
+import { sessionsForItems, skippedItems, type SessionDetail } from "@/lib/calendar-sessions";
 import { syncPlanHorizon } from "@/lib/fitness-plan";
 import { syncOutlookIfStale } from "@/lib/outlook";
 import { requireSession } from "@/lib/auth";
@@ -39,14 +39,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const today = ymd(new Date());
   const month = isValidMonth(sp.m) ? sp.m : today.slice(0, 7);
   const cells = monthGrid(month);
-  const [{ items, failed }, status] = await Promise.all([
-    loadCalendar(startOfDay(cells[0]!), startOfDay(addDays(cells.at(-1)!, 1))),
+  const from = startOfDay(cells[0]!), to = startOfDay(addDays(cells.at(-1)!, 1));
+  const [{ items: loaded, failed }, status, skipped] = await Promise.all([
+    loadCalendar(from, to),
     systemStatus(),
+    skippedItems(from, to).catch(() => ({ items: [], sessions: new Map<number, SessionDetail>() })),
   ]);
+  const items = [...loaded, ...skipped.items];
   const selected = isValidDay(sp.d) && cells.includes(sp.d) ? sp.d : today.startsWith(month) ? today : `${month}-01`;
   const dayItems = itemsOnDay(items, selected);
   const notConnected = status.ok && !status.calendarConnected;
-  const sessions = await sessionsForItems(dayItems).catch(() => new Map<number, SessionDetail>());
+  const sessions = new Map([...(await sessionsForItems(loaded).catch(() => new Map<number, SessionDetail>())), ...skipped.sessions]);
 
   return (
     <>
@@ -115,7 +118,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                   </span>
                   <span className="hidden flex-col gap-1 md:flex">
                     {list.slice(0, 3).map((i) => (
-                      <span key={i.id} className={`truncate rounded-sm px-1.5 py-0.5 text-xs ${eventTone(i.kind).chip}`}>
+                      <span key={i.id} className={`truncate rounded-sm px-1.5 py-0.5 text-xs ${eventTone(i.kind).chip} ${sessions.get(i.id)?.status === "skipped" ? "line-through opacity-60" : ""}`}>
                         {i.title}
                       </span>
                     ))}

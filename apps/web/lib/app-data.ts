@@ -1,7 +1,7 @@
 import "server-only";
 import { addDays, startOfDay, ymd } from "./dates";
 import { calendarItems, loadCalendar, systemStatus, type CalendarItem } from "./calendar";
-import { sessionsForItems, type SessionDetail } from "./calendar-sessions";
+import { sessionsForItems, skippedItems, type SessionDetail } from "./calendar-sessions";
 import { loadToday } from "./capture";
 import { accountLabel, cashflowSeries, classify, insights, lastMonths, merchantName, monthOf, netWorth, shiftMonthKey, summarizeMonth } from "./finance-calc";
 import { loadFinance, loadHoldings } from "./finance-data";
@@ -26,9 +26,11 @@ export const calendarJson = (i: CalendarItem, session?: SessionDetail) => ({
 });
 
 export async function calendarRange(from: string, to: string) {
-  const items = await calendarItems(startOfDay(from), startOfDay(addDays(to, 1)));
+  const a = startOfDay(from), b = startOfDay(addDays(to, 1));
+  const items = await calendarItems(a, b);
   const sessions = await sessionsForItems(items).catch(() => new Map<number, SessionDetail>());
-  return items.map((i) => calendarJson(i, sessions.get(i.id)));
+  const skipped = await skippedItems(a, b).catch(() => ({ items: [] as CalendarItem[], sessions: new Map<number, SessionDetail>() }));
+  return [...items.map((i) => calendarJson(i, sessions.get(i.id))), ...skipped.items.map((i) => calendarJson(i, skipped.sessions.get(i.id)))].sort((x, y) => x.start.localeCompare(y.start));
 }
 
 export async function sleepNights(limit: number) {
