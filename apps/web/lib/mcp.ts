@@ -20,6 +20,7 @@ import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from ".
 import { logBlocks } from "./goals-notion-core";
 import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
 import { addNotePage, appendToNote } from "./notes-write";
+import { NOTE_FORMAT } from "./session-note-core";
 import { addTodo, listTodos, updateTodo } from "./todos";
 import { addOption, addWant, listWants, updateOption } from "./wants";
 import type { VerifiedToken } from "./tokens";
@@ -445,7 +446,7 @@ export function buildServer(token: VerifiedToken): McpServer {
       "propose_plan",
       {
         description:
-          'Drafts the sessions for a goal and fits them into real free time. It saves nothing, so call it as often as you like while brainstorming and show the owner the result. kind "prep": counts back from targetDay (a date, YYYY-MM-DD) with a session every everyDays days (default 2) of durationMin minutes (default 60), the last taperLast ones lighter. kind "progress": a session each day (or only the listed weekdays, Monday is 0) from fromDay (default today) to targetDay. kind "train": a weekly template of {weekday, durationMin, title}, scaled week by week (builds up, steps back every fourth week, tapers the last two) until targetDay. kind "custom": an explicit list of sessions [{day, durationMin, title, flexDays}]. Every plan and every template slot or custom session can take a start ("HH:MM", local) to say when in the free time it likes to begin, such as "09:00" for a morning long run or "18:30" for an evening one; without it sessions start at the general preference (about 7pm). Returns the placed sessions, any that did not fit with the reason, and a feasibility summary (minutes needed, available, short by).',
+          'Drafts the sessions for a goal and fits them into real free time. It saves nothing, so call it as often as you like while brainstorming and show the owner the result. kind "prep": counts back from targetDay (a date, YYYY-MM-DD) with a session every everyDays days (default 2) of durationMin minutes (default 60), the last taperLast ones lighter. kind "progress": a session each day (or only the listed weekdays, Monday is 0) from fromDay (default today) to targetDay. kind "train": a weekly template of {weekday, durationMin, title}, scaled week by week (builds up, steps back every fourth week, tapers the last two) until targetDay. kind "custom": an explicit list of sessions [{day, durationMin, title, flexDays}]. Every plan and every template slot or custom session can take a start ("HH:MM", local) to say when in the free time it likes to begin, such as "09:00" for a morning long run or "18:30" for an evening one; without it sessions start at the general preference (about 7pm). Returns the placed sessions, any that did not fit with the reason, and a feasibility summary (minutes needed, available, short by). Each session can carry a note, which is its plan. ' + NOTE_FORMAT,
         inputSchema: {
           kind: z.enum(["prep", "progress", "train", "custom"]),
           title: z.string(),
@@ -509,7 +510,7 @@ export function buildServer(token: VerifiedToken): McpServer {
     server.registerTool(
       "commit_plan",
       {
-        description: "Saves the finalized sessions for a goal and adds them to the owner's Outlook calendar (in the Life Stack category). Only call this after the owner has approved the plan. Each session is {title, start, end, note} with ISO times, normally taken from propose_plan. If anything overlaps a meeting or another session nothing is saved and the conflicts are listed. If Outlook has not been reconnected to allow writing the sessions are still saved here and calendar says needs_reconnect; run push_to_calendar after the owner reconnects.",
+        description: "Saves the finalized sessions for a goal and adds them to the owner's Outlook calendar (in the Life Stack category). Only call this after the owner has approved the plan. Each session is {title, start, end, note} with ISO times, normally taken from propose_plan. If anything overlaps a meeting or another session nothing is saved and the conflicts are listed. If Outlook has not been reconnected to allow writing the sessions are still saved here and calendar says needs_reconnect; run push_to_calendar after the owner reconnects. A session's note is its plan. " + NOTE_FORMAT,
         inputSchema: { goalId: z.string(), sessions: z.array(z.object({ title: z.string(), start: z.string(), end: z.string(), note: z.string().optional() })), allowOverlap: z.boolean().optional() },
       },
       async ({ goalId, ...rest }) => {
@@ -540,7 +541,7 @@ export function buildServer(token: VerifiedToken): McpServer {
     );
     server.registerTool(
       "set_session_note",
-      { description: "Sets the note on a session, replacing the old one (empty text clears it), and updates the Outlook event body to match. Use it to add detail to a workout before it happens or comments after, such as pace, how it felt, or what to fuel with. The note is also returned by get_goal and get_tonight.", inputSchema: { id: z.string(), note: z.string() } },
+      { description: "Sets the note on a session, replacing the old one (empty text clears it), and updates the Outlook event body to match. Use it to add detail to a workout before it happens or comments after, such as pace, how it felt, or what to fuel with. The note is also returned by get_goal and get_tonight. " + NOTE_FORMAT, inputSchema: { id: z.string(), note: z.string() } },
       async ({ id, note }) => {
         try { return fromResult(await setSessionNote(id, { note })); } catch (e) { console.error("mcp: set_session_note failed", describeError(e)); return fail("The tool could not save that."); }
       },

@@ -18,8 +18,15 @@ struct CalendarSession: Decodable, Equatable {
     struct Actual: Decodable, Equatable { let summary: String; let url: String }
     let status: String   // planned | done | skipped
     let goal: String?
-    let note: String?
+    let noteBlocks: [NoteBlock]?
+    let notesBlocks: [NoteBlock]?   // cautions and context, shown collapsed
     let actual: Actual?
+}
+
+// A session's plan, already split by the server into headings, bullets and plain lines.
+struct NoteBlock: Decodable, Equatable {
+    let kind: String   // heading | bullet | text
+    let text: String
 }
 
 struct Night: Decodable, Identifiable, Equatable {

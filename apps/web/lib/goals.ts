@@ -13,6 +13,7 @@ import { loadActivity } from "./activities";
 import { syncOutlook } from "./outlook";
 import { createEvents, deleteEvent, updateEvent, type SessionEvent } from "./outlook-write";
 import { loadOverrides } from "./settings-store";
+import { splitSessionNote, noteToText } from "./session-note-core";
 import { actualLine, completes, stravaUrl, type Actual } from "./strava-link-core";
 import { verifyBearer } from "./tokens";
 import { resolveAll, valueOf, type GoalScheduleT } from "./settings-core";
@@ -134,7 +135,12 @@ export async function getGoal(id: string) {
   return { goal, notebook: goal.notionPageId ? notebookUrl(goal.notionPageId) : null, sessions: sessions.map(sessionJson), progress: { planned: sessions.filter((s) => s.status === "planned").length, done: done.length, skipped: sessions.filter((s) => s.status === "skipped").length, minutesDone: done.reduce((n, s) => n + (s.minutes ?? s.durationMin), 0) }, next: next && sessionJson(next) };
 }
 
-export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title: s.title, start: s.start.toISOString(), end: s.end.toISOString(), minutes: s.durationMin, status: s.status, note: s.note, onCalendar: !!s.outlookEventId, movedFrom: s.movedFrom, doneAt: s.doneAt, minutesSpent: s.minutes, rating: s.rating, actual: s.actual && { ...s.actual, summary: actualLine(s.actual), url: stravaUrl(s.actual.id) } });
+const noteParts = (note: string | null) => {
+  const n = splitSessionNote(note);
+  return { noteBlocks: n.plan, notesBlocks: n.notes };
+};
+
+export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title: s.title, start: s.start.toISOString(), end: s.end.toISOString(), minutes: s.durationMin, status: s.status, note: s.note, ...noteParts(s.note), onCalendar: !!s.outlookEventId, movedFrom: s.movedFrom, doneAt: s.doneAt, minutesSpent: s.minutes, rating: s.rating, actual: s.actual && { ...s.actual, summary: actualLine(s.actual), url: stravaUrl(s.actual.id) } });
 
 // ---- free time
 // Meetings (not all-day events, not holidays) as busy time, leaving out the Outlook copies of Life Stack's own sessions: those are
@@ -180,9 +186,9 @@ const Spec = z.object({
   start: Clock.optional(),
   weekdays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
   weeks: z.number().int().min(1).max(40).optional(),
-  note: z.string().trim().max(500).optional(), // goes on every session that has no note of its own
-  template: z.array(z.object({ weekday: z.number().int().min(0).max(6), durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), start: Clock.optional(), note: z.string().trim().max(500).optional() })).max(14).optional(),
-  sessions: z.array(z.object({ day: Day, durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), flexDays: z.number().int().min(0).max(7).optional(), start: Clock.optional(), note: z.string().trim().max(500).optional() })).max(120).optional(),
+  note: z.string().trim().max(2000).optional(), // goes on every session that has no note of its own
+  template: z.array(z.object({ weekday: z.number().int().min(0).max(6), durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), start: Clock.optional(), note: z.string().trim().max(2000).optional() })).max(14).optional(),
+  sessions: z.array(z.object({ day: Day, durationMin: z.number().int().min(10).max(480), title: z.string().trim().min(1).max(120), flexDays: z.number().int().min(0).max(7).optional(), start: Clock.optional(), note: z.string().trim().max(2000).optional() })).max(120).optional(),
   flexDays: z.number().int().min(0).max(7).optional(),
 });
 export type PlanSpec = z.input<typeof Spec>;
@@ -236,7 +242,7 @@ export async function proposePlan(input: unknown, now = new Date()) {
 
 // ---- committing a plan
 const Commit = z.object({
-  sessions: z.array(z.object({ title: z.string().trim().min(1).max(200), start: z.iso.datetime({ offset: true }), end: z.iso.datetime({ offset: true }), note: z.string().trim().max(500).optional() })).min(1).max(120),
+  sessions: z.array(z.object({ title: z.string().trim().min(1).max(200), start: z.iso.datetime({ offset: true }), end: z.iso.datetime({ offset: true }), note: z.string().trim().max(2000).optional() })).min(1).max(120),
   allowOverlap: z.boolean().optional(),
 });
 export type CalendarState = "ok" | "not_connected" | "needs_reconnect" | "failed" | "skipped";
@@ -294,8 +300,15 @@ function refreshCalendar() {
   }
 }
 
-const eventBody = (g: Goal, note?: string | null, actual?: Actual | null) =>
-  [`Goal: ${g.title}`, g.thesis ? g.thesis.slice(0, 500) : "", note ?? "", actual ? actualLine(actual) : "", actual ? stravaUrl(actual.id) : ""].filter(Boolean).join("\n");
+const eventBody = (g: Goal, note?: string | null, actual?: Actual | null) => {
+  const lines = [`Goal: ${g.title}`];
+  if (g.thesis) lines.push(g.thesis.slice(0, 500));
+  const n = splitSessionNote(note);
+  if (n.plan.length) lines.push("", "Plan:", noteToText(n.plan));
+  if (n.notes.length) lines.push("", "Notes:", noteToText(n.notes));
+  if (actual) lines.push("", actualLine(actual), stravaUrl(actual.id));
+  return lines.join("\n");
+};
 
 // Sessions saved before Outlook was ready (or whose event failed) get their calendar events now.
 export async function pushToCalendar(goalId?: string, now = new Date()) {
@@ -325,7 +338,7 @@ export async function completeSession(id: string, input: unknown = {}, now = new
   return { ok: true as const, session: sessionJson((await sessionRow(id))!) };
 }
 
-const NoteBody = z.object({ note: z.string().trim().max(1000) });
+const NoteBody = z.object({ note: z.string().trim().max(2000) });
 // Replaces a session's note (empty clears it) here and in the Outlook event body, so notes can be added or corrected after the plan was
 // committed, such as how a workout went. The session's status and time are untouched.
 export async function setSessionNote(id: string, input: unknown) {

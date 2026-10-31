@@ -138,3 +138,32 @@ console.log("goals-core: ok");
   assert.equal(sl.stravaUrl(20796624826), "https://www.strava.com/activities/20796624826");
   assert.equal(sl.actualLine({ id: 1, name: "Lift", sport: "WeightTraining", distanceM: null, movingS: 3725, avgHr: null, start: "" }), "Actual: 1:02:05 (Strava)", "no distance, no pace");
 }
+
+// ---- Session plan notes: structure for display and for the calendar body
+{
+  const sn = await import("../lib/session-note-core.ts");
+  const flat = sn.parseSessionNote("Bench 4×5–6, weighted pull-up 4×5–8, single-leg glute bridge (floor, 50 lb DB on hip, 1 s pause at top) 3×12–15/leg, Pallof 3×10/side.");
+  assert.deepEqual(flat.map((b) => b.kind), ["bullet", "bullet", "bullet", "bullet"], "a comma list becomes bullets");
+  assert.equal(flat[2]!.text, "single-leg glute bridge (floor, 50 lb dumbbell on hip, 1 s pause at top) 3×12–15/leg", "commas inside brackets do not split");
+  assert.equal(flat[3]!.text, "Pallof 3×10/side", "the closing full stop is dropped");
+  assert.deepEqual(sn.parseSessionNote("1 mi WU, 2×1.5 mi @ 7:10–7:20 w/ 2:00 jog, 1 mi CD.").map((b) => b.text), ["1 mi warm-up", "2×1.5 mi @ 7:10–7:20 with 2:00 jog", "1 mi cool-down"]);
+  assert.deepEqual(sn.parseSessionNote("Easy pace, then 4×20 s strides."), [{ kind: "text", text: "Easy pace, then 4×20 s strides." }], "two parts stay a sentence");
+  assert.equal(sn.spellOut("1 mi WU, CD to 6, 50 lb DB, bench @ RPE 7.5, WUMPUS"), "1 mi warm-up, cool-down to 6, 50 lb dumbbell, bench @ effort 7.5 out of 10, WUMPUS", "shorthand is written out; whole words are untouched");
+  assert.equal(sn.spellOut("OHP 3×6, SL RDLs, incline DBs, BB row, KB swing, BW dips, RIR 2, AMRAP, EMOM, HR 150, w/o rest, TOHPIC"), "overhead press 3×6, single-leg Romanian deadlifts, incline dumbbells, barbell row, kettlebell swing, bodyweight dips, 2 reps in reserve, as many reps as possible, every minute on the minute, heart rate 150, without rest, TOHPIC", "gym shorthand is written out; longer words are untouched");
+  assert.match(sn.NOTE_FORMAT, /overhead press \(not OHP\)/);
+  assert.deepEqual(sn.parseSessionNote("Warm-up:\n- WU 5 min\n- Squat RPE 7 w/ pause").map((b) => b.text), ["Warm-up", "warm-up 5 min", "Squat effort 7 out of 10 with pause"]);
+  assert.match(sn.NOTE_FORMAT, /warm-up and cool-down \(not WU or CD\)/);
+  // cautions and conditions are kept apart from the plan
+  const legacy = sn.splitSessionNote("8:50–9:30/mi. Only if the toe is pain-free in your shoe; otherwise skip.");
+  assert.deepEqual(legacy.plan, [{ kind: "text", text: "8:50–9:30/mi." }]); assert.deepEqual(legacy.notes, [{ kind: "text", text: "Only if the toe is pain-free in your shoe; otherwise skip." }]);
+  assert.deepEqual(sn.splitSessionNote("Only if the toe is pain-free.").notes, [], "a note that is only a caution is still the plan");
+  const sectioned = sn.splitSessionNote("Warm-up:\n- 5 min jog\nMain set:\n- 4 x 20 s strides\nNotes:\n- Skip the strides if the toe hurts\nCues:\nStay relaxed\nCool-down:\n- 5 min walk");
+  assert.deepEqual(sectioned.plan.map((b) => b.text), ["Warm-up", "5 min jog", "Main set", "4 x 20 s strides", "Cool-down", "5 min walk"]);
+  assert.deepEqual(sectioned.notes.map((b) => b.text), ["Skip the strides if the toe hurts", "Stay relaxed"], "everything under Notes or Cues, and not the headings themselves");
+  assert.deepEqual(sn.parseSessionNote("  "), []); assert.deepEqual(sn.parseSessionNote(null), []);
+  const coach = sn.parseSessionNote("Warm-up:\n- 5 min easy jog\n- Leg swings\n\n## Main set\n* Back squat: 4 x 5 @ RPE 7, rest 2-3 min\n2) Pull-up 3 x 6\nCues: brace, slow down\nStay smooth.");
+  assert.deepEqual(coach.map((b) => b.kind), ["heading", "bullet", "bullet", "heading", "bullet", "bullet", "text", "text"], "headings, bullets and plain lines are told apart");
+  assert.equal(coach[0]!.text, "Warm-up"); assert.equal(coach[3]!.text, "Main set"); assert.equal(coach[4]!.text, "Back squat: 4 x 5 @ effort 7 out of 10, rest 2-3 min", "a colon inside a bullet is not a heading"); assert.equal(coach[5]!.text, "Pull-up 3 x 6");
+  assert.equal(sn.noteToText(coach), "Warm-up:\n- 5 min easy jog\n- Leg swings\n\nMain set:\n- Back squat: 4 x 5 @ effort 7 out of 10, rest 2-3 min\n- Pull-up 3 x 6\nCues: brace, slow down\nStay smooth.");
+  assert.match(sn.NOTE_FORMAT, /Warm-up/);
+}

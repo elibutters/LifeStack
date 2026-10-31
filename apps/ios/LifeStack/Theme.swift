@@ -176,28 +176,53 @@ struct StageBar: View {
 }
 
 // Under a session, two sections that can each run to several lines and are divided from one another: the plan (its note), then what
-// actually happened with the Strava link at the bottom right.
+// actually happened with the Strava link at the bottom right. Cautions and context come last, collapsed.
 struct SessionBody: View {
-    let note: String?
+    let blocks: [NoteBlock]?
+    let extra: [NoteBlock]?   // cautions and context, collapsed so the plan stays short
     let summary: String?
     let url: String?
-    private func section(_ label: String, _ text: String, link: URL? = nil) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(label).foregroundStyle(Theme.muted).frame(width: 44, alignment: .leading)
-            HStack(alignment: .bottom, spacing: 8) {
-                Text(text).frame(maxWidth: .infinity, alignment: .leading)
-                if let link { Link("Strava", destination: link).font(.caption2).foregroundStyle(Theme.accent) }
+    private func label(_ text: String) -> some View { Text(text).foregroundStyle(Theme.muted).frame(width: 44, alignment: .leading) }
+
+    // Headings are small and muted, bullets get a dot, and plain lines stand as they are.
+    private func plan(_ blocks: [NoteBlock]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { i, b in
+                switch b.kind {
+                case "heading": Text(b.text).font(.caption2.weight(.semibold)).foregroundStyle(Theme.muted).padding(.top, i == 0 ? 0 : 4)
+                case "bullet":
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\u{2022}").foregroundStyle(Theme.muted)
+                        Text(b.text)
+                    }
+                default: Text(b.text)
+                }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
+
     var body: some View {
-        let plan = (note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = blocks ?? []
+        let more = extra ?? []
         let actual = summary?.replacingOccurrences(of: "Actual: ", with: "").replacingOccurrences(of: " (Strava)", with: "")
-        if !plan.isEmpty || actual != nil {
+        if !note.isEmpty || !more.isEmpty || actual != nil {
             VStack(alignment: .leading, spacing: 6) {
-                if !plan.isEmpty { section("Plan", plan) }
-                if !plan.isEmpty, actual != nil { Divider().overlay(Color.white.opacity(0.12)) }
-                if let actual { section("Actual", actual, link: url.flatMap(URL.init(string:))) }
+                if !note.isEmpty { HStack(alignment: .top, spacing: 8) { label("Plan"); plan(note) } }
+                if let actual {
+                    if !note.isEmpty { Divider().overlay(Color.white.opacity(0.12)) }
+                    HStack(alignment: .top, spacing: 8) {
+                        label("Actual")
+                        HStack(alignment: .bottom, spacing: 8) {
+                            Text(actual).frame(maxWidth: .infinity, alignment: .leading)
+                            if let link = url.flatMap(URL.init(string:)) { Link("Strava", destination: link).font(.caption2).foregroundStyle(Theme.accent) }
+                        }
+                    }
+                }
+                if !more.isEmpty {
+                    if !note.isEmpty || actual != nil { Divider().overlay(Color.white.opacity(0.12)) }
+                    DisclosureGroup("Notes") { plan(more).padding(.top, 4) }.tint(Theme.muted).foregroundStyle(Theme.muted)
+                }
             }
             .font(.caption)
         }
@@ -235,7 +260,7 @@ struct EventRow: View {
                     Text(Format.time(item)).font(.caption).foregroundStyle(Theme.muted)
                     if let place = item.location, !place.isEmpty { Text("· \(place)").font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
                 }
-                if let s = item.session { SessionBody(note: s.note, summary: s.actual?.summary, url: s.actual?.url).padding(.top, 2) }
+                if let s = item.session { SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url).padding(.top, 2) }
             }
             Spacer(minLength: 0)
         }
