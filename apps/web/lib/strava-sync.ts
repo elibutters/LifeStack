@@ -4,6 +4,8 @@ import { z } from "zod";
 import { connections, events, syncState } from "@lifestack/db";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./db";
+import { afterResponse } from "./goals-notion";
+import { autoLinkRecent } from "./strava-link";
 import { describeError } from "./errors";
 import { createSubscription, listSubscriptions, refreshTokens, StravaError, stravaGet, webhookUrl } from "./strava";
 import { STRAVA, toRow, type ActivityRow } from "./strava-map";
@@ -170,6 +172,7 @@ export async function syncStrava(opts: { full?: boolean } = {}): Promise<SyncRes
       lastError: keptOnEmpty ? "Strava returned no activities, so the existing copy was kept." : null,
       cursor: JSON.stringify({ ...cur, after: newest, tried: new Date().toISOString() }),
     });
+    afterResponse(() => autoLinkRecent()); // pair new activities with planned goal sessions
     return { activities: list.length };
   } catch (e) {
     const err = e instanceof StravaError ? e : null;

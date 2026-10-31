@@ -60,7 +60,7 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                 <div key={s.id} className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className={s.status === "done" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
-                    <p className="text-xs text-muted">{time(s.start)} to {time(s.end)} &middot; {names.get(s.goalId) ?? "Goal"} &middot; {s.minutes} min{s.status === "done" ? " · done" : ""}</p>
+                    <p className="text-xs text-muted">{time(s.start)} to {time(s.end)} &middot; {names.get(s.goalId) ?? "Goal"} &middot; {s.minutes} min{s.status === "done" ? " · done" : ""}{s.actual ? ` · ${s.actual.summary}` : ""}</p>
                   </div>
                   {s.status === "planned" && (
                     <div className="flex gap-2">

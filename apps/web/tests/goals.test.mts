@@ -190,6 +190,34 @@ assert.equal((await act("snope-1234", { action: "skip" })).status, 404); assert.
 assert.equal((await act(todo.id, { action: "done", minutes: 30, rating: 5 })).status, 200); assert.equal((await act(todo.id, { action: "move" })).status, 409, "moving a finished session is refused");
 assert.ok(cap.AGENT_SCOPES.includes("goals:read") && cap.AGENT_SCOPES.includes("goals:write") && cap.APP_SCOPES.includes("goals:read") && cap.APP_SCOPES.includes("goals:write"), "agents and the phone can both use goals");
 
+// ---- Strava: linking an activity to a session, by hand and automatically after a sync
+const { sql } = await import("drizzle-orm");
+const al = await import("../lib/strava-link.ts");
+if (!(await db().select().from(connections)).length) await connect();
+const rg = (await g.createGoal({ title: "Run goal", kind: "custom" }) as any).goal;
+const rc = await g.commitPlan(rg.id, { sessions: [{ title: "Easy run", start: at("2026-11-10", 7 * 60).toISOString(), end: at("2026-11-10", 8 * 60).toISOString() }, { title: "Long run", start: at("2026-11-11", 7 * 60).toISOString(), end: at("2026-11-11", 9 * 60).toISOString() }] }, NOW) as any;
+assert.ok(rc.ok); const [easyId, longId] = rc.sessions.map((x: any) => x.id) as string[];
+const strava = (id: number, day: string, min: number, sport: string, movingS: number, distanceM: number) =>
+  db().insert(events).values({ ts: at(day, min), domain: "activity", key: "activity.workout", valueText: sport, source: "strava", sourceId: `act:${id}`, payload: { id, name: `Morning ${sport}`, distanceM, movingS, avgHr: 151.6 } });
+await strava(101, "2026-11-10", 7 * 60 + 5, "Run", 3000, 8000); await strava(102, "2026-11-11", 7 * 60, "Ride", 1500, 9000);
+const SOON = at("2026-11-11", 12 * 60);
+assert.equal(await al.autoLinkRecent(SOON), 1, "only the run matches the easy run; a ride does not match a long run");
+let easy = (await g.sessionsOf(rg.id)).find((s) => s.id === easyId)!;
+assert.equal(easy.actual?.id, 101); assert.equal(easy.status, "done", "50 of 60 planned minutes counts as done"); assert.equal(easy.minutes, 50);
+assert.match(g.sessionJson(easy).actual!.summary, /^Actual: 5\.0 mi in 50:00, 10:04 \/mi, avg HR 152 \(Strava\)$/);
+assert.match(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /Actual: 5\.0 mi in 50:00[\s\S]*Planned by Life Stack/);
+assert.equal(await al.autoLinkRecent(SOON), 0, "nothing new to pair the second time");
+const longAct = await g.linkActivity(longId, 102) as any;
+assert.ok(longAct.ok); assert.equal(longAct.completed, false, "25 of 120 minutes leaves the session planned"); assert.equal(longAct.session.status, "planned");
+assert.equal(((await g.linkActivity(easyId, 102)) as any).ok, false, "an activity is linked to one session only");
+assert.equal(((await g.linkActivity(easyId, 99999)) as any).ok, false); assert.equal(((await g.linkActivity("snope-1234", 101)) as any).ok, false);
+assert.equal((await act(longId, { action: "link", activityId: null }, read.token)).status, 403);
+assert.equal((await act(longId, { action: "link", activityId: null })).status, 200);
+assert.doesNotMatch(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /Actual/);
+assert.equal((await g.sessionsOf(rg.id)).find((s) => s.id === longId)!.actual, null, "unlinked");
+assert.equal((await act(longId, { action: "link", activityId: 102 })).status, 200); assert.equal((await act(longId, { action: "link", activityId: "x" })).status, 400);
+await db().delete(events).where(sql`${events.payload}->>'goalId' = ${rg.id} or ${events.sourceId} = ${`goal:${rg.id}`} or ${events.source} = 'strava'`);
+
 await wipe();
 console.log("goals: ok");
 process.exit(0);

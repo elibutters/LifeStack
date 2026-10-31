@@ -115,3 +115,25 @@ assert.equal(hm(r.placed.find((p) => p.title === "Easy")!.start), "19:00", "othe
 assert.equal(g.weeklyPlan({ fromDay: mon, toDay: "2026-11-02", template: [{ weekday: 5, durationMin: 60, title: "Long", startMin: 540 }] })[0].startMin, 540, "the template passes it on");
 
 console.log("goals-core: ok");
+
+// ---- Strava link rules
+{
+  const sl = await import("../lib/strava-link-core.ts");
+  const mk = (id: string, title: string, day: string, from: number, to: number, extra = {}) => ({ id, title, start: at(day, from), end: at(day, to), durationMin: to - from, status: "planned", actual: null, ...extra });
+  const act = (id: number, day: string, min: number, sport = "Run", movingS = 3000) => ({ id, name: null, sport, distanceM: 8000, movingS, avgHr: null, start: at(day, min).toISOString() });
+  assert.deepEqual(sl.sportsFor("Easy 3 mi + strides"), ["Run", "TrailRun", "VirtualRun"]); assert.equal(sl.sportsFor("Interview prep"), null);
+  assert.ok(sl.sportFits("Interview prep", "Run"), "a title without a sport matches any sport"); assert.equal(sl.sportFits("Long run", "Ride"), false); assert.ok(sl.sportFits("Bike ride", "GravelRide"));
+  const run = mk("a", "Easy run", "2026-11-10", 420, 480);
+  assert.ok(sl.matchesWindow(run, act(1, "2026-11-10", 420 - 90)), "up to two hours early"); assert.equal(sl.matchesWindow(run, act(1, "2026-11-10", 420 - 130)), false);
+  assert.ok(sl.matchesWindow(run, act(1, "2026-11-10", 480 + 170))); assert.equal(sl.matchesWindow(run, act(1, "2026-11-10", 480 + 190)), false);
+  // closest pairing wins, each activity and session is used once
+  const two = [mk("a", "Run", "2026-11-10", 420, 480), mk("b", "Run", "2026-11-10", 480, 540)];
+  assert.deepEqual(sl.matchSessions(two, [act(1, "2026-11-10", 485), act(2, "2026-11-10", 425)], new Set()).sort((x, y) => x.sessionId.localeCompare(y.sessionId)), [{ sessionId: "a", activityId: 2 }, { sessionId: "b", activityId: 1 }], "each activity goes to the session it started closest to");
+  assert.deepEqual(sl.matchSessions([run], [act(1, "2026-11-10", 425), act(2, "2026-11-10", 450)], new Set()), [{ sessionId: "a", activityId: 1 }], "one activity per session");
+  assert.deepEqual(sl.matchSessions([run], [act(1, "2026-11-10", 425)], new Set([1])), [], "an activity already linked elsewhere is not reused");
+  assert.deepEqual(sl.matchSessions([mk("a", "Run", "2026-11-10", 420, 480, { actual: { id: 9 } })], [act(1, "2026-11-10", 425)], new Set()), [], "a linked session is left alone");
+  assert.deepEqual(sl.matchSessions([mk("a", "Run", "2026-11-10", 420, 480, { status: "skipped" })], [act(1, "2026-11-10", 425)], new Set()), [], "a skipped session is left alone");
+  assert.ok(sl.completes(60, 2520) && !sl.completes(60, 2400), "42 of 60 minutes is enough, 40 is not"); assert.equal(sl.completes(60, null), false);
+  assert.equal(sl.actualLine({ id: 1, name: "x", sport: "Run", distanceM: 5000, movingS: 1500, avgHr: 150, start: "" }), "Actual: 3.1 mi in 25:00, 8:03 /mi, avg HR 150 (Strava)");
+  assert.equal(sl.actualLine({ id: 1, name: "Lift", sport: "WeightTraining", distanceM: null, movingS: 3725, avgHr: null, start: "" }), "Actual: 1:02:05 (Strava)", "no distance, no pace");
+}
