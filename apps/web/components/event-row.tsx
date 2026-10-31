@@ -23,8 +23,8 @@ export function SessionTag({ session }: { session: SessionDetail }) {
   );
 }
 
-// The plan (a coach-style note: headings and bullets) and what actually happened, divided from one another, each free to run to several lines.
-// The Strava link sits at the bottom right.
+// The plan (a coach-style note: headings and bullets) and what actually happened, divided from one another, each free to run to several lines,
+// with the Strava link at the bottom right. Cautions and context come last, collapsed, so the two important parts stay together.
 type Block = SessionDetail["noteBlocks"][number];
 
 function PlanBlocks({ blocks }: { blocks: Block[] }) {
@@ -51,23 +51,23 @@ export function SessionBody({ noteBlocks, notesBlocks, actual }: { noteBlocks: B
           <PlanBlocks blocks={noteBlocks} />
         </div>
       )}
-      {notesBlocks.length > 0 && (
-        <details className={`py-1.5 ${noteBlocks.length ? "border-t border-line" : ""}`}>
-          <summary className="cursor-pointer text-xs text-muted">Notes</summary>
-          <div className="grid grid-cols-[3.25rem_1fr] gap-x-2 pt-1.5">
-            <span />
-            <PlanBlocks blocks={notesBlocks} />
-          </div>
-        </details>
-      )}
       {actual && (
-        <div className={`grid grid-cols-[3.25rem_1fr] gap-x-2 py-1.5 ${noteBlocks.length || notesBlocks.length ? "border-t border-line" : ""}`}>
+        <div className={`grid grid-cols-[3.25rem_1fr] gap-x-2 py-1.5 ${noteBlocks.length ? "border-t border-line" : ""}`}>
           <span className="text-xs text-muted">Actual</span>
           <div className="flex items-end justify-between gap-3">
             <p className="whitespace-pre-line">{actual.summary.replace(/^Actual: /, "").replace(/ \(Strava\)$/, "")}</p>
             <a href={actual.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs text-accent">Strava</a>
           </div>
         </div>
+      )}
+      {notesBlocks.length > 0 && (
+        <details className={`py-1.5 ${noteBlocks.length || actual ? "border-t border-line" : ""}`}>
+          <summary className="cursor-pointer text-xs text-muted">Notes</summary>
+          <div className="grid grid-cols-[3.25rem_1fr] gap-x-2 pt-1.5">
+            <span />
+            <PlanBlocks blocks={notesBlocks} />
+          </div>
+        </details>
       )}
     </div>
   );
