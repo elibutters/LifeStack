@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
-import { completeSession, moveSession, refreshEventBodies, skipSession } from "@/lib/goals";
+import { addDays, TZ, ymd } from "@/lib/dates";
+import { completeSession, moveSession, refreshEventBodies, skipSession, suggestSlots } from "@/lib/goals";
 import { afterResponse, ensureNotebook, notebookHook } from "@/lib/goals-notion";
 
 // Every action checks the session itself (server actions are POSTs to the page) and goes back to /goals with a short note when
@@ -53,4 +54,19 @@ export async function refreshCalendarAction(): Promise<void> {
   const r = await refreshEventBodies({ budgetMs: 45_000 });
   if (r.calendar !== "ok") return back("Reconnect Outlook on the Connections page to let Life Stack update your calendar.");
   back(r.remaining > 0 ? `Updated ${r.updated} calendar events, ${r.remaining} left. Press the button again to continue.` : r.updated > 0 ? `Updated ${r.updated} calendar events. They are all current.` : "Every calendar event is already current.");
+}
+
+// Up to three free times for the Move panel, worded for the owner ("Today", "Tomorrow", then the day), with the exact times for the form.
+export async function suggestTimesAction(id: string): Promise<{ start: string; end: string; label: string }[]> {
+  await requireSession();
+  const r = await suggestSlots(id.trim(), 3);
+  if (!r.ok) return [];
+  const now = new Date();
+  const today = ymd(now), tomorrow = addDays(today, 1);
+  const clock = (d: Date) => new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).format(d);
+  return r.slots.map((s) => {
+    const a = new Date(s.start), b = new Date(s.end), day = ymd(a);
+    const name = day === today ? "Today" : day === tomorrow ? "Tomorrow" : new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "short", day: "numeric" }).format(a);
+    return { ...s, label: `${name}, ${clock(a)} to ${clock(b)}` };
+  });
 }

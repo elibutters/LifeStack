@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth";
 import { TZ } from "@/lib/dates";
 import { getGoal, listGoals, tonight } from "@/lib/goals";
 import { doneAction, moveAction, notebookAction, refreshCalendarAction, skipAction } from "./actions";
+import { SessionActions } from "./session-actions";
 
 export const metadata: Metadata = { title: "Goals" };
 export const dynamic = "force-dynamic";
@@ -25,15 +26,10 @@ function SessionRow({ s, now }: { s: SessionItem; now: number }) {
   const late = s.status === "planned" && Date.parse(s.end) < now;
   return (
     <li className="rounded-md border border-line bg-raised/40 px-3 py-2">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <p className={s.status === "skipped" || s.status === "replaced" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
         {s.status === "planned" ? (
-          <div className="flex shrink-0 items-center gap-2">
-            {late && <span className="rounded-sm bg-danger/15 px-1.5 py-0.5 text-xs text-danger">Missed</span>}
-            <Btn action={doneAction} id={s.id} label="Done" />
-            {!late && <Btn action={moveAction} id={s.id} label="Move" />}
-            <Btn action={skipAction} id={s.id} label="Skip" />
-          </div>
+          <SessionActions id={s.id} late={late} />
         ) : (
           <span className={`shrink-0 rounded-sm px-1.5 py-0.5 text-xs capitalize ${late ? "bg-danger/15 text-danger" : (TONE[s.status] ?? TONE.planned)}`}>{late ? "missed" : s.status}</span>
         )}
@@ -95,13 +91,7 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                     <p className={s.status === "done" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
                     <p className="text-xs text-muted">{time(s.start)} to {time(s.end)} &middot; {names.get(s.goalId) ?? "Goal"} &middot; {s.minutes} min{s.status === "done" ? " · done" : ""}{s.actual ? ` · ${s.actual.summary}` : ""}</p>
                   </div>
-                  {s.status === "planned" && (
-                    <div className="flex gap-2">
-                      <Btn action={doneAction} id={s.id} label="Done" />
-                      <Btn action={moveAction} id={s.id} label="Move" />
-                      <Btn action={skipAction} id={s.id} label="Skip" />
-                    </div>
-                  )}
+                  {s.status === "planned" && <SessionActions id={s.id} />}
                 </div>
               ))}
               {ton.sessions.length === 0 && ton.needsDecision.length === 0 && <p className="py-2 text-sm text-muted">Nothing planned for today. Ask your assistant to plan something, or take the evening.</p>}

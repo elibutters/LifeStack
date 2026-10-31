@@ -642,3 +642,117 @@ struct CalendarItemSheet: View {
         .presentationDragIndicator(.visible)
     }
 }
+
+// What opens from a Move button: a few free times for the session and any other time, to choose from. Choosing nothing moves nothing, and
+// nothing moves until Move is tapped.
+struct MoveSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let session: GoalSessionDTO
+    let changed: () async -> Void
+
+    private struct Slot: Hashable { let start: Date; let end: Date }
+    @State private var slots: [Slot] = []
+    @State private var loading = true
+    @State private var chosen: Date?
+    @State private var other = Date().addingTimeInterval(3600)
+    @State private var busy = false
+    @State private var error: String?
+
+    private var length: TimeInterval { TimeInterval(session.minutes * 60) }
+    private func iso(_ d: Date) -> String { ISO8601DateFormatter().string(from: d) }
+    private func dayName(_ d: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(d) { return "Today" }
+        if cal.isDateInTomorrow(d) { return "Tomorrow" }
+        return d.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
+    }
+    private func range(_ a: Date) -> String { a.formatted(date: .omitted, time: .shortened) + " \u{2013} " + a.addingTimeInterval(length).formatted(date: .omitted, time: .shortened) }
+
+    private func load() async {
+        defer { loading = false }
+        guard let client = model.client, let raw = try? await client.sessionSuggestions(session.id) else { return }
+        slots = raw.compactMap { r in
+            guard let a = Format.date(r.start), let b = Format.date(r.end) else { return nil }
+            return Slot(start: a, end: b)
+        }
+    }
+
+    private func move() {
+        guard let start = chosen else { return }
+        Task {
+            guard let client = model.client else { error = "Not signed in."; return }
+            busy = true; defer { busy = false }
+            do { try await client.sessionAction(session.id, ["action": "move", "start": iso(start)]); await changed(); dismiss() }
+            catch is CancellationError { return }
+            catch { self.error = error.localizedDescription }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(session.title).font(.title2.weight(.bold)).fixedSize(horizontal: false, vertical: true)
+                        if let now = Format.date(session.start) {
+                            Label(dayName(now) + ", " + range(now), systemImage: "clock").font(.subheadline).foregroundStyle(Theme.muted)
+                        }
+                        Text("Pick a new time. Nothing moves until you tap Move.").font(.subheadline).foregroundStyle(Theme.muted)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("FREE TIMES FOR IT").font(.caption.weight(.semibold)).tracking(0.8).foregroundStyle(Theme.muted)
+                        if loading { ProgressView().frame(maxWidth: .infinity, alignment: .leading) }
+                        else if slots.isEmpty { Text("No free time found in the next few weeks. Pick a time below.").font(.subheadline).foregroundStyle(Theme.muted) }
+                        ForEach(slots, id: \.self) { slot in
+                            let on = chosen == slot.start
+                            Button { chosen = slot.start } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(dayName(slot.start)).font(.subheadline.weight(.semibold))
+                                        Text(range(slot.start)).font(.caption).foregroundStyle(Theme.muted)
+                                    }
+                                    Spacer()
+                                    if on { Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good) }
+                                }
+                                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                                .background(on ? Theme.good.opacity(0.14) : Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("OR ANOTHER TIME").font(.caption.weight(.semibold)).tracking(0.8).foregroundStyle(Theme.muted)
+                        DatePicker("Starts", selection: $other).datePickerStyle(.compact)
+                            .onChange(of: other) { _, new in chosen = new }
+                        Button { chosen = other } label: {
+                            HStack { Text("Use \(dayName(other)), \(range(other))").font(.subheadline.weight(.medium)); Spacer(); if chosen == other { Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.good) } }
+                                .padding(12).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    ErrorBanner(text: error)
+                }
+                .padding(.horizontal, 16).padding(.top, 6).padding(.bottom, 24)
+            }
+            .background(Ambient())
+            .safeAreaInset(edge: .bottom) {
+                HStack(spacing: 10) {
+                    Button { dismiss() } label: { Label("Cancel", systemImage: "xmark").font(.headline).frame(maxWidth: .infinity, minHeight: 50).background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous)) }
+                        .buttonStyle(.plain)
+                    Button(action: move) {
+                        Label(chosen == nil ? "Pick a time" : "Move", systemImage: "arrow.right").font(.headline).frame(maxWidth: .infinity, minHeight: 50)
+                            .foregroundStyle(Color.black).background(Theme.good.opacity(chosen == nil ? 0.35 : 1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain).disabled(chosen == nil || busy)
+                }
+                .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8).background(.bar)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Close") { dismiss() } } }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .task { await load() }
+    }
+}
