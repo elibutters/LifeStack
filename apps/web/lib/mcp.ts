@@ -18,7 +18,7 @@ import { getNote, kickSync, searchNotes } from "./notes";
 import { changeSetting, listSettings, resetSetting } from "./settings";
 import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
 import { logBlocks } from "./goals-notion-core";
-import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, pushToCalendar, skipSession, tonight, updateGoal } from "./goals";
+import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, pushToCalendar, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
 import { addNotePage, appendToNote } from "./notes-write";
 import { addTodo, listTodos, updateTodo } from "./todos";
 import { addOption, addWant, listWants, updateOption } from "./wants";
@@ -457,8 +457,9 @@ export function buildServer(token: VerifiedToken): McpServer {
           weekdays: z.array(z.number().int()).optional(),
           weeks: z.number().int().optional(),
           start: z.string().optional(),
-          template: z.array(z.object({ weekday: z.number().int(), durationMin: z.number().int(), title: z.string(), start: z.string().optional() })).optional(),
-          sessions: z.array(z.object({ day: z.string(), durationMin: z.number().int(), title: z.string(), flexDays: z.number().int().optional(), start: z.string().optional() })).optional(),
+          note: z.string().optional(),
+          template: z.array(z.object({ weekday: z.number().int(), durationMin: z.number().int(), title: z.string(), start: z.string().optional(), note: z.string().optional() })).optional(),
+          sessions: z.array(z.object({ day: z.string(), durationMin: z.number().int(), title: z.string(), flexDays: z.number().int().optional(), start: z.string().optional(), note: z.string().optional() })).optional(),
           flexDays: z.number().int().optional(),
         },
       },
@@ -535,6 +536,13 @@ export function buildServer(token: VerifiedToken): McpServer {
           const state = await appendToNotebook(goalId, logBlocks(day, text.slice(0, 3800)));
           return state === "ok" ? ok({ state }) : fail(`The note was not added (${state}). ${state === "no_notebook" ? "Run create_notebook first." : ""}`.trim());
         } catch (e) { console.error("mcp: notebook_note failed", describeError(e)); return fail("The tool could not reach Notion."); }
+      },
+    );
+    server.registerTool(
+      "set_session_note",
+      { description: "Sets the note on a session, replacing the old one (empty text clears it), and updates the Outlook event body to match. Use it to add detail to a workout before it happens or comments after, such as pace, how it felt, or what to fuel with. The note is also returned by get_goal and get_tonight.", inputSchema: { id: z.string(), note: z.string() } },
+      async ({ id, note }) => {
+        try { return fromResult(await setSessionNote(id, { note })); } catch (e) { console.error("mcp: set_session_note failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
     server.registerTool(
