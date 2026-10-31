@@ -322,125 +322,276 @@ struct CalendarView: View {
     }
 }
 
-// What opens when an event is tapped. A goal session can be marked done (also long after the fact), skipped, moved, undone and have its plan
-// edited, with its title and times; any other event comes from Outlook and is shown as it is.
-private struct CalendarItemSheet: View {
+// What opens when an event is tapped. A goal session shows its status, plan, actual run and notes, can be marked done (also long after the
+// fact, with how long it took and how it went), skipped, undone, rescheduled and edited. Any other event comes from Outlook and is shown
+// as it is.
+struct CalendarItemSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let item: CalendarItem
     let changed: () async -> Void
+
     @State private var editing = false
-    @State private var draft = ""
     @State private var title = ""
     @State private var start = Date()
     @State private var end = Date()
+    @State private var draft = ""
+    @State private var minutes = 0
+    @State private var rating = 0
+    @State private var logNote = ""
     @State private var busy = false
     @State private var error: String?
 
-    private func run(_ id: String, _ body: [String: Any]) {
-        Task {
-            guard let client = model.client else { return }
-            busy = true; defer { busy = false }
-            do { try await client.sessionAction(id, body); await changed(); dismiss() }
-            catch is CancellationError { return }
-            catch { self.error = error.localizedDescription }
-        }
-    }
-
+    private var startDate: Date? { Format.date(item.start) }
+    private var endDate: Date? { Format.date(item.end) }
     private func iso(_ d: Date) -> String { ISO8601DateFormatter().string(from: d) }
-
-    private func beginEditing(_ s: CalendarSession) {
-        title = item.title
-        start = Format.date(item.start) ?? Date()
-        end = Format.date(item.end) ?? start.addingTimeInterval(3600)
-        draft = s.note ?? ""
-        editing = true
+    private func missed(_ s: CalendarSession) -> Bool { s.status == "planned" && (endDate.map { $0 < Date() } ?? false) }
+    private func length(_ s: CalendarSession?) -> Int {
+        if let m = s?.minutes { return m }
+        guard let a = startDate, let b = endDate else { return 0 }
+        return max(1, Int(b.timeIntervalSince(a) / 60))
     }
 
-    // Sends only what changed: the title and times in one call, the plan in another.
-    private func save(_ id: String, _ s: CalendarSession) {
+    // ---- actions
+    private func run(_ id: String, _ steps: [[String: Any]]) {
         Task {
-            guard let client = model.client else { return }
+            guard let client = model.client else { error = "Not signed in."; return }
             busy = true; defer { busy = false }
-            let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let timesChanged = Format.date(item.start) != start || Format.date(item.end) != end
             do {
-                if (!name.isEmpty && name != item.title) || timesChanged {
-                    var body: [String: Any] = ["action": "edit"]
-                    if !name.isEmpty && name != item.title { body["title"] = name }
-                    if timesChanged { body["start"] = iso(start); body["end"] = iso(end) }
-                    try await client.sessionAction(id, body)
-                }
-                if draft != (s.note ?? "") { try await client.sessionAction(id, ["action": "note", "note": draft]) }
+                for body in steps { try await client.sessionAction(id, body) }
                 await changed(); dismiss()
             } catch is CancellationError { return }
             catch { self.error = error.localizedDescription }
         }
     }
 
-    private func button(_ label: String, _ icon: String, tint: Color? = nil, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) { Label(label, systemImage: icon).font(.subheadline.weight(.medium)).padding(.horizontal, 12).frame(height: 38).chip(tint) }
-            .buttonStyle(.plain).disabled(busy)
+    // The log (time, rating, note) goes along when it was filled in, or when it is being saved on purpose.
+    private func logged(_ s: CalendarSession) -> Bool { rating > 0 || !logNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || minutes != (s.minutesSpent ?? length(s)) }
+
+    private func doneBody(_ s: CalendarSession, withLog: Bool) -> [String: Any] {
+        var b: [String: Any] = ["action": "done"]
+        if withLog || logged(s) {
+            b["minutes"] = max(1, minutes)
+            if rating > 0 { b["rating"] = rating }
+            let n = logNote.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !n.isEmpty { b["note"] = n }
+        }
+        return b
+    }
+
+    private func beginEditing(_ s: CalendarSession) {
+        title = item.title
+        start = startDate ?? Date()
+        end = endDate ?? start.addingTimeInterval(3600)
+        draft = s.note ?? ""
+        editing = true
+    }
+
+    private func saveEdits(_ id: String, _ s: CalendarSession) {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        var steps: [[String: Any]] = []
+        let nameChanged = !name.isEmpty && name != item.title
+        let timesChanged = startDate != start || endDate != end
+        if nameChanged || timesChanged {
+            var body: [String: Any] = ["action": "edit"]
+            if nameChanged { body["title"] = name }
+            if timesChanged { body["start"] = iso(start); body["end"] = iso(end) }
+            steps.append(body)
+        }
+        if draft != (s.note ?? "") { steps.append(["action": "note", "note": draft]) }
+        if steps.isEmpty { editing = false } else { run(id, steps) }
+    }
+
+    // ---- pieces
+    private func pill(_ text: String, _ tint: Color) -> some View {
+        Text(text).font(.caption.weight(.semibold)).padding(.horizontal, 10).padding(.vertical, 4)
+            .foregroundStyle(tint).background(tint.opacity(0.16), in: Capsule())
+    }
+
+    private func card<C: View>(_ label: String, @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(label.uppercased()).font(.caption.weight(.semibold)).tracking(0.8).foregroundStyle(Theme.muted)
+            content()
+        }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading).panel()
+    }
+
+    private func blocks(_ list: [NoteBlock]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(list.enumerated()), id: \.offset) { i, b in
+                switch b.kind {
+                case "heading": Text(b.text).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.muted).padding(.top, i == 0 ? 0 : 6)
+                case "bullet":
+                    HStack(alignment: .firstTextBaseline, spacing: 8) { Text("\u{2022}").foregroundStyle(Theme.muted); Text(b.text) }.font(.body)
+                default: Text(b.text).font(.body)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func bigButton(_ label: String, _ icon: String, primary: Bool = false, tint: Color = Theme.good, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: icon).font(.headline).frame(maxWidth: .infinity, minHeight: 50)
+                .foregroundStyle(primary ? Color.black : Color.white)
+                .background(primary ? tint : Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain).disabled(busy).opacity(busy ? 0.5 : 1)
+    }
+
+    private var header: some View {
+        let s = item.session
+        return VStack(alignment: .leading, spacing: 10) {
+            if let s {
+                HStack(spacing: 8) {
+                    if let goal = s.goal { Text(goal.uppercased()).font(.caption.weight(.semibold)).tracking(0.8).foregroundStyle(Theme.muted).lineLimit(1) }
+                    Spacer(minLength: 0)
+                    if missed(s) { pill("Missed", Theme.warm) } else { pill(s.status.capitalized, sessionTint(s.status)) }
+                }
+            }
+            Text(item.title).font(.title.weight(.bold)).strikethrough(s?.status == "skipped").fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Label(Format.dayHeading(item), systemImage: "calendar")
+                if !item.allDay {
+                    Label([Format.time(item), endDate.map { "\u{2013} " + $0.formatted(date: .omitted, time: .shortened) }, "\u{00B7} \(length(s)) min"].compactMap { $0 }.joined(separator: " "), systemImage: "clock")
+                }
+                if let place = item.location, !place.isEmpty { Label(place, systemImage: "mappin.and.ellipse") }
+            }
+            .font(.subheadline).foregroundStyle(Theme.muted).labelStyle(.titleAndIcon)
+        }
+    }
+
+    // ---- a goal session
+    @ViewBuilder private func sessionContent(_ id: String, _ s: CalendarSession) -> some View {
+        if missed(s) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "questionmark.circle.fill").foregroundStyle(Theme.warm)
+                Text("This was planned for earlier and is still open. Did you do it?").font(.subheadline)
+            }
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.warm.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.r, style: .continuous))
+        }
+        if let plan = s.noteBlocks, !plan.isEmpty { card("Plan") { blocks(plan) } }
+        if let a = s.actual {
+            card("Actual") {
+                Text(a.summary.replacingOccurrences(of: "Actual: ", with: "").replacingOccurrences(of: " (Strava)", with: "")).font(.body)
+                if let url = URL(string: a.url) { Link(destination: url) { Label("View on Strava", systemImage: "arrow.up.right.square").font(.subheadline.weight(.medium)) }.foregroundStyle(Theme.accent) }
+            }
+        }
+        // Only once it can have happened: a session still ahead has nothing to log. For a planned one the details go with the Mark done button
+        // below; a session that is already done has its own button to update them.
+        if s.status == "done" || (s.status == "planned" && missed(s)) {
+            card(s.status == "done" ? "Your log" : "How it went (optional)") {
+                Stepper(value: $minutes, in: 1...720, step: 5) { Text("\(minutes) min").font(.body.monospacedDigit()) }
+                HStack(spacing: 6) {
+                    ForEach(1...5, id: \.self) { n in
+                        Button { rating = rating == n ? 0 : n } label: { Image(systemName: n <= rating ? "star.fill" : "star").font(.title3).foregroundStyle(n <= rating ? Theme.warm : Theme.muted) }.buttonStyle(.plain)
+                    }
+                    Spacer()
+                    if rating > 0 { Text(["", "Rough", "Meh", "OK", "Good", "Great"][rating]).font(.subheadline).foregroundStyle(Theme.muted) }
+                }
+                TextField("Add a note about how it went", text: $logNote, axis: .vertical).lineLimit(1...4).padding(10)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+                if s.status == "done" { bigButton("Update log", "checkmark") { run(id, [doneBody(s, withLog: true)]) } }
+            }
+        }
+        if let more = s.notesBlocks, !more.isEmpty { card("Notes") { blocks(more) } }
+    }
+
+    private func sessionBar(_ id: String, _ s: CalendarSession) -> some View {
+        HStack(spacing: 10) {
+            switch s.status {
+            case "done": bigButton("Undo done", "arrow.uturn.backward") { run(id, [["action": "reopen"]]) }
+            case "skipped":
+                bigButton("Undo skip", "arrow.uturn.backward") { run(id, [["action": "reopen"]]) }
+                bigButton("I did it", "checkmark", primary: true) { run(id, [doneBody(s, withLog: false)]) }
+            default:
+                bigButton("Skip", "xmark") { run(id, [["action": "skip"]]) }
+                bigButton(missed(s) ? "I did it" : "Mark done", "checkmark", primary: true) { run(id, [doneBody(s, withLog: false)]) }
+            }
+        }
+        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8)
+        .background(.bar)
+    }
+
+    // ---- editing a goal session
+    @ViewBuilder private func editForm(_ id: String, _ s: CalendarSession) -> some View {
+        card("Title") {
+            TextField("Title", text: $title).font(.body).padding(10).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+        }
+        card("When") {
+            DatePicker("Starts", selection: $start).datePickerStyle(.compact)
+            DatePicker("Ends", selection: $end, in: start...).datePickerStyle(.compact)
+            HStack(spacing: 8) {
+                Button("30 min") { end = start.addingTimeInterval(1800) }.buttonStyle(.bordered)
+                Button("1 hour") { end = start.addingTimeInterval(3600) }.buttonStyle(.bordered)
+                Button("90 min") { end = start.addingTimeInterval(5400) }.buttonStyle(.bordered)
+                Spacer(minLength: 0)
+            }
+            .font(.subheadline).tint(Theme.muted)
+            if s.status == "planned" {
+                Button { run(id, [["action": "move"]]) } label: { Label("Move to the next free slot", systemImage: "arrow.right.circle").font(.subheadline.weight(.medium)) }
+                    .foregroundStyle(Theme.accent).disabled(busy)
+            }
+        }
+        card("Plan") {
+            TextEditor(text: $draft).frame(minHeight: 170).scrollContentBackground(.hidden).padding(8)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
+            HStack(spacing: 8) {
+                Button { draft += (draft.isEmpty || draft.hasSuffix("\n") ? "" : "\n") + "- " } label: { Label("Bullet", systemImage: "list.bullet") }
+                Button { draft += (draft.isEmpty || draft.hasSuffix("\n") ? "" : "\n") + "Section:\n- " } label: { Label("Section", systemImage: "textformat") }
+                Spacer(minLength: 0)
+            }
+            .buttonStyle(.bordered).tint(Theme.muted).font(.subheadline)
+            Text("One step per line. A line starting with - is a bullet, and a line ending in a colon is a heading. Write the words out in full.").font(.caption).foregroundStyle(Theme.muted)
+        }
+    }
+
+    // ---- an event from Outlook
+    private var outlookContent: some View {
+        card("From Outlook") {
+            Text("This event comes from your Outlook calendar, so it is changed there.").font(.subheadline).foregroundStyle(Theme.muted)
+            if let place = item.location, !place.isEmpty,
+               let url = URL(string: "http://maps.apple.com/?q=" + (place.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")) {
+                Link(destination: url) { Label("Open in Maps", systemImage: "map").font(.subheadline.weight(.medium)) }.foregroundStyle(Theme.accent)
+            }
+        }
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(item.title).font(.title3.weight(.semibold)).strikethrough(item.session?.status == "skipped")
-                            Spacer(minLength: 0)
-                            if let s = item.session {
-                                HStack(spacing: 6) {
-                                    if let goal = s.goal { Text(goal).foregroundStyle(Theme.muted) }
-                                    Text(s.status.capitalized).foregroundStyle(sessionTint(s.status))
-                                }
-                                .font(.caption).lineLimit(1)
-                            }
-                        }
-                        Text(Format.time(item) + (item.location.map { $0.isEmpty ? "" : " \u{00B7} \($0)" } ?? "")).font(.subheadline).foregroundStyle(Theme.muted)
-                    }
+                    header
                     if let s = item.session, let id = s.id {
-                        SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url)
-                        if editing {
-                            VStack(alignment: .leading, spacing: 10) {
-                                TextField("Title", text: $title).padding(10).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
-                                DatePicker("Starts", selection: $start).datePickerStyle(.compact)
-                                DatePicker("Ends", selection: $end).datePickerStyle(.compact)
-                                Text("Plan").font(.caption).foregroundStyle(Theme.muted)
-                                TextEditor(text: $draft).frame(minHeight: 140).scrollContentBackground(.hidden).padding(8).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.rs, style: .continuous))
-                                Text("One step per line. Start a line with - for a bullet and end a heading with a colon.").font(.caption2).foregroundStyle(Theme.muted)
-                                HStack(spacing: 8) {
-                                    button("Save", "checkmark", tint: Theme.good.opacity(0.4)) { save(id, s) }
-                                    button("Cancel", "xmark") { editing = false }
-                                }
-                            }
-                        } else {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack(spacing: 8) {
-                                    if s.status != "done" { button("Mark done", "checkmark", tint: Theme.good.opacity(0.4)) { run(id, ["action": "done"]) } }
-                                    if s.status == "planned" {
-                                        button("Move", "arrow.right") { run(id, ["action": "move"]) }
-                                        button("Skip", "xmark") { run(id, ["action": "skip"]) }
-                                    } else {
-                                        button("Undo", "arrow.uturn.backward") { run(id, ["action": "reopen"]) }
-                                    }
-                                }
-                                button("Edit", "pencil") { beginEditing(s) }
-                            }
-                        }
+                        if editing { editForm(id, s) } else { sessionContent(id, s) }
                     } else {
-                        Text("This event comes from your Outlook calendar, so it is changed there.").font(.subheadline).foregroundStyle(Theme.muted)
+                        outlookContent
                     }
                     ErrorBanner(text: error)
                 }
-                .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16).padding(.top, 6).padding(.bottom, 24)
             }
             .background(Ambient())
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Close") { dismiss() } } }
+            .safeAreaInset(edge: .bottom) {
+                if let s = item.session, let id = s.id {
+                    if editing {
+                        HStack(spacing: 10) {
+                            bigButton("Cancel", "xmark") { editing = false }
+                            bigButton("Save changes", "checkmark", primary: true) { saveEdits(id, s) }
+                        }
+                        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8).background(.bar)
+                    } else { sessionBar(id, s) }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { Button("Close") { dismiss() } }
+                if let s = item.session, s.id != nil, !editing { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { beginEditing(s) } } }
+            }
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { if let s = item.session { minutes = s.minutesSpent ?? length(s); rating = s.rating ?? 0 } }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
 }
