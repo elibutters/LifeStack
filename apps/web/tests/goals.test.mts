@@ -101,7 +101,7 @@ assert.equal(((await g.pushToCalendar(goal.id, NOW)) as any).calendar, "needs_re
 const pushed = await g.pushToCalendar(goal.id, NOW) as any;
 assert.deepEqual([pushed.calendar, pushed.pushed], ["ok", 3]);
 assert.equal(graph("POST").length, 3); const body0 = JSON.parse(graph("POST")[0]!.body);
-assert.deepEqual([body0.categories, body0.start.timeZone], [["Life Stack"], "UTC"]); assert.match(body0.body.content, /Goal: Interview prep[\s\S]*Topics 1 to 3[\s\S]*Planned by Life Stack/);
+assert.deepEqual([body0.categories, body0.start.timeZone], [["Life Stack"], "UTC"]); assert.match(body0.body.content, /^Goal: Interview prep\n[\s\S]*Topics 1 to 3$/);
 assert.ok((await g.sessionsOf(goal.id)).every((s) => !!s.outlookEventId), "every session now has its event id");
 assert.deepEqual(await g.pushToCalendar(goal.id, NOW), { calendar: "ok", pushed: 0 }, "nothing left to push");
 
@@ -114,7 +114,7 @@ const noteId = (await g.sessionsOf(goal.id))[0]!.id; const patches = graph("PATC
 const n1 = await g.setSessionNote(noteId, { note: "Easy pace, 4 x 20s strides" }) as any;
 assert.ok(n1.ok); assert.equal(n1.calendar, "ok"); assert.equal(n1.session.note, "Easy pace, 4 x 20s strides");
 const p1 = JSON.parse(graph("PATCH").at(-1)!.body); assert.equal(graph("PATCH").length, patches + 1);
-assert.match(p1.body.content, /Goal: Interview prep[\s\S]*Easy pace, 4 x 20s strides[\s\S]*Planned by Life Stack/); assert.equal(p1.start, undefined, "only the body changes");
+assert.match(p1.body.content, /^Goal: Interview prep\n[\s\S]*Easy pace, 4 x 20s strides$/); assert.equal(p1.start, undefined, "only the body changes");
 const n2 = await g.setSessionNote(noteId, { note: "" }) as any; assert.equal(n2.session.note, null, "an empty note clears it");
 assert.doesNotMatch(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /strides/);
 assert.equal(((await g.setSessionNote("snope-1234", { note: "x" })) as any).ok, false); assert.equal(((await g.setSessionNote(noteId, { note: "x".repeat(1001) })) as any).ok, false);
@@ -205,7 +205,7 @@ assert.equal(await al.autoLinkRecent(SOON), 1, "only the run matches the easy ru
 let easy = (await g.sessionsOf(rg.id)).find((s) => s.id === easyId)!;
 assert.equal(easy.actual?.id, 101); assert.equal(easy.status, "done", "50 of 60 planned minutes counts as done"); assert.equal(easy.minutes, 50);
 assert.match(g.sessionJson(easy).actual!.summary, /^Actual: 5\.0 mi in 50:00, 10:04 \/mi, avg HR 152 \(Strava\)$/);
-assert.match(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /Actual: 5\.0 mi in 50:00[\s\S]*Planned by Life Stack/);
+assert.match(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /^Goal: Run goal\nActual: 5\.0 mi in 50:00, .*\(Strava\)$/);
 assert.equal(await al.autoLinkRecent(SOON), 0, "nothing new to pair the second time");
 const longAct = await g.linkActivity(longId, 102) as any;
 assert.ok(longAct.ok); assert.equal(longAct.completed, false, "25 of 120 minutes leaves the session planned"); assert.equal(longAct.session.status, "planned");

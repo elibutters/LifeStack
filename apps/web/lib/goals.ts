@@ -295,7 +295,7 @@ function refreshCalendar() {
 }
 
 const eventBody = (g: Goal, note?: string | null, actual?: Actual | null) =>
-  [`Goal: ${g.title}`, g.thesis ? g.thesis.slice(0, 500) : "", note ?? "", actual ? actualLine(actual) : ""].filter(Boolean).concat(["", "Planned by Life Stack."]).join("\n");
+  [`Goal: ${g.title}`, g.thesis ? g.thesis.slice(0, 500) : "", note ?? "", actual ? actualLine(actual) : ""].filter(Boolean).join("\n");
 
 // Sessions saved before Outlook was ready (or whose event failed) get their calendar events now.
 export async function pushToCalendar(goalId?: string, now = new Date()) {
