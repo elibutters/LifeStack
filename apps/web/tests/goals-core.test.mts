@@ -135,5 +135,6 @@ console.log("goals-core: ok");
   assert.deepEqual(sl.matchSessions([mk("a", "Run", "2026-11-10", 420, 480, { status: "skipped" })], [act(1, "2026-11-10", 425)], new Set()), [], "a skipped session is left alone");
   assert.ok(sl.completes(60, 2520) && !sl.completes(60, 2400), "42 of 60 minutes is enough, 40 is not"); assert.equal(sl.completes(60, null), false);
   assert.equal(sl.actualLine({ id: 1, name: "x", sport: "Run", distanceM: 5000, movingS: 1500, avgHr: 150, start: "" }), "Actual: 3.1 mi in 25:00, 8:03 /mi, avg HR 150 (Strava)");
+  assert.equal(sl.stravaUrl(20796624826), "https://www.strava.com/activities/20796624826");
   assert.equal(sl.actualLine({ id: 1, name: "Lift", sport: "WeightTraining", distanceM: null, movingS: 3725, avgHr: null, start: "" }), "Actual: 1:02:05 (Strava)", "no distance, no pace");
 }
