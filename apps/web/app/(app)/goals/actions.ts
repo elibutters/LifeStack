@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
-import { completeSession, moveSession, skipSession } from "@/lib/goals";
+import { completeSession, moveSession, refreshEventBodies, skipSession } from "@/lib/goals";
 import { afterResponse, ensureNotebook, notebookHook } from "@/lib/goals-notion";
 
 // Every action checks the session itself (server actions are POSTs to the page) and goes back to /goals with a short note when
@@ -45,4 +45,12 @@ export async function notebookAction(form: FormData): Promise<void> {
   await requireSession();
   const r = await ensureNotebook(String(form.get("goalId") ?? ""));
   back(r.state === "ok" || r.state === "exists" ? undefined : (r.help ?? "Could not create the notebook."));
+}
+
+// Rewrites the Outlook events of the saved sessions in the current layout; press again while some are left.
+export async function refreshCalendarAction(): Promise<void> {
+  await requireSession();
+  const r = await refreshEventBodies({ budgetMs: 45_000 });
+  if (r.calendar !== "ok") return back("Reconnect Outlook on the Connections page to let Life Stack update your calendar.");
+  back(r.remaining > 0 ? `Updated ${r.updated} calendar events, ${r.remaining} left. Press the button again to continue.` : r.updated > 0 ? `Updated ${r.updated} calendar events. They are all current.` : "Every calendar event is already current.");
 }

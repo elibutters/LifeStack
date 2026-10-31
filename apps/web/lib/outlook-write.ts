@@ -110,3 +110,24 @@ export const deleteEvent = (id: string) =>
     }
     return true as const;
   });
+
+// Rewrites the body of several events on one access token (an event the owner deleted in Outlook counts as done: there is nothing to
+// update). Stops when `deadline` (epoch ms) passes. Returns which ids were done and how many failed for another reason.
+export const updateBodies = (items: { id: string; body: string }[], deadline: number) =>
+  withWriteToken(async (token) => {
+    const done: string[] = [];
+    let failed = 0;
+    for (const it of items) {
+      if (Date.now() > deadline) break;
+      try {
+        await graphSend("PATCH", `${GRAPH}/me/events/${encodeURIComponent(it.id)}`, token, eventPatch({ body: it.body }));
+        done.push(it.id);
+      } catch (e) {
+        if (!(e instanceof GraphError)) throw e;
+        if (e.status === 404) done.push(it.id);
+        else if (e.status === 401 || e.status === 403) throw e;
+        else failed++;
+      }
+    }
+    return { done, failed };
+  });

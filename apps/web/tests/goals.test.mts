@@ -270,6 +270,15 @@ await legacy("old-future", at("2026-12-20", 7 * 60), "skipped"); await legacy("o
 await legacy("old-past", at("2026-10-05", 7 * 60), "skipped"); await legacy("old-swapped", at("2026-10-06", 7 * 60), "skipped"); await legacy("old-swap-new", at("2026-10-06", 7 * 60), "planned");
 const read2 = new Map((await g.sessionsOf(rg.id, NOW)).map((x) => [x.id, x.status]));
 assert.deepEqual(["old-future", "old-future-real", "old-past", "old-swapped"].map((k) => read2.get(k)), ["replaced", "skipped", "skipped", "replaced"], "a recent skip is a skip; an old one that was a plan change is replaced");
+// ---- refreshing old calendar events: every saved session's event is rewritten once, in the current layout
+const patchesBefore = graph("PATCH").length;
+const refreshed = await g.refreshEventBodies({ now: NOW });
+assert.ok(refreshed.updated >= 1 && refreshed.remaining === 0 && refreshed.failed === 0 && refreshed.calendar === "ok", "the events with a saved session were rewritten");
+const bodies = graph("PATCH").slice(patchesBefore).map((c) => JSON.parse(c.body).body.content as string);
+assert.equal(bodies.length, refreshed.updated); assert.ok(bodies.every((b) => /^Goal: /.test(b) && !/Planned by Life Stack/.test(b)), "the new layout, without the old footer");
+assert.ok(bodies.some((b) => b.includes("https://www.strava.com/activities/101")), "a session with a linked run carries its Strava link");
+const again = await g.refreshEventBodies({ now: NOW });
+assert.deepEqual([again.updated, again.remaining], [0, 0], "nothing is rewritten twice");
 await db().delete(events).where(sql`${events.payload}->>'goalId' = ${rg.id} or ${events.sourceId} = ${`goal:${rg.id}`} or ${events.source} = 'strava'`);
 
 await wipe();

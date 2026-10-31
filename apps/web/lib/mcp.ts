@@ -19,7 +19,7 @@ import { getNote, kickSync, searchNotes } from "./notes";
 import { changeSetting, listSettings, resetSetting } from "./settings";
 import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
 import { logBlocks } from "./goals-notion-core";
-import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, replaceSession, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
+import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, refreshEventBodies, replaceSession, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
 import { addNotePage, appendToNote } from "./notes-write";
 import { NOTE_FORMAT } from "./session-note-core";
 import { addTodo, listTodos, updateTodo } from "./todos";
@@ -568,6 +568,11 @@ export function buildServer(token: VerifiedToken): McpServer {
           return fromResult(r);
         } catch (e) { console.error("mcp: link_strava_activity failed", describeError(e)); return fail("The tool could not save that."); }
       },
+    );
+    server.registerTool(
+      "refresh_calendar_events",
+      { description: "Rewrites the Outlook event of every saved session in the current layout (goal, plan, notes, the run and its Strava link), upcoming sessions first. It works for up to about 40 seconds per call and each event is only rewritten once, so call it again while remaining is above zero. Use it after the layout changed." },
+      guard(async () => ok(await refreshEventBodies())),
     );
     server.registerTool(
       "push_to_calendar",

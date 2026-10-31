@@ -11,7 +11,7 @@ import { notebookUrl } from "./goals-notion-core";
 import { after } from "next/server";
 import { loadActivity } from "./activities";
 import { syncOutlook } from "./outlook";
-import { createEvents, deleteEvent, updateEvent, type SessionEvent } from "./outlook-write";
+import { createEvents, deleteEvent, updateBodies, updateEvent, type SessionEvent } from "./outlook-write";
 import { loadOverrides } from "./settings-store";
 import { splitSessionNote, noteToText } from "./session-note-core";
 import { actualLine, completes, stravaUrl, type Actual } from "./strava-link-core";
@@ -42,7 +42,7 @@ export type Goal = { id: string; title: string; thesis: string; kind: (typeof GO
 // "replaced" is a session that was dropped because the plan changed: it is not something the owner skipped, so it is kept out of the calendar, the
 // counts and the goal's session list. Only the current plan is shown anywhere.
 export type SessionStatus = "planned" | "done" | "skipped" | "replaced";
-export type Session = { id: string; goalId: string; title: string; start: Date; end: Date; durationMin: number; status: SessionStatus; day: string; note: string | null; outlookEventId: string | null; movedFrom: string[]; doneAt: string | null; minutes: number | null; rating: number | null; actual: Actual | null; skippedAt: string | null };
+export type Session = { id: string; goalId: string; title: string; start: Date; end: Date; durationMin: number; status: SessionStatus; day: string; note: string | null; outlookEventId: string | null; movedFrom: string[]; doneAt: string | null; minutes: number | null; rating: number | null; actual: Actual | null; skippedAt: string | null; bodyV: number | null };
 
 const newId = (prefix: string) => `${prefix}${randomBytes(4).toString("hex")}`;
 type Row = typeof events.$inferSelect;
@@ -71,6 +71,7 @@ function sessionOf(r: Row): Session {
     status: (r.valueText as SessionStatus) ?? "planned", day: typeof p.day === "string" ? p.day : eng.localDay(r.ts, TZ), note: typeof p.note === "string" ? p.note : null,
     outlookEventId: typeof p.outlookEventId === "string" ? p.outlookEventId : null, movedFrom: Array.isArray(p.movedFrom) ? p.movedFrom.map(String) : [],
     doneAt: typeof p.doneAt === "string" ? p.doneAt : null, minutes: typeof p.minutes === "number" ? p.minutes : null, rating: typeof p.rating === "number" ? p.rating : null, actual: actualOf(p.actual), skippedAt: typeof p.skippedAt === "string" ? p.skippedAt : null,
+    bodyV: typeof p.bodyV === "number" ? p.bodyV : null,
   };
 }
 
@@ -326,6 +327,31 @@ const eventBody = (g: Goal, note?: string | null, actual?: Actual | null) => {
   if (actual) lines.push("", actualLine(actual), stravaUrl(actual.id));
   return lines.join("\n");
 };
+
+// The layout version of the event bodies. Raise it when eventBody changes and refreshEventBodies rewrites every older event once.
+export const BODY_VERSION = 1;
+
+// Rewrites the Outlook event of every saved session in the current layout, upcoming ones first, within a time budget; call again while
+// `remaining` is above zero. A session is marked with the version it was written at, so this never repeats work.
+export async function refreshEventBodies(opts: { budgetMs?: number; now?: Date } = {}) {
+  const now = opts.now ?? new Date();
+  const deadline = Date.now() + (opts.budgetMs ?? 40_000);
+  const goals = new Map((await listGoals()).map((g) => [g.id, g]));
+  const pending = (await sessionsOf(undefined, now))
+    .filter((s) => (s.status === "planned" || s.status === "done") && s.outlookEventId && s.bodyV !== BODY_VERSION)
+    .sort((a, b) => Number(a.end < now) - Number(b.end < now) || a.start.getTime() - b.start.getTime());
+  let updated = 0, failed = 0, calendar: CalendarState = "ok";
+  for (let i = 0; i < pending.length && Date.now() < deadline; i += 20) {
+    const chunk = pending.slice(i, i + 20);
+    const r = await updateBodies(chunk.map((s) => ({ id: s.outlookEventId!, body: eventBody(goals.get(s.goalId) ?? ({ title: "", thesis: "" } as Goal), s.note, s.actual) })), deadline);
+    if (!r.ok) { calendar = r.reason as CalendarState; break; }
+    failed += r.value.failed;
+    const ok = new Set(r.value.done);
+    for (const s of chunk) if (ok.has(s.outlookEventId!)) { await patchPayload(`session:${s.id}`, { bodyV: BODY_VERSION }); updated++; }
+    if (r.value.done.length < chunk.length) break; // out of time, or the rest failed: stop here
+  }
+  return { updated, failed, remaining: pending.length - updated, calendar };
+}
 
 // Sessions saved before Outlook was ready (or whose event failed) get their calendar events now.
 export async function pushToCalendar(goalId?: string, now = new Date()) {
