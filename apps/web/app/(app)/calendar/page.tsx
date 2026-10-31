@@ -6,6 +6,7 @@ import { EventRow, eventTone } from "@/components/event-row";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { itemsOnDay, loadCalendar, systemStatus } from "@/lib/calendar";
+import { sessionsForItems, type SessionDetail } from "@/lib/calendar-sessions";
 import { syncPlanHorizon } from "@/lib/fitness-plan";
 import { syncOutlookIfStale } from "@/lib/outlook";
 import { requireSession } from "@/lib/auth";
@@ -45,6 +46,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const selected = isValidDay(sp.d) && cells.includes(sp.d) ? sp.d : today.startsWith(month) ? today : `${month}-01`;
   const dayItems = itemsOnDay(items, selected);
   const notConnected = status.ok && !status.calendarConnected;
+  const sessions = await sessionsForItems(dayItems).catch(() => new Map<number, SessionDetail>());
 
   return (
     <>
@@ -132,9 +134,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
         <Card title={fmtDayLong(selected)}>
           {dayItems.length > 0 ? (
-            <ul className="w-max min-w-full divide-y divide-line">
+            <ul className="w-full divide-y divide-line">
               {dayItems.map((i) => (
-                <EventRow key={i.id} item={i} day={selected} />
+                <EventRow key={i.id} item={i} day={selected} session={sessions.get(i.id)} />
               ))}
             </ul>
           ) : failed ? (

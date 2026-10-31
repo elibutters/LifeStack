@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Card } from "@/components/card";
+import { SessionBody } from "@/components/event-row";
 import { PageHeader } from "@/components/page-header";
 import { requireSession } from "@/lib/auth";
 import { TZ } from "@/lib/dates";
@@ -14,6 +15,33 @@ const small = "h-8 rounded-md border border-line px-3 text-sm text-muted hover:b
 const time = (iso: string) => new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 const when = (iso: string) => new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 const hours = (min: number) => (min >= 60 ? `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}` : `${min} min`);
+
+const TONE: Record<string, string> = { done: "bg-ok/15 text-ok", skipped: "bg-fg/10 text-muted", planned: "bg-warn/15 text-warn" };
+type Detail = NonNullable<Awaited<ReturnType<typeof getGoal>>>;
+type SessionItem = Detail["sessions"][number];
+
+// One session in a goal: status top right (or the buttons while it is still planned), then the time, and the note and linked run on one line.
+function SessionRow({ s, now }: { s: SessionItem; now: number }) {
+  const late = s.status === "planned" && Date.parse(s.end) < now;
+  return (
+    <li className="py-2">
+      <div className="flex items-start justify-between gap-3">
+        <p className={s.status === "skipped" ? "text-muted line-through" : "font-medium"}>{s.title}</p>
+        {s.status === "planned" && !late ? (
+          <div className="flex shrink-0 gap-2">
+            <Btn action={doneAction} id={s.id} label="Done" />
+            <Btn action={moveAction} id={s.id} label="Move" />
+            <Btn action={skipAction} id={s.id} label="Skip" />
+          </div>
+        ) : (
+          <span className={`shrink-0 rounded-sm px-1.5 py-0.5 text-xs capitalize ${late ? "bg-danger/15 text-danger" : (TONE[s.status] ?? TONE.planned)}`}>{late ? "missed" : s.status}</span>
+        )}
+      </div>
+      <p className="text-xs text-muted">{when(s.start)} &middot; {s.minutes} min</p>
+      <SessionBody note={s.note} actual={s.actual} />
+    </li>
+  );
+}
 
 function Btn({ action, id, label, extra }: { action: (f: FormData) => Promise<void>; id: string; label: string; extra?: Record<string, string> }) {
   return (
@@ -84,7 +112,7 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
             <p className="py-2 text-sm text-muted">Goals are planned with your assistant: tell it what you are working toward and when, and it fits sessions into your real free time and puts them on your calendar. Try &quot;set up interview prep, interview on Nov 9, an hour every other day&quot;.</p>
           </Card>
         ) : (
-          details.map(({ goal, progress, next, notebook }) => {
+          details.map(({ goal, progress, next, notebook, sessions }) => {
             const total = progress.done + progress.planned + progress.skipped;
             return (
               <Card key={goal.id} title={goal.title} action={<span className="text-xs text-muted">{goal.status}</span>}>
@@ -96,6 +124,25 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                 <p className="mt-0.5 text-xs text-muted">
                   {goal.kind}{goal.targetDay ? ` · by ${goal.targetDay}` : ""} &middot; when a session slips: {goal.mode}{next ? ` · next: ${when(next.start)}` : ""}
                 </p>
+                {(() => {
+                  const live = sessions.filter((s) => s.status !== "skipped");
+                  const skipped = sessions.filter((s) => s.status === "skipped");
+                  const now = Date.now();
+                  return (
+                    <div className="mt-3 space-y-2">
+                      <details>
+                        <summary className="cursor-pointer text-sm font-medium">Sessions ({live.length})</summary>
+                        {live.length ? <ul className="mt-1 divide-y divide-line">{live.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul> : <p className="py-2 text-sm text-muted">No sessions yet.</p>}
+                      </details>
+                      {skipped.length > 0 && (
+                        <details>
+                          <summary className="cursor-pointer text-sm text-muted">Skipped ({skipped.length})</summary>
+                          <ul className="mt-1 divide-y divide-line">{skipped.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul>
+                        </details>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {notebook ? (
                     <a href={notebook} target="_blank" rel="noopener noreferrer" className={small}>Open notebook</a>

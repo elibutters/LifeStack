@@ -216,6 +216,14 @@ assert.equal((await act(longId, { action: "link", activityId: null })).status, 2
 assert.doesNotMatch(JSON.parse(graph("PATCH").at(-1)!.body).body.content, /Actual/);
 assert.equal((await g.sessionsOf(rg.id)).find((s) => s.id === longId)!.actual, null, "unlinked");
 assert.equal((await act(longId, { action: "link", activityId: 102 })).status, 200); assert.equal((await act(longId, { action: "link", activityId: "x" })).status, 400);
+// a calendar item that is one of the goal's sessions carries the session's status, note and run
+const cs = await import("../lib/calendar-sessions.ts");
+const easyNow = (await g.sessionsOf(rg.id)).find((s) => s.id === easyId)!;
+const asItem = (id: number, sourceId?: string) => ({ id, title: "x", start: easyNow.start, end: easyNow.end, allDay: false, kind: "event" as const, sourceId });
+const hits = await cs.sessionsForItems([asItem(1, easyNow.outlookEventId!), asItem(2, "other"), asItem(3)]);
+assert.deepEqual([...hits.keys()], [1], "only the item whose event id belongs to a session is matched");
+assert.equal(hits.get(1)!.goal, "Run goal"); assert.equal(hits.get(1)!.status, "done"); assert.equal(hits.get(1)!.actual?.url, "https://www.strava.com/activities/101");
+assert.equal((await cs.sessionsForItems([asItem(3)])).size, 0);
 await db().delete(events).where(sql`${events.payload}->>'goalId' = ${rg.id} or ${events.sourceId} = ${`goal:${rg.id}`} or ${events.source} = 'strava'`);
 
 await wipe();

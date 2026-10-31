@@ -31,6 +31,7 @@ export type CalendarItem = {
   kind: CalendarKind;
   location?: string;
   detail?: string;
+  sourceId?: string; // the provider's id for it, such as the Outlook event id
 };
 
 export async function calendarItems(from: Date, to: Date): Promise<CalendarItem[]> {
@@ -59,6 +60,7 @@ export async function calendarItems(from: Date, to: Date): Promise<CalendarItem[
       kind: kind ?? "event",
       location: location ?? undefined,
       detail: detail ?? undefined,
+      sourceId: row.sourceId ?? undefined,
     };
     if (overlaps(item, from, to)) items.push(item);
   }
