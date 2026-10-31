@@ -277,6 +277,7 @@ assert.ok(refreshed.updated >= 1 && refreshed.remaining === 0 && refreshed.faile
 const bodies = graph("PATCH").slice(patchesBefore).map((c) => JSON.parse(c.body).body.content as string);
 assert.equal(bodies.length, refreshed.updated); assert.ok(bodies.every((b) => /^Goal: /.test(b) && !/Planned by Life Stack/.test(b)), "the new layout, without the old footer");
 assert.ok(bodies.some((b) => b.includes("https://www.strava.com/activities/101")), "a session with a linked run carries its Strava link");
+assert.ok(bodies.every((b) => !b.includes("Be ready to talk through any case")), "the goal's thesis is not copied onto its events");
 const again = await g.refreshEventBodies({ now: NOW });
 assert.deepEqual([again.updated, again.remaining], [0, 0], "nothing is rewritten twice");
 await db().delete(events).where(sql`${events.payload}->>'goalId' = ${rg.id} or ${events.sourceId} = ${`goal:${rg.id}`} or ${events.source} = 'strava'`);
