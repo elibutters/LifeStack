@@ -9,9 +9,11 @@ import { describeError } from "./errors";
 import * as eng from "./goals-core";
 import { notebookUrl } from "./goals-notion-core";
 import { after } from "next/server";
+import { loadActivity } from "./activities";
 import { syncOutlook } from "./outlook";
 import { createEvents, deleteEvent, updateEvent, type SessionEvent } from "./outlook-write";
 import { loadOverrides } from "./settings-store";
+import { actualLine, completes, type Actual } from "./strava-link-core";
 import { verifyBearer } from "./tokens";
 import { resolveAll, valueOf, type GoalScheduleT } from "./settings-core";
 
@@ -37,7 +39,7 @@ export const GoalPatch = z.object({ title: z.string().trim().min(1).max(120), th
 
 export type Goal = { id: string; title: string; thesis: string; kind: (typeof GOAL_KINDS)[number]; targetDay: string | null; mode: (typeof GOAL_MODES)[number]; status: (typeof GOAL_STATUSES)[number]; config: Record<string, unknown>; notionPageId: string | null; createdAt: string };
 export type SessionStatus = "planned" | "done" | "skipped";
-export type Session = { id: string; goalId: string; title: string; start: Date; end: Date; durationMin: number; status: SessionStatus; day: string; note: string | null; outlookEventId: string | null; movedFrom: string[]; doneAt: string | null; minutes: number | null; rating: number | null };
+export type Session = { id: string; goalId: string; title: string; start: Date; end: Date; durationMin: number; status: SessionStatus; day: string; note: string | null; outlookEventId: string | null; movedFrom: string[]; doneAt: string | null; minutes: number | null; rating: number | null; actual: Actual | null };
 
 const newId = (prefix: string) => `${prefix}${randomBytes(4).toString("hex")}`;
 type Row = typeof events.$inferSelect;
@@ -51,6 +53,13 @@ function goalOf(r: Row): Goal {
   };
 }
 
+function actualOf(v: unknown): Actual | null {
+  const a = rec(v);
+  if (typeof a.id !== "number" || typeof a.start !== "string") return null;
+  const num = (x: unknown) => (typeof x === "number" ? x : null);
+  return { id: a.id, name: typeof a.name === "string" ? a.name : null, sport: typeof a.sport === "string" ? a.sport : "Workout", distanceM: num(a.distanceM), movingS: num(a.movingS), avgHr: num(a.avgHr), start: a.start };
+}
+
 function sessionOf(r: Row): Session {
   const p = rec(r.payload);
   const end = new Date(String(p.end));
@@ -58,7 +67,7 @@ function sessionOf(r: Row): Session {
     id: r.sourceId!.slice("session:".length), goalId: String(p.goalId), title: String(p.title ?? ""), start: r.ts, end, durationMin: Math.round((end.getTime() - r.ts.getTime()) / 60000),
     status: (r.valueText as SessionStatus) ?? "planned", day: typeof p.day === "string" ? p.day : eng.localDay(r.ts, TZ), note: typeof p.note === "string" ? p.note : null,
     outlookEventId: typeof p.outlookEventId === "string" ? p.outlookEventId : null, movedFrom: Array.isArray(p.movedFrom) ? p.movedFrom.map(String) : [],
-    doneAt: typeof p.doneAt === "string" ? p.doneAt : null, minutes: typeof p.minutes === "number" ? p.minutes : null, rating: typeof p.rating === "number" ? p.rating : null,
+    doneAt: typeof p.doneAt === "string" ? p.doneAt : null, minutes: typeof p.minutes === "number" ? p.minutes : null, rating: typeof p.rating === "number" ? p.rating : null, actual: actualOf(p.actual),
   };
 }
 
@@ -125,7 +134,7 @@ export async function getGoal(id: string) {
   return { goal, notebook: goal.notionPageId ? notebookUrl(goal.notionPageId) : null, sessions: sessions.map(sessionJson), progress: { planned: sessions.filter((s) => s.status === "planned").length, done: done.length, skipped: sessions.filter((s) => s.status === "skipped").length, minutesDone: done.reduce((n, s) => n + (s.minutes ?? s.durationMin), 0) }, next: next && sessionJson(next) };
 }
 
-export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title: s.title, start: s.start.toISOString(), end: s.end.toISOString(), minutes: s.durationMin, status: s.status, note: s.note, onCalendar: !!s.outlookEventId, movedFrom: s.movedFrom, doneAt: s.doneAt, minutesSpent: s.minutes, rating: s.rating });
+export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title: s.title, start: s.start.toISOString(), end: s.end.toISOString(), minutes: s.durationMin, status: s.status, note: s.note, onCalendar: !!s.outlookEventId, movedFrom: s.movedFrom, doneAt: s.doneAt, minutesSpent: s.minutes, rating: s.rating, actual: s.actual && { ...s.actual, summary: actualLine(s.actual) } });
 
 // ---- free time
 // Meetings (not all-day events, not holidays) as busy time, leaving out the Outlook copies of Life Stack's own sessions: those are
@@ -285,14 +294,15 @@ function refreshCalendar() {
   }
 }
 
-const eventBody = (g: Goal, note?: string | null) => [`Goal: ${g.title}`, g.thesis ? g.thesis.slice(0, 500) : "", note ?? "", "", "Planned by Life Stack."].filter((x, i) => x || i === 3).join("\n");
+const eventBody = (g: Goal, note?: string | null, actual?: Actual | null) =>
+  [`Goal: ${g.title}`, g.thesis ? g.thesis.slice(0, 500) : "", note ?? "", actual ? actualLine(actual) : ""].filter(Boolean).concat(["", "Planned by Life Stack."]).join("\n");
 
 // Sessions saved before Outlook was ready (or whose event failed) get their calendar events now.
 export async function pushToCalendar(goalId?: string, now = new Date()) {
   const goals = new Map((await listGoals()).map((g) => [g.id, g]));
   const todo = (await sessionsOf(goalId)).filter((s) => s.status === "planned" && !s.outlookEventId && s.end > now);
   if (todo.length === 0) return { calendar: "ok" as CalendarState, pushed: 0 };
-  const cal = await createEvents(todo.map((s) => ({ key: s.id, title: s.title, start: s.start, end: s.end, body: eventBody(goals.get(s.goalId) ?? ({ title: "", thesis: "" } as Goal), s.note) })));
+  const cal = await createEvents(todo.map((s) => ({ key: s.id, title: s.title, start: s.start, end: s.end, body: eventBody(goals.get(s.goalId) ?? ({ title: "", thesis: "" } as Goal), s.note, s.actual) })));
   if (!cal.ok) return { calendar: cal.reason as CalendarState, pushed: 0 };
   for (const v of cal.value) await patchPayload(`session:${v.key}`, { outlookEventId: v.id });
   refreshCalendar();
@@ -326,9 +336,31 @@ export async function setSessionNote(id: string, input: unknown) {
   const note = p.data.note || null;
   await patchPayload(`session:${id}`, { note });
   const goal = (await listGoals()).find((g) => g.id === s.goalId);
-  const cal = s.outlookEventId ? await updateEvent(s.outlookEventId, { body: eventBody(goal ?? ({ title: "", thesis: "" } as Goal), note) }) : null;
+  const cal = s.outlookEventId ? await updateEvent(s.outlookEventId, { body: eventBody(goal ?? ({ title: "", thesis: "" } as Goal), note, s.actual) }) : null;
   if (cal && cal.ok) refreshCalendar();
   return { ok: true as const, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
+}
+
+// Attaches a Strava activity to a session (or detaches it with null): the actual run is stored on the session, shown in the goal and written
+// into the Outlook event body. An activity at least 70% of the planned minutes also marks a planned session done with the real minutes.
+// `completed` tells the caller a session just became done, so it can log that to the goal's notebook.
+export async function linkActivity(id: string, activityId: number | null) {
+  const s = await sessionRow(id);
+  if (!s) return { ok: false as const, error: "No such session." };
+  let actual: Actual | null = null;
+  if (activityId !== null) {
+    const a = await loadActivity(activityId);
+    if (!a || a.id === null) return { ok: false as const, error: "No such Strava activity. Use get_activities for an id." };
+    const other = (await sessionsOf()).find((x) => x.actual?.id === activityId && x.id !== id);
+    if (other) return { ok: false as const, error: `That activity is already linked to "${other.title}".` };
+    actual = { id: a.id, name: a.name, sport: a.sport, distanceM: a.distanceM, movingS: a.movingS, avgHr: a.avgHr, start: a.start };
+  }
+  const done = !!actual && s.status === "planned" && completes(s.durationMin, actual.movingS);
+  await patchPayload(`session:${id}`, { actual, ...(done ? { doneAt: new Date().toISOString(), minutes: Math.max(1, Math.round(actual!.movingS! / 60)) } : {}) }, done ? { valueText: "done" } : {});
+  const goal = (await listGoals()).find((g) => g.id === s.goalId);
+  const cal = s.outlookEventId ? await updateEvent(s.outlookEventId, { body: eventBody(goal ?? ({ title: "", thesis: "" } as Goal), s.note, actual) }) : null;
+  if (cal && cal.ok) refreshCalendar();
+  return { ok: true as const, completed: done, calendar: (cal ? (cal.ok ? "ok" : cal.reason) : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
 }
 
 export async function skipSession(id: string) {
@@ -410,6 +442,7 @@ const Action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("skip") }),
   z.object({ action: z.literal("move"), start: z.iso.datetime({ offset: true }).optional() }),
   NoteBody.extend({ action: z.literal("note") }),
+  z.object({ action: z.literal("link"), activityId: z.number().int().positive().nullable() }),
 ]);
 export type SessionActionEvent = { action: "done" | "skip" | "move"; session: ReturnType<typeof sessionJson>; note?: string };
 // `after` lets a caller (the route) do something once the action has succeeded, such as logging it to the goal's Notion notebook.
@@ -423,9 +456,11 @@ export const handleSessionAction = (req: Request, rawId: string, after?: (e: Ses
     const a = Action.safeParse(body);
     if (!a.success) return json({ error: "invalid" }, 400);
     const act = a.data;
-    const r = act.action === "done" ? await completeSession(rawId, act) : act.action === "skip" ? await skipSession(rawId) : act.action === "note" ? await setSessionNote(rawId, act) : await moveSession(rawId, { start: act.start });
+    const r = act.action === "done" ? await completeSession(rawId, act) : act.action === "skip" ? await skipSession(rawId) : act.action === "note" ? await setSessionNote(rawId, act) : act.action === "link" ? await linkActivity(rawId, act.activityId) : await moveSession(rawId, { start: act.start });
     if (r.ok) {
-      if (act.action !== "note") after?.({ action: act.action, session: r.session, note: act.action === "done" ? act.note : undefined });
+      if (act.action === "link") {
+        if ("completed" in r && r.completed) after?.({ action: "done", session: r.session });
+      } else if (act.action !== "note") after?.({ action: act.action, session: r.session, note: act.action === "done" ? act.note : undefined });
       return json(r);
     }
     return json({ error: "failed", message: r.error }, r.error === "No such session." ? 404 : 409);

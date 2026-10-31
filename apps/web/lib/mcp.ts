@@ -18,7 +18,7 @@ import { getNote, kickSync, searchNotes } from "./notes";
 import { changeSetting, listSettings, resetSetting } from "./settings";
 import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
 import { logBlocks } from "./goals-notion-core";
-import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, pushToCalendar, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
+import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
 import { addNotePage, appendToNote } from "./notes-write";
 import { addTodo, listTodos, updateTodo } from "./todos";
 import { addOption, addWant, listWants, updateOption } from "./wants";
@@ -543,6 +543,20 @@ export function buildServer(token: VerifiedToken): McpServer {
       { description: "Sets the note on a session, replacing the old one (empty text clears it), and updates the Outlook event body to match. Use it to add detail to a workout before it happens or comments after, such as pace, how it felt, or what to fuel with. The note is also returned by get_goal and get_tonight.", inputSchema: { id: z.string(), note: z.string() } },
       async ({ id, note }) => {
         try { return fromResult(await setSessionNote(id, { note })); } catch (e) { console.error("mcp: set_session_note failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "link_strava_activity",
+      {
+        description: "Attaches a Strava activity (id from get_activities) to a goal session, or detaches it with activityId null. The actual distance, time and heart rate then show on the session and in its Outlook event, and an activity of at least 70% of the planned minutes marks a planned session done. Life Stack already pairs activities with sessions on its own after each sync; use this to fix a wrong or missed pairing.",
+        inputSchema: { id: z.string(), activityId: z.number().int().nullable() },
+      },
+      async ({ id, activityId }) => {
+        try {
+          const r = await linkActivity(id, activityId);
+          if (r.ok && r.completed) afterResponse(() => notebookHook({ type: "done", session: r.session }));
+          return fromResult(r);
+        } catch (e) { console.error("mcp: link_strava_activity failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
     server.registerTool(
