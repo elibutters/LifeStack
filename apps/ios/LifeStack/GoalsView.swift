@@ -149,7 +149,7 @@ struct GoalsView: View {
     }
 
     private func goalCard(_ g: GoalDetail) -> some View {
-        let total = g.progress.done + g.progress.planned + g.progress.skipped
+        let total = g.progress.done + g.progress.planned   // skipped sessions are not part of the count
         return Card(title: g.goal.title, trailing: g.goal.status) {
             if !g.goal.thesis.isEmpty { Text(g.goal.thesis).font(.subheadline).foregroundStyle(Theme.muted).lineLimit(4) }
             ProgressView(value: total == 0 ? 0 : Double(g.progress.done) / Double(total)).tint(Theme.sky)
@@ -166,7 +166,7 @@ struct GoalsView: View {
         let live = all.filter { $0.status != "skipped" }
         let skipped = all.filter { $0.status == "skipped" }
         if !live.isEmpty {
-            DisclosureGroup("Sessions (\(live.count))") { VStack(alignment: .leading, spacing: 10) { ForEach(live) { sessionRow($0) } }.padding(.top, 6) }
+            DisclosureGroup("Sessions \u{00B7} \(live.filter { $0.status == "done" }.count) / \(live.count) done") { VStack(alignment: .leading, spacing: 10) { ForEach(live) { sessionRow($0) } }.padding(.top, 6) }
                 .font(.subheadline.weight(.medium)).tint(Theme.muted)
         }
         if !skipped.isEmpty {

@@ -113,7 +113,7 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
           </Card>
         ) : (
           details.map(({ goal, progress, next, notebook, sessions }) => {
-            const total = progress.done + progress.planned + progress.skipped;
+            const total = progress.done + progress.planned; // the sessions still in the plan; skipped ones are not part of the count
             return (
               <Card key={goal.id} title={goal.title} action={<span className="text-xs text-muted">{goal.status}</span>}>
                 {goal.thesis && <p className="mb-2 text-sm text-muted">{goal.thesis.length > 220 ? `${goal.thesis.slice(0, 220)}...` : goal.thesis}</p>}
@@ -131,7 +131,13 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                   return (
                     <div className="mt-3 space-y-2">
                       <details>
-                        <summary className="cursor-pointer text-sm font-medium">Sessions ({live.length})</summary>
+                        <summary className="flex cursor-pointer items-center gap-3 text-sm font-medium">
+                          Sessions
+                          <span className="font-normal text-muted tabular-nums">{live.filter((x) => x.status === "done").length} / {live.length} done</span>
+                          <span aria-hidden="true" className="h-1.5 w-24 overflow-hidden rounded-sm bg-raised">
+                            <span className="block h-full rounded-sm bg-accent/70" style={{ width: `${live.length ? Math.round((live.filter((x) => x.status === "done").length / live.length) * 100) : 0}%` }} />
+                          </span>
+                        </summary>
                         {live.length ? <ul className="mt-2 space-y-2">{live.map((s) => <SessionRow key={s.id} s={s} now={now} />)}</ul> : <p className="py-2 text-sm text-muted">No sessions yet.</p>}
                       </details>
                       {skipped.length > 0 && (
