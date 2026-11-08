@@ -1,0 +1,4 @@
+// Reuses the iPhone app's Local.xcconfig (gitignored): same team, bundle id prefix and API_BASE_URL.
+APP_BUNDLE_ID = com.example.lifestack
+API_BASE_URL =
+#include? "../ios/Local.xcconfig"

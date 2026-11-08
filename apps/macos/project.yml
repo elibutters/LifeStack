@@ -1,0 +1,34 @@
+name: LifeStackMac
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    macOS: "15.0"
+configFiles:
+  Debug: Config.xcconfig
+  Release: Config.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  LifeStackMac:
+    type: application
+    platform: macOS
+    sources:
+      - LifeStackMac
+      # Shared with the iPhone app: the same API client, models and key storage.
+      - ../ios/LifeStack/APIClient.swift
+      - ../ios/LifeStack/Models.swift
+      - ../ios/LifeStack/Keychain.swift
+    info:
+      path: LifeStackMac/Info.plist
+      properties:
+        CFBundleDisplayName: Life Stack
+        LSUIElement: true   # menu bar only: no Dock icon
+        LSBaseURL: $(API_BASE_URL)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).mac
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_APP_SANDBOX: NO
