@@ -6,6 +6,7 @@ import { describeError } from "./errors";
 import { verifyBearer } from "./tokens";
 import { loadActivities, totals } from "./activities";
 import { workoutsOverview } from "./workouts";
+import { syncOutlookIfStale } from "./outlook";
 import { calendarRange, connectionsStatus, financeSummary, holdingsList, MAX_RANGE_DAYS, overview, searchTransactions, sleepNights } from "./app-data";
 
 // Read-only JSON endpoints for the iPhone app (and any other client). /api/v1/ skips the session gate
@@ -49,6 +50,8 @@ export const handleCalendar = (req: Request) =>
     if (!Day.safeParse(from).success || !Day.safeParse(to).success) return bad("from and to must be YYYY-MM-DD");
     if (to < from) return bad("to is before from");
     if (addDays(from, MAX_RANGE_DAYS) < to) return bad(`range is limited to ${MAX_RANGE_DAYS} days`);
+    // Opening the phone calendar refreshes Outlook if it is stale (throttled, errors swallowed), like the web pages do.
+    await syncOutlookIfStale();
     return json({ from, to, items: await calendarRange(from, to) });
   });
 
