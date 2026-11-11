@@ -38,4 +38,6 @@ const ev = { title: "Call Mom", start: "2026-11-11T22:00:00.000Z", end: "2026-11
 assert.equal(S.addEvent({ event: ev }, NY), 'Added "Call Mom" to your calendar for Wed 5:00 PM to 5:30 PM.');
 assert.equal(S.moveEvent({ event: { ...ev, start: "2026-11-11T23:00:00.000Z", end: "2026-11-11T23:30:00.000Z" }, was: ev }, NY), 'Moved "Call Mom" from Wed 5:00 PM to Wed 6:00 PM to 6:30 PM.');
 assert.equal(S.removeEvent({ removed: ev }, NY), 'Removed "Call Mom" (Wed 5:00 PM to 5:30 PM) from your calendar.');
+assert.equal(S.deleteGoal({ deleted: { title: "Calls & personal", sessions: 2, finished: 0, calendarEvents: 1 }, notebook: null }), 'Deleted the goal "Calls & personal" and its 2 sessions, and removed 1 calendar event.');
+assert.equal(S.deleteGoal({ deleted: { title: "Old", sessions: 1, finished: 1, calendarEvents: 0 }, notebook: "https://www.notion.so/abc" }), 'Deleted the goal "Old" and its 1 session (1 finished). Its Notion notebook was left alone; delete that page by hand if you want it gone: https://www.notion.so/abc');
 console.log("mcp-summaries tests passed");

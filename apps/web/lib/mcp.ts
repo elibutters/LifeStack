@@ -26,6 +26,7 @@ import { sessionsForItems } from "./calendar-sessions";
 import { buildInstructions } from "./mcp-instructions";
 import { findSessions, logSession } from "./session-log";
 import { addEvent, moveEvent, oneOffsForItems, removeEvent } from "./oneoff";
+import { deleteGoal } from "./goal-delete";
 import { addNotePage, appendToNote } from "./notes-write";
 import { NOTE_FORMAT } from "./session-note-core";
 import { addTodo, listTodos, updateTodo } from "./todos";
@@ -638,6 +639,17 @@ export function buildServer(token: VerifiedToken): McpServer {
       async ({ id }) => {
         try { return fromResult(await removeEvent(id), (x) => summaries.removeEvent(x, TZ)); }
         catch (e) { console.error("mcp: delete_event failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "delete_goal",
+      {
+        description: "Deletes a goal for good, with all its sessions and their calendar events. This cannot be undone, so only do it when the owner has asked for that goal to be deleted. The goal must already be archived (update_goal status archived) or still a draft, and confirmTitle must be its exact title. A goal with finished sessions is refused (that is history) unless deleteHistory is true. If anything cannot be removed from the calendar nothing is deleted. The Notion notebook is never touched; the answer gives its address so the owner can delete the page.",
+        inputSchema: { id: z.string(), confirmTitle: z.string(), deleteHistory: z.boolean().optional() },
+      },
+      async ({ id, ...rest }) => {
+        try { return fromResult(await deleteGoal(id, rest), (x) => summaries.deleteGoal(x)); }
+        catch (e) { console.error("mcp: delete_goal failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
     server.registerTool(
