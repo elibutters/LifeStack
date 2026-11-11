@@ -33,4 +33,9 @@ assert.match(S.commit({ saved: 2, calendar: "needs_reconnect" }), /^Saved 2 sess
 assert.equal(S.push({ pushed: 2, calendar: "ok" }), "Added 2 sessions to the calendar.");
 assert.equal(S.push({ pushed: 0, calendar: "ok" }), "Every saved session is already on the calendar.");
 assert.equal(S.push({ pushed: 0, calendar: "not_connected" }), "Nothing was added to the calendar (Outlook is not connected).");
+
+const ev = { title: "Call Mom", start: "2026-11-11T22:00:00.000Z", end: "2026-11-11T22:30:00.000Z" };
+assert.equal(S.addEvent({ event: ev }, NY), 'Added "Call Mom" to your calendar for Wed 5:00 PM to 5:30 PM.');
+assert.equal(S.moveEvent({ event: { ...ev, start: "2026-11-11T23:00:00.000Z", end: "2026-11-11T23:30:00.000Z" }, was: ev }, NY), 'Moved "Call Mom" from Wed 5:00 PM to Wed 6:00 PM to 6:30 PM.');
+assert.equal(S.removeEvent({ removed: ev }, NY), 'Removed "Call Mom" (Wed 5:00 PM to 5:30 PM) from your calendar.');
 console.log("mcp-summaries tests passed");

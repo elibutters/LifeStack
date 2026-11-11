@@ -23,6 +23,7 @@ export function buildInstructions(scopes: readonly string[]): string {
               "  - Planned for a different time that has not happened yet: move_session (it refuses overlaps; find_free_time shows what is open).",
               "  - The owner chose not to do it: skip_session. The plan changed and it is no longer wanted: replace_session (or commit_plan's replaces). Never skip a session in order to reschedule it.",
               "- Add detail or comments to a session with set_session_note.",
+              "- A one-off that belongs to no goal (a call, an appointment, an errand): add_event, then move_event or delete_event with the id it returns (get_calendar shows oneOff.id on events added this way). Never create a goal just to hold one.",
             ]
           : []),
       ].join("\n"),

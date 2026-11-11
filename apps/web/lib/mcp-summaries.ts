@@ -11,7 +11,16 @@ const when = (iso: string, tz: string) => new Intl.DateTimeFormat("en-US", { tim
 const name = (s: Session) => `"${s.title}"`;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+const clock = (iso: string, tz: string) => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+const span = (start: string, end: string, tz: string) => `${when(start, tz)} to ${clock(end, tz)}`;
+type OneOff = { title: string; start: string; end: string };
+
 export const summaries = {
+  // One-off calendar events (no goal).
+  addEvent: ({ event }: { event: OneOff }, tz: string) => `Added "${event.title}" to your calendar for ${span(event.start, event.end, tz)}.`,
+  moveEvent: ({ event, was }: { event: OneOff; was: { start: string; end: string } }, tz: string) => `Moved "${event.title}" from ${when(was.start, tz)} to ${span(event.start, event.end, tz)}.`,
+  removeEvent: ({ removed }: { removed: OneOff }, tz: string) => `Removed "${removed.title}" (${span(removed.start, removed.end, tz)}) from your calendar.`,
+
   complete: ({ session: s }: { session: Session }) =>
     `Marked ${name(s)} done (${s.minutesSpent ?? s.minutes} min${s.rating ? `, rated ${s.rating}/5` : ""}${s.logNote ? ", with a note" : ""}).`,
 

@@ -41,6 +41,9 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   sessions can be added (`lib/outlook-write.ts`): only events Life Stack created itself, always in the "Life Stack" category and
   created idempotently, are ever changed or deleted. Anything that only reads asks for the narrower scopes, so an older
   connection keeps syncing until the owner reconnects to approve writing.
+  One-off events that belong to no goal (a call, an appointment) go through `lib/oneoff.ts` (`add_event`, `move_event`, `delete_event`): same
+  "Life Stack" category, same idempotent create, remembered in an `events` row (source `oneoff`) because only events Life Stack added are ever moved
+  or deleted. An agent must never invent a goal just to put something on the calendar.
   Mail is copied into the `emails` table (plain text, capped, classified by `lib/email-core.ts`) so agents have context;
   the owner chose this. It is read through `email:read` (agent keys; a phone key only if the owner ticks it on the keys page) and is never backed up.
   Work or employer calendars are never connected.
