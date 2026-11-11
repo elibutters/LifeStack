@@ -193,6 +193,7 @@ struct SessionBody: View {
     let extra: [NoteBlock]?   // cautions and context, collapsed so the plan stays short
     let summary: String?
     let url: String?
+    var done: Bool = false   // a finished session keeps its plan out of the way, one tap from open
     private func label(_ text: String) -> some View { Text(text).foregroundStyle(Theme.muted).frame(width: 44, alignment: .leading) }
 
     // Headings are small and muted, bullets get a dot, and plain lines stand as they are.
@@ -219,7 +220,10 @@ struct SessionBody: View {
         let actual = summary?.replacingOccurrences(of: "Actual: ", with: "").replacingOccurrences(of: " (Strava)", with: "")
         if !note.isEmpty || !more.isEmpty || actual != nil {
             VStack(alignment: .leading, spacing: 8) {
-                if !note.isEmpty { HStack(alignment: .top, spacing: 8) { label("Plan"); plan(note) } }
+                if !note.isEmpty {
+                    if done { DisclosureGroup("Plan") { plan(note).padding(.top, 4) }.tint(Theme.muted).foregroundStyle(Theme.muted) }
+                    else { HStack(alignment: .top, spacing: 8) { label("Plan"); plan(note) } }
+                }
                 if let actual {
                     HStack(alignment: .top, spacing: 8) {
                         label("Actual")
@@ -269,7 +273,7 @@ struct EventRow: View {
                     Text(Format.time(item)).font(.caption).foregroundStyle(Theme.muted)
                     if let place = item.location, !place.isEmpty { Text("· \(place)").font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
                 }
-                if let s = item.session { SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url).padding(.top, 2) }
+                if let s = item.session { SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url, done: s.status == "done").padding(.top, 2) }
             }
             Spacer(minLength: 0)
         }
