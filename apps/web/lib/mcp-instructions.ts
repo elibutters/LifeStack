@@ -24,6 +24,7 @@ export function buildInstructions(scopes: readonly string[]): string {
               "  - The owner chose not to do it: skip_session. The plan changed and it is no longer wanted: replace_session (or commit_plan's replaces). Never skip a session in order to reschedule it.",
               "- Add detail or comments to a session with set_session_note.",
               "- A one-off that belongs to no goal (a call, an appointment, an errand): add_event, then move_event or delete_event with the id it returns (get_calendar shows oneOff.id on events added this way). Never create a goal just to hold one.",
+              "- To remove a goal for good: archive it with update_goal, then delete_goal with its exact title. It cannot be undone, so only when the owner asks, and it is refused for a goal with finished sessions unless deleteHistory is set.",
             ]
           : []),
       ].join("\n"),
