@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { after } from "next/server";
 import { Card } from "@/components/card";
 import { MiniStages, NightBars, NightLine, ScoreRing, StageBar } from "@/components/sleep-viz";
 import { PageHeader } from "@/components/page-header";
@@ -29,7 +28,8 @@ function parseRange(raw: string | undefined) {
 
 export default async function SleepPage({ searchParams }: { searchParams: Promise<{ r?: string }> }) {
   await requireSession();
-  after(syncEightIfStale);
+  // Refresh before reading so a night imported while it was still scoring shows the finished score.
+  await syncEightIfStale();
   const range = parseRange((await searchParams).r);
   const [connected, loaded] = await Promise.all([getEightConnection().then((c) => !!c), loadNights(range.days)]);
   const today = ymd(new Date());
