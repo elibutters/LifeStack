@@ -96,20 +96,28 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
 
 ## Working with multiple agents
 
-There is one clone: this folder. Do not add extra git worktrees or sibling `LifeStack-*`
-directories. New work happens on a git branch here.
+Several agents (Claude Code, Cursor) work on this repo at the same time, so they must never share a
+working tree. The main folder (`/path/to/LifeStack`, on `main`) belongs to the owner. Every agent works
+in its own git worktree under `.worktrees/` (gitignored), on its own branch.
 
-- `git fetch` and start from current `origin/main`: `git switch -c <task> origin/main` (stash or
-  finish other uncommitted work first; never discard someone else's files).
+- Start a task: `bash scripts/new-worktree.sh <task>`. It fetches, creates `.worktrees/<task>` on a
+  new branch from current `origin/main`, links the gitignored `.env`, and installs dependencies. Then
+  work only inside that folder.
+- In the main folder never run `git stash`, `git reset --hard`, `git clean`, `git checkout -- <path>`,
+  `git restore`, or switch branches. They move or destroy other people's uncommitted files, and the
+  guard in `scripts/guard-git.mjs` (a Claude Code and Cursor hook) refuses them there. Inside your own
+  worktree they only affect you, but still never discard changes you did not make.
+- Commit early to your own branch (small WIP commits are fine). Committed work cannot be stashed away.
 - Small PRs, merged quickly. Run `pnpm test`, typecheck and build before opening one, and wait for
-  CI to finish before merging.
-- After a PR merges, delete the local branch (`git branch -d <task>`) and the remote branch
-  (`git push origin --delete <task>`). Fast-forward `main` to `origin/main`. Do not keep finished
-  feature branches around. GitHub should also auto-delete the head branch on merge.
-- Stage files by name, read `git diff --cached` before committing, never `git add -A` if another
-  agent may have touched the tree.
+  CI to finish before merging. `pnpm test` takes a lock on the shared `lifestack_test` database, so a
+  second run waits for the first; never run the suites against any other database.
+- After a PR merges, from the main folder run `git worktree remove .worktrees/<task>`, delete the local
+  branch (`git branch -D <task>`; squash merges need `-D`) and the remote branch
+  (`git push origin --delete <task>`). GitHub should also auto-delete the head branch on merge.
+  Fast-forward `main` with `git pull --ff-only` only if the main folder is clean.
+- Stage files by name, read `git diff --cached` before committing, never `git add -A`.
 - Production deploys come only from merges to main. No manual deploys.
-- If you find uncommitted changes that are not yours, leave them. Do not discard or commit them.
+- If you find uncommitted changes that are not yours, leave them. Do not discard, stash or commit them.
 
 ## Native iOS app (the end goal)
 

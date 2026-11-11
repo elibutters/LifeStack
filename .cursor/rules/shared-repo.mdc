@@ -1,0 +1,14 @@
+---
+description: Rules for working in this repo alongside other agents
+alwaysApply: true
+---
+
+Several agents work on this repo at the same time. Read `CLAUDE.md` ("Working with multiple agents").
+
+- Do your work in your own git worktree, never in the main folder: `bash scripts/new-worktree.sh <task>`,
+  then stay inside `.worktrees/<task>`.
+- In the main folder, never run `git stash`, `git reset --hard`, `git clean`, `git checkout -- <path>`,
+  `git restore`, or switch branches. Other agents have uncommitted work there.
+- Commit your work early to your own branch. Stage files by name; never `git add -A`.
+- If you find changes you did not make, leave them alone.
+- No personal information in the repo (`PRIVACY.md`).
