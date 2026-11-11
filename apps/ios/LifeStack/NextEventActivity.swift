@@ -12,6 +12,9 @@ enum NextEventActivity {
     private static var pending: Task<Void, Never>?
 
     static func sync(_ model: AppModel) async {
+        #if DEBUG
+        if UserDefaults.standard.string(forKey: "LS_SAMPLE_ACTIVITY") != nil { return }   // keep the sample card up
+        #endif
         let previous = pending
         let task = Task { @MainActor in
             await previous?.value
@@ -22,8 +25,10 @@ enum NextEventActivity {
     }
 
     private static func run(_ model: AppModel) async {
-        guard let client = model.client, let overview = try? await client.overview() else { return }
-        let chosen = pick(overview, now: Date())
+        // The calendar endpoint, not the overview: only it says whether a goal session is already done or skipped.
+        let start = Calendar.current.startOfDay(for: Date())
+        guard let client = model.client, let items = try? await client.calendar(from: start, to: Calendar.current.date(byAdding: .day, value: 2, to: start) ?? start) else { return }
+        let chosen = pick(items, now: Date())
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             DispatchQueue.main.async {
                 let followup = mutate(chosen)
@@ -57,9 +62,10 @@ enum NextEventActivity {
     }
 
     // An event already underway wins, then the soonest one inside the lead window, then an all-day event today.
-    private static func pick(_ overview: Overview, now: Date) -> NextEventAttributes? {
-        let items = (overview.calendar?.today ?? []) + (overview.calendar?.soon ?? [])
+    private static func pick(_ items: [CalendarItem], now: Date) -> NextEventAttributes? {
         let timed: [(CalendarItem, Date, Date)] = items.compactMap { item in
+            // A goal session already logged as done or skipped is over, whatever the clock says.
+            if let status = item.session?.status, status == "done" || status == "skipped" { return nil }
             guard !item.allDay, let start = Format.date(item.start) else { return nil }
             let end = Format.date(item.end).flatMap { $0 > start ? $0 : nil } ?? start.addingTimeInterval(60 * 60)
             guard end > now else { return nil }
@@ -70,7 +76,8 @@ enum NextEventActivity {
         if let chosen = underway ?? upcoming { return attributes(chosen) }
         let cal = Calendar.current
         guard let allDay = items.first(where: { item in
-            guard item.allDay, let day = Format.dayDate(String(item.start.prefix(10))) else { return false }
+            // Holidays are not something to attend, so they never get a card.
+            guard item.allDay, item.kind != "holiday", let day = Format.dayDate(String(item.start.prefix(10))) else { return false }
             return cal.isDate(day, inSameDayAs: now)
         }) else { return nil }
         let day = Format.dayDate(String(allDay.start.prefix(10))) ?? now
@@ -89,4 +96,21 @@ enum NextEventActivity {
         if now >= event.start { return .init(phase: .now, rangeStart: now, rangeEnd: event.end) }
         return .init(phase: .upcoming, rangeStart: now, rangeEnd: event.start)
     }
+
+    #if DEBUG
+    static func showSample(_ mode: String) {
+        let now = Date()
+        let allDay = mode == "allday"
+        let start = mode == "next" ? now.addingTimeInterval(25 * 60) : now.addingTimeInterval(-20 * 60)
+        let end = start.addingTimeInterval(60 * 60)
+        let attrs = NextEventAttributes(id: 9_999, title: allDay ? "Team offsite" : "Design review", start: allDay ? Calendar.current.startOfDay(for: now) : start, end: end, allDay: allDay, place: "Room 4")
+        let state = content(attrs, now: now)
+        // Same rule as the real path: ActivityKit's synchronous calls run on the main queue, outside a Swift task.
+        DispatchQueue.main.async {
+            for a in Activity<NextEventAttributes>.activities { Task { await a.end(nil, dismissalPolicy: .immediate) } }
+            do { _ = try Activity.request(attributes: attrs, content: ActivityContent(state: state, staleDate: nil)) }
+            catch { print("sample activity failed:", error) }
+        }
+    }
+    #endif
 }
