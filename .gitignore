@@ -34,3 +34,6 @@ apps/ios/LifeStackWidgets/Info.plist
 # macOS
 apps/macos/LifeStackMac.xcodeproj/
 apps/macos/LifeStackMac/Info.plist
+
+# Per-agent git worktrees (see CLAUDE.md)
+.worktrees/
