@@ -26,7 +26,8 @@ export async function handleMcp(req: Request, Transport: typeof WebStandardStrea
     const res = await transport.handleRequest(new Request(req.url, { method: "POST", headers: req.headers, body: text }));
     let body: unknown = null;
     try { body = JSON.parse(text); } catch { /* not JSON: nothing to record */ }
-    recordAfter(body, res, auth.token.id, started);
+    // Copy now, while the body is unread: by the time the recording runs after the response, the original has been sent.
+    recordAfter(body, res.clone(), auth.token.id, started);
     return res;
   } finally {
     await server.close();
