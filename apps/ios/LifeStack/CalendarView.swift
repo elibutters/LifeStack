@@ -495,7 +495,11 @@ struct CalendarItemSheet: View {
             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.warm.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.r, style: .continuous))
         }
-        if let plan = s.noteBlocks, !plan.isEmpty { card("Plan") { blocks(plan) } }
+        if let plan = s.noteBlocks, !plan.isEmpty {
+            // Once it is done the plan is history: folded away, one tap to read it again.
+            if s.status == "done" { card("Plan") { DisclosureGroup("Show plan") { blocks(plan).padding(.top, 6) }.tint(Theme.muted).foregroundStyle(Theme.muted) } }
+            else { card("Plan") { blocks(plan) } }
+        }
         if let a = s.actual {
             card("Actual") {
                 Text(a.summary.replacingOccurrences(of: "Actual: ", with: "").replacingOccurrences(of: " (Strava)", with: "")).font(.body)
