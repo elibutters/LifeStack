@@ -8,6 +8,8 @@ export type Call = {
   bytes: number;
   argKeys: string[];
   error?: string;
+  client?: string; // who called, from the request's User-Agent (see clientOf); older rows have none
+  ua?: string;     // the raw signature, kept short, so an unrecognised client can be named later
 };
 
 export type ToolStats = { tool: string; calls: number; errors: number; errorRate: number; avgMs: number; p95Ms: number; maxBytes: number; lastAt: Date };
@@ -88,3 +90,40 @@ export function outcomeOf(res: unknown): { outcome: Call["outcome"]; bytes: numb
 
 // Messages are kept short and carry no values: type words only.
 const clean = (m: string) => m.replace(/\s+/g, " ").slice(0, 200);
+
+// A short, readable name for the program that made a call, from its User-Agent. Several agents share one key, so this is what tells a
+// Claude chat from Claude Code from Cursor. Unrecognised ones keep their first word, so they can still be told apart.
+export function clientOf(ua: string | null | undefined): string {
+  const u = (ua ?? "").trim().toLowerCase();
+  if (!u) return "unknown";
+  if (u.includes("claude-code") || u.includes("claude code")) return "Claude Code";
+  if (u.includes("cursor")) return "Cursor";
+  if (u.includes("claude") || u.includes("anthropic")) return "Claude chat";
+  if (u.includes("chatgpt") || u.includes("openai")) return "ChatGPT";
+  if (u.includes("windsurf")) return "Windsurf";
+  if (/^(curl|wget|httpie)\b/.test(u)) return "curl";
+  const first = u.split(/[\s/;(]/)[0] ?? "";
+  return first ? first.slice(0, 30) : "unknown";
+}
+
+export type Run = { start: Date; end: Date; tokenId: number | null; client: string; tools: string[]; calls: number; errors: number; ms: number };
+
+// Calls grouped into runs: one agent's burst of work, which is what a conversation looks like from here. A run is the calls from one key and
+// one client with no gap longer than `gapMs` between them. Newest first.
+export function runsOf(calls: Call[], gapMs = 10 * 60_000): Run[] {
+  const sorted = [...calls].sort((a, b) => a.at.getTime() - b.at.getTime());
+  const open = new Map<string, Run>();
+  const all: Run[] = [];
+  for (const c of sorted) {
+    const client = c.client ?? "unknown";
+    const k = `${c.tokenId}|${client}`;
+    let r = open.get(k);
+    if (!r || c.at.getTime() - r.end.getTime() > gapMs) {
+      r = { start: c.at, end: c.at, tokenId: c.tokenId, client, tools: [], calls: 0, errors: 0, ms: 0 };
+      open.set(k, r);
+      all.push(r);
+    }
+    r.end = c.at; r.tools.push(c.tool); r.calls++; r.ms += c.ms; if (c.outcome !== "ok") r.errors++;
+  }
+  return all.sort((a, b) => b.start.getTime() - a.start.getTime());
+}
