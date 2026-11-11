@@ -6,7 +6,7 @@ import { decrypt, encrypt } from "./crypto";
 import { db } from "./db";
 import { addDays, startOfDay, TZ, ymd } from "./dates";
 import { describeError } from "./errors";
-import { EIGHT, EIGHT_FRESH_MS, eightSyncDue, rowsFromDay, SleepDay, hasSleep } from "./eight-map";
+import { EIGHT, EIGHT_CAPTURE, EIGHT_FRESH_MS, eightSyncDue, rowsFromRaw, SleepDay, hasSleep } from "./eight-map";
 
 export { EIGHT };
 
@@ -28,6 +28,7 @@ const Creds = z.object({ email: z.string().min(3), password: z.string().min(1) }
 const Cursor = z.object({
   backfillBefore: z.string().nullable().optional(),
   emptyStreak: z.number().int().nonnegative().optional(),
+  capture: z.number().int().optional(),
 });
 const Auth = z.object({ access_token: z.string().min(1), userId: z.string().min(1), expires_in: z.number().optional() });
 const Trends = z.object({
@@ -140,7 +141,7 @@ async function trends(token: string, userId: string, from: string, to: string, e
   const days = parsed.days ?? parsed.result?.days ?? [];
   return days.flatMap((d) => {
     const one = SleepDay.safeParse(d);
-    return one.success && hasSleep(one.data) ? [one.data] : [];
+    return one.success && hasSleep(one.data) ? [d] : [];
   });
 }
 
@@ -169,21 +170,22 @@ async function releaseLease() {
   }
 }
 
-function parseCursor(raw: string | null | undefined): { kind: "fresh" | "backfill" | "done"; before?: string; emptyStreak: number } {
+function parseCursor(raw: string | null | undefined): { kind: "fresh" | "backfill" | "done"; before?: string; emptyStreak: number; capture?: number } {
   if (!raw) return { kind: "fresh", emptyStreak: 0 };
   try {
     const parsed = Cursor.safeParse(JSON.parse(raw));
     if (!parsed.success) return { kind: "fresh", emptyStreak: 0 };
-    if (parsed.data.backfillBefore === undefined) return { kind: "fresh", emptyStreak: parsed.data.emptyStreak ?? 0 };
-    if (parsed.data.backfillBefore === null) return { kind: "done", emptyStreak: 0 };
-    return { kind: "backfill", before: parsed.data.backfillBefore, emptyStreak: parsed.data.emptyStreak ?? 0 };
+    const capture = parsed.data.capture;
+    if (parsed.data.backfillBefore === undefined) return { kind: "fresh", emptyStreak: parsed.data.emptyStreak ?? 0, capture };
+    if (parsed.data.backfillBefore === null) return { kind: "done", emptyStreak: 0, capture };
+    return { kind: "backfill", before: parsed.data.backfillBefore, emptyStreak: parsed.data.emptyStreak ?? 0, capture };
   } catch {
     return { kind: "fresh", emptyStreak: 0 };
   }
 }
 
-async function writeDays(days: z.infer<typeof SleepDay>[]) {
-  const rows = days.flatMap((d) => rowsFromDay(d, startOfDay));
+async function writeDays(days: unknown[]) {
+  const rows = days.flatMap((d) => rowsFromRaw(d, startOfDay));
   if (rows.length === 0) return 0;
   const unique = [...new Map(rows.map((r) => [r.sourceId, r])).values()];
   await db().transaction(async (tx) => {
@@ -222,7 +224,8 @@ export async function syncEight(): Promise<EightSyncResult> {
     const recentFrom = addDays(today, -RECENT_DAYS);
     let nights = await writeDays(await trends(token, userId, recentFrom, today, creds.email, creds.password));
 
-    let backfillBefore: string | null = cursor.kind === "done" ? null : cursor.kind === "backfill" ? cursor.before! : recentFrom;
+    const recapture = cursor.capture !== EIGHT_CAPTURE;
+    let backfillBefore: string | null = cursor.kind === "backfill" ? cursor.before! : cursor.kind === "done" && !recapture ? null : recentFrom;
     let emptyStreak = cursor.emptyStreak;
     let backfill = backfillBefore != null && backfillBefore > FLOOR;
 
@@ -250,7 +253,7 @@ export async function syncEight(): Promise<EightSyncResult> {
     await recordState({
       lastOkAt: new Date(),
       lastError: null,
-      cursor: JSON.stringify({ backfillBefore, emptyStreak: backfill ? emptyStreak : 0 }),
+      cursor: JSON.stringify({ backfillBefore, emptyStreak: backfill ? emptyStreak : 0, ...(backfillBefore == null ? { capture: EIGHT_CAPTURE } : {}) }),
     });
     return { nights, backfill: backfillBefore != null };
   } catch (e) {
@@ -288,6 +291,7 @@ export async function syncEightIfStale() {
       ageMs,
       hasError: !!state?.lastError,
       processing: ageMs < EIGHT_FRESH_MS ? await latestNightProcessing() : false,
+      captureStale: cursor.capture !== EIGHT_CAPTURE,
     });
     if (!due) return;
     await syncEight();
