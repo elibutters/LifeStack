@@ -107,7 +107,7 @@ async function rowOf(sourceId: string): Promise<Row | null> {
   return r ?? null;
 }
 
-const patchPayload = (sourceId: string, patch: Record<string, unknown>, extra: Partial<typeof events.$inferInsert> = {}) =>
+export const patchPayload = (sourceId: string, patch: Record<string, unknown>, extra: Partial<typeof events.$inferInsert> = {}) =>
   db().update(events).set({ payload: sql`${events.payload} || ${JSON.stringify(patch)}::jsonb`, ...extra }).where(and(eq(events.source, SRC), eq(events.sourceId, sourceId)));
 
 export async function updateGoal(id: string, patch: unknown): Promise<{ ok: true; goal: Goal } | { ok: false; error: string }> {
@@ -309,7 +309,7 @@ export async function commitPlan(goalId: string, input: unknown, now = new Date(
 
 // After Outlook has been written to, copy the calendar back so the site shows the change now rather than at the next daily sync.
 // Runs after the response when in a request, otherwise in the background. Never throws.
-function refreshCalendar() {
+export function refreshCalendar() {
   const run = () => syncOutlook().catch(() => {});
   try {
     after(run);
@@ -365,7 +365,7 @@ export async function pushToCalendar(goalId?: string, now = new Date()) {
 }
 
 // ---- acting on a session
-async function sessionRow(id: string) {
+export async function sessionRow(id: string) {
   const r = await rowOf(`session:${id}`);
   return r ? sessionOf(r) : null;
 }

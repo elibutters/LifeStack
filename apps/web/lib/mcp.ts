@@ -20,6 +20,8 @@ import { changeSetting, listSettings, resetSetting } from "./settings";
 import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
 import { logBlocks } from "./goals-notion-core";
 import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, refreshEventBodies, replaceSession, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
+import { sessionsForItems } from "./calendar-sessions";
+import { findSessions, logSession } from "./session-log";
 import { addNotePage, appendToNote } from "./notes-write";
 import { NOTE_FORMAT } from "./session-note-core";
 import { addTodo, listTodos, updateTodo } from "./todos";
@@ -226,7 +228,8 @@ export function buildServer(token: VerifiedToken): McpServer {
         if (addDays(start, MAX_RANGE_DAYS) < end) return fail(`Range is limited to ${MAX_RANGE_DAYS} days.`);
         try {
           const items = await calendarItems(startOfDay(start), startOfDay(addDays(end, 1)));
-          return ok(items.map((i) => ({ title: i.title, start: i.allDay ? ymd(i.start) : i.start.toISOString(), end: i.allDay ? ymd(i.end) : i.end.toISOString(), allDay: i.allDay, kind: i.kind, location: i.location ?? null })));
+          const sessions = await sessionsForItems(items).catch(() => new Map<number, { id: string; status: string; goal: string | null }>());
+          return ok(items.map((i) => ({ title: i.title, start: i.allDay ? ymd(i.start) : i.start.toISOString(), end: i.allDay ? ymd(i.end) : i.end.toISOString(), allDay: i.allDay, kind: i.kind, location: i.location ?? null, session: ((x) => (x ? { id: x.id, status: x.status, goal: x.goal } : null))(sessions.get(i.id)) })));
         } catch (e) {
           console.error("mcp: calendar failed", describeError(e));
           return fail("The tool could not read the data.");
@@ -435,6 +438,19 @@ export function buildServer(token: VerifiedToken): McpServer {
       },
     );
     server.registerTool(
+      "get_sessions",
+      {
+        description: "Goal sessions in a window of the owner's local days (default the last 7 days to the next 14), one short row each with the id you need for log_session, complete_session, move_session or skip_session. state is planned, done, skipped or missed (planned and over more than an hour ago with nothing logged); replaced sessions are left out unless asked for. Filter by state or goalId. Use this to find a session by day and name instead of reading every goal.",
+        inputSchema: { from: z.string().optional(), to: z.string().optional(), state: z.enum(["planned", "done", "skipped", "missed", "replaced"]).optional(), goalId: z.string().optional() },
+      },
+      async (args) => {
+        try {
+          const r = await findSessions(args);
+          return r.ok ? ok(r) : fail(r.error);
+        } catch (e) { console.error("mcp: get_sessions failed", describeError(e)); return fail("The tool could not read the data."); }
+      },
+    );
+    server.registerTool(
       "find_free_time",
       {
         description: "Stretches of real free time in the owner's calendar over the next few days, inside the hours they allow for goal sessions (weekday evenings and weekend days by default, never after the latest end), clear of meetings and of sessions already planned. Use it to see what is possible before proposing a plan.",
@@ -582,8 +598,22 @@ export function buildServer(token: VerifiedToken): McpServer {
       },
     );
     server.registerTool(
+      "log_session",
+      {
+        description: "Records that a session was done, at the time it was really done: use this when the owner says they did something earlier, or at a different time than planned (\"I did yesterday's legs lift at noon today\"). It moves the session and its calendar event to the real start, keeps the planned time in its history, and marks it done, in one step. Unlike move_session it never refuses an overlap, because it records the past. start is when it began: an ISO time with an offset, or a local time with no offset (2026-11-11T12:00) which counts as the owner's own time zone. It cannot be in the future. Optional minutes actually spent (default the planned length), a note, and a 1 to 5 rating. Works on planned, skipped or already-done sessions (to correct one). Find the id with get_sessions. For a run with a Strava activity, link_strava_activity pairs it instead. Use complete_session only when it was done at the planned time.",
+        inputSchema: { id: z.string(), start: z.string(), minutes: z.number().int().optional(), note: z.string().optional(), rating: z.number().int().optional() },
+      },
+      async ({ id, ...rest }) => {
+        try {
+          const r = await logSession(id, rest);
+          if (r.ok) afterResponse(() => notebookHook({ type: "done", session: r.session, note: rest.note }));
+          return fromResult(r);
+        } catch (e) { console.error("mcp: log_session failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
       "complete_session",
-      { description: "Marks a session done. Optionally the minutes actually spent, a note about what was covered, and a 1 to 5 rating of how it went.", inputSchema: { id: z.string(), minutes: z.number().int().optional(), note: z.string().optional(), rating: z.number().int().optional() } },
+      { description: "Marks a session done now, at its planned time. To record that it was done at another time, or earlier, use log_session. Optionally the minutes actually spent, a note about what was covered, and a 1 to 5 rating of how it went.", inputSchema: { id: z.string(), minutes: z.number().int().optional(), note: z.string().optional(), rating: z.number().int().optional() } },
       async ({ id, ...rest }) => {
         try {
           const r = await completeSession(id, rest);
@@ -614,7 +644,7 @@ export function buildServer(token: VerifiedToken): McpServer {
     );
     server.registerTool(
       "move_session",
-      { description: "Moves a planned session, and its calendar event. Give start (an ISO time) to pick the time, or leave it out to use the next free slot. Refuses an overlap, and says plainly when there is no slot before the goal's last day.", inputSchema: { id: z.string(), start: z.string().optional() } },
+      { description: "Plans a different time for a planned session, and moves its calendar event. For something that already happened, use log_session instead (this refuses overlaps and only works on planned sessions). Give start (an ISO time) to pick the time, or leave it out to use the next free slot. Refuses an overlap, and says plainly when there is no slot before the goal's last day.", inputSchema: { id: z.string(), start: z.string().optional() } },
       async ({ id, start }) => {
         try {
           const r = await moveSession(id, { start });
