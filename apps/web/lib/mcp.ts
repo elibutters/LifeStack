@@ -21,9 +21,10 @@ import { getNote, kickSync, searchNotes } from "./notes";
 import { changeSetting, listSettings, resetSetting } from "./settings";
 import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
 import { logBlocks } from "./goals-notion-core";
-import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, refreshEventBodies, replaceSession, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
+import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, refreshEventBodies, replaceSession, sessionsOf, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
 import { sessionsForItems } from "./calendar-sessions";
 import { buildInstructions } from "./mcp-instructions";
+import { summarizeGoals } from "./goal-summary-core";
 import { findSessions, logSession } from "./session-log";
 import { addEvent, moveEvent, oneOffsForItems, removeEvent } from "./oneoff";
 import { deleteGoal } from "./goal-delete";
@@ -428,8 +429,19 @@ export function buildServer(token: VerifiedToken): McpServer {
   if (has("goals:read")) {
     server.registerTool(
       "get_goals",
-      { description: "The owner's goals (a thing they are working toward, with a thesis and a date or pace), each with its planned, done and skipped session counts, and the next session." },
-      guard(async () => ok(await Promise.all((await listGoals()).map(async (g) => (await getGoal(g.id))!)))),
+      {
+        description: "A short summary of the owner's goals (things they are working toward): id, title, status, kind, date, a one-line thesis, session counts (planned, missed, done, skipped, minutes done), the next planned session and the last finished one. Active and draft goals by default; pass status (done, archived, active, draft or all) to see others. The answer says how many goals the filter hid. This is small on purpose: it has no session lists. Use get_goal for one goal's sessions, get_sessions to find sessions by day, and add_event for a one-off that belongs to no goal (you do not need to read goals first).",
+        inputSchema: { status: z.enum(["active", "draft", "done", "archived", "all"]).optional() },
+      },
+      async ({ status }) => {
+        try {
+          const [goals, sessions] = await Promise.all([listGoals(), sessionsOf()]);
+          return ok(summarizeGoals(goals, sessions, status, new Date()));
+        } catch (e) {
+          console.error("mcp: get_goals failed", describeError(e));
+          return fail("The tool could not read the data.");
+        }
+      },
     );
     server.registerTool(
       "get_goal",
