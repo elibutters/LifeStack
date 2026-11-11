@@ -98,12 +98,16 @@ export async function overview(has: (scope: string) => boolean, now = new Date()
     has("fitness:read") ? fitnessSummary().catch(() => null) : null,
   ]);
   const status = has("calendar:read") || has("sleep:read") ? await systemStatus() : null;
+  // Goal sessions ride along, as on the calendar endpoint, so a client can tell a done or skipped session from a planned one.
+  const sessions = todayRes && soonRes
+    ? await sessionsForItems([...todayRes.items, ...soonRes.items]).catch(() => new Map<number, SessionDetail>())
+    : new Map<number, SessionDetail>();
   return {
     date: today,
     calendar: todayRes && soonRes && {
-      today: todayRes.items.map((i) => calendarJson(i)),
+      today: todayRes.items.map((i) => calendarJson(i, sessions.get(i.id))),
       // Things already under way belong to today; "soon" lists what starts later.
-      soon: soonRes.items.filter((i) => i.start >= tomorrow).map((i) => calendarJson(i)),
+      soon: soonRes.items.filter((i) => i.start >= tomorrow).map((i) => calendarJson(i, sessions.get(i.id))),
       failed: todayRes.failed || soonRes.failed,
       connected: status?.ok ? status.calendarConnected : false,
     },
