@@ -21,6 +21,7 @@ import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from ".
 import { logBlocks } from "./goals-notion-core";
 import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoals, moveSession, proposePlan, linkActivity, pushToCalendar, refreshEventBodies, replaceSession, setSessionNote, skipSession, tonight, updateGoal } from "./goals";
 import { sessionsForItems } from "./calendar-sessions";
+import { buildInstructions } from "./mcp-instructions";
 import { findSessions, logSession } from "./session-log";
 import { addNotePage, appendToNote } from "./notes-write";
 import { NOTE_FORMAT } from "./session-note-core";
@@ -46,7 +47,7 @@ const Day = z.string().refine(isValidDay, "use YYYY-MM-DD");
 const MAX_RANGE_DAYS = 90;
 
 export function buildServer(token: VerifiedToken): McpServer {
-  const server = new McpServer({ name: "life-stack", version: "1.0.0" });
+  const server = new McpServer({ name: "life-stack", version: "1.0.0" }, { instructions: buildInstructions(token.scopes) });
   const has = (s: Scope) => token.scopes.includes(s);
 
   if (has("log:read") || has("calendar:read") || has("sleep:read") || has("finance:read")) {
