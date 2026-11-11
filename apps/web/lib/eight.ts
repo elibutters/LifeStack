@@ -1,12 +1,12 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { connections, events, syncState } from "@lifestack/db";
 import { decrypt, encrypt } from "./crypto";
 import { db } from "./db";
 import { addDays, startOfDay, TZ, ymd } from "./dates";
 import { describeError } from "./errors";
-import { EIGHT, rowsFromDay, SleepDay, hasSleep } from "./eight-map";
+import { EIGHT, EIGHT_FRESH_MS, eightSyncDue, rowsFromDay, SleepDay, hasSleep } from "./eight-map";
 
 export { EIGHT };
 
@@ -17,8 +17,6 @@ const CLIENT_ID = "0894c7f33bb94800a03f1f4df13a4f38";
 const CLIENT_SECRET = "f0954a3ed5763ba3d06834c73731a32f15f168f47d4f164751275def86db0c76";
 const USER_AGENT = "okhttp/4.9.3";
 
-const FRESH_MS = 15 * 60 * 1000;
-const RETRY_MS = 2 * 60 * 1000;
 const BUDGET_MS = 45_000;
 const RECENT_DAYS = 14;
 const CHUNK_DAYS = 45;
@@ -267,15 +265,31 @@ export async function syncEight(): Promise<EightSyncResult> {
   }
 }
 
+async function latestNightProcessing(): Promise<boolean> {
+  const [row] = await db()
+    .select({ payload: events.payload })
+    .from(events)
+    .where(and(eq(events.source, EIGHT), eq(events.key, "sleep.night")))
+    .orderBy(desc(events.ts))
+    .limit(1);
+  const payload = row?.payload;
+  return !!payload && typeof payload === "object" && (payload as { processing?: unknown }).processing === true;
+}
+
 export async function syncEightIfStale() {
   try {
     if (!(await getEightConnection())) return;
     const state = await getEightSyncState();
-    if (state?.lastError === AUTH_FAILED) return;
-    const now = Date.now();
     const cursor = parseCursor(state?.cursor);
-    if (cursor.kind === "done" && now - (state?.lastOkAt?.getTime() ?? 0) < FRESH_MS) return;
-    if (state?.lastError && now - (state.lastOkAt?.getTime() ?? 0) < RETRY_MS) return;
+    const ageMs = Date.now() - (state?.lastOkAt?.getTime() ?? 0);
+    const due = eightSyncDue({
+      authFailed: state?.lastError === AUTH_FAILED,
+      backfillDone: cursor.kind === "done",
+      ageMs,
+      hasError: !!state?.lastError,
+      processing: ageMs < EIGHT_FRESH_MS ? await latestNightProcessing() : false,
+    });
+    if (!due) return;
     await syncEight();
   } catch {
     // Recorded in sync_state.

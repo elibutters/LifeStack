@@ -2,6 +2,25 @@ import { z } from "zod";
 
 export const EIGHT = "eight";
 
+// A finished night can sit for a quarter hour. A night Eight Sleep is still scoring is refreshed
+// sooner, because that first number is replaced once scoring finishes.
+export const EIGHT_FRESH_MS = 15 * 60 * 1000;
+export const EIGHT_PROCESSING_FRESH_MS = 5 * 60 * 1000;
+export const EIGHT_RETRY_MS = 2 * 60 * 1000;
+
+export function eightSyncDue(input: {
+  authFailed: boolean;
+  backfillDone: boolean;
+  ageMs: number;
+  hasError: boolean;
+  processing: boolean;
+}): boolean {
+  if (input.authFailed) return false;
+  if (input.backfillDone && input.ageMs < EIGHT_FRESH_MS && (input.ageMs < EIGHT_PROCESSING_FRESH_MS || !input.processing)) return false;
+  if (input.hasError && input.ageMs < EIGHT_RETRY_MS) return false;
+  return true;
+}
+
 const Score = z.object({
   score: z.number().optional(),
   current: z.number().optional(),

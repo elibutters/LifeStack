@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { hasSleep, payloadFromDay, rowsFromDay, type SleepDay } from "../lib/eight-map.ts";
+import { eightSyncDue, hasSleep, payloadFromDay, rowsFromDay, type SleepDay } from "../lib/eight-map.ts";
 
 const startOfDay = (day: string) => new Date(`${day}T00:00:00.000Z`);
 
@@ -44,4 +44,14 @@ assert.equal(rows.find((r) => r.key === "sleep.night")?.sourceId, "night:2026-10
 assert.equal(rows.find((r) => r.key === "sleep.score")?.valueNum, 88);
 assert.equal(rows.find((r) => r.key === "sleep.duration_min")?.valueNum, 432);
 assert.equal(rows.every((r) => r.source === "eight"), true);
+
+const min = 60 * 1000;
+assert.equal(eightSyncDue({ authFailed: true, backfillDone: true, ageMs: 60 * min, hasError: true, processing: true }), false);
+assert.equal(eightSyncDue({ authFailed: false, backfillDone: true, ageMs: min, hasError: false, processing: false }), false, "a fresh finished night waits");
+assert.equal(eightSyncDue({ authFailed: false, backfillDone: true, ageMs: 10 * min, hasError: false, processing: false }), false);
+assert.equal(eightSyncDue({ authFailed: false, backfillDone: true, ageMs: 10 * min, hasError: false, processing: true }), true, "a night still scoring is refreshed before the usual wait");
+assert.equal(eightSyncDue({ authFailed: false, backfillDone: true, ageMs: 4 * min, hasError: false, processing: true }), false);
+assert.equal(eightSyncDue({ authFailed: false, backfillDone: true, ageMs: 20 * min, hasError: false, processing: false }), true);
+assert.equal(eightSyncDue({ authFailed: false, backfillDone: false, ageMs: min, hasError: false, processing: false }), true, "backfill keeps going");
+assert.equal(eightSyncDue({ authFailed: false, backfillDone: false, ageMs: min, hasError: true, processing: false }), false, "a recent failure waits out the retry");
 console.log("eight-map ok");

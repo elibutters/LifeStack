@@ -6,6 +6,7 @@ import { describeError } from "./errors";
 import { verifyBearer } from "./tokens";
 import { loadActivities, totals } from "./activities";
 import { workoutsOverview } from "./workouts";
+import { syncEightIfStale } from "./eight";
 import { syncOutlookIfStale } from "./outlook";
 import { calendarRange, connectionsStatus, financeSummary, holdingsList, MAX_RANGE_DAYS, overview, searchTransactions, sleepNights } from "./app-data";
 
@@ -36,6 +37,8 @@ export const handleOverview = async (req: Request) => {
   const auth = await verifyBearer(req.headers.get("authorization"));
   if (!auth.ok) return json({ error: auth.status === 401 ? "unauthorized" : "forbidden" }, auth.status);
   try {
+    // The morning import often stores a score Eight Sleep is still calculating. Refresh first so the phone shows the finished number.
+    if (auth.token.scopes.includes("sleep:read")) await syncEightIfStale();
     return json(await overview((s) => auth.token.scopes.includes(s)));
   } catch (e) {
     console.error("api: could not build the overview", describeError(e));
@@ -59,6 +62,7 @@ export const handleSleep = (req: Request) =>
   run(req, "sleep:read", async (url) => {
     const n = int(url.searchParams.get("nights"), 1, 60, 14);
     if (n == null) return bad("nights must be 1 to 60");
+    await syncEightIfStale();
     return json({ nights: await sleepNights(n) });
   });
 

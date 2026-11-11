@@ -27,9 +27,10 @@ function greeting(hour: number) {
 
 export default async function Overview() {
   await requireSession();
-  after(async () => {
-    await Promise.all([syncOutlookIfStale(), syncEightIfStale()]);
-  });
+  // The morning import often runs while Eight Sleep is still scoring. Refresh before reading
+  // so the score on the page is the finished one.
+  await syncEightIfStale();
+  after(() => syncOutlookIfStale());
   const now = new Date();
   const today = ymd(now);
   const tomorrow = startOfDay(addDays(today, 1));
