@@ -12,7 +12,7 @@ import { GRAPH, GraphError, graphSend, refreshTokens, TokenError, WRITE_SCOPES }
 export const CATEGORY = "Life Stack";
 export const NEEDS_WRITE = "Reconnect Outlook on the Connections page to let Life Stack add calendar events.";
 
-export type SessionEvent = { key: string; title: string; start: Date; end: Date; body?: string; reminderMin?: number };
+export type SessionEvent = { key: string; title: string; start: Date; end: Date; body?: string; reminderMin?: number; location?: string };
 
 // Graph wants a GUID to treat a repeated create as the same request; one derived from the session's key is stable across retries.
 export function transactionId(key: string): string {
@@ -32,6 +32,7 @@ export function eventPayload(s: SessionEvent) {
     isReminderOn: true,
     reminderMinutesBeforeStart: s.reminderMin ?? 15,
     showAs: "busy",
+    ...(s.location ? { location: { displayName: s.location.slice(0, 200) } } : {}),
     transactionId: transactionId(s.key),
   };
 }

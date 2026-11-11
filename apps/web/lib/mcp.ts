@@ -25,6 +25,7 @@ import { commitPlan, completeSession, createGoal, findFreeTime, getGoal, listGoa
 import { sessionsForItems } from "./calendar-sessions";
 import { buildInstructions } from "./mcp-instructions";
 import { findSessions, logSession } from "./session-log";
+import { addEvent, moveEvent, oneOffsForItems, removeEvent } from "./oneoff";
 import { addNotePage, appendToNote } from "./notes-write";
 import { NOTE_FORMAT } from "./session-note-core";
 import { addTodo, listTodos, updateTodo } from "./todos";
@@ -233,7 +234,8 @@ export function buildServer(token: VerifiedToken): McpServer {
         try {
           const items = await calendarItems(startOfDay(start), startOfDay(addDays(end, 1)));
           const sessions = await sessionsForItems(items).catch(() => new Map<number, { id: string; status: string; goal: string | null }>());
-          return ok(items.map((i) => ({ title: i.title, start: i.allDay ? ymd(i.start) : i.start.toISOString(), end: i.allDay ? ymd(i.end) : i.end.toISOString(), allDay: i.allDay, kind: i.kind, location: i.location ?? null, session: ((x) => (x ? { id: x.id, status: x.status, goal: x.goal } : null))(sessions.get(i.id)) })));
+          const oneOffs = await oneOffsForItems(items).catch(() => new Map<number, { id: string }>());
+          return ok(items.map((i) => ({ title: i.title, start: i.allDay ? ymd(i.start) : i.start.toISOString(), end: i.allDay ? ymd(i.end) : i.end.toISOString(), allDay: i.allDay, kind: i.kind, location: i.location ?? null, session: ((x) => (x ? { id: x.id, status: x.status, goal: x.goal } : null))(sessions.get(i.id)), oneOff: oneOffs.get(i.id) ?? null })));
         } catch (e) {
           console.error("mcp: calendar failed", describeError(e));
           return fail("The tool could not read the data.");
@@ -601,6 +603,41 @@ export function buildServer(token: VerifiedToken): McpServer {
       { description: "Adds calendar events for sessions that were saved without one (for example before Outlook was reconnected). Optionally for one goal.", inputSchema: { goalId: z.string().optional() } },
       async ({ goalId }) => {
         try { const r = await pushToCalendar(goalId); return ok({ ...r, summary: summaries.push(r) }); } catch (e) { console.error("mcp: push_to_calendar failed", describeError(e)); return fail("The tool could not update the calendar."); }
+      },
+    );
+    server.registerTool(
+      "add_event",
+      {
+        description: "Puts a one-off event on the owner's Outlook calendar: a call, an appointment, an errand, anything that is not part of a goal. No goal is needed; do not create one to hold it. start is when it begins: an ISO time with an offset, or a local time with no offset (2026-11-11T17:00) which counts as the owner's own time zone. Give an end, or minutes (default 30, at most 12 hours). Optional location and note. It is refused if it overlaps a meeting or a planned session, and the answer says what it clashed with; pass allowOverlap only if the owner wants it anyway. It can start up to 30 days in the past, to record something that happened. Returns the event with an id for move_event and delete_event.",
+        inputSchema: { title: z.string(), start: z.string(), end: z.string().optional(), minutes: z.number().int().optional(), location: z.string().optional(), note: z.string().optional(), allowOverlap: z.boolean().optional() },
+      },
+      async (args) => {
+        try {
+          const r = await addEvent(args);
+          return fromResult(r, (x) => summaries.addEvent(x, TZ));
+        } catch (e) { console.error("mcp: add_event failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "move_event",
+      {
+        description: "Moves a one-off event added with add_event (its id is in that answer, and on get_calendar as oneOff.id) to a new start, keeping its length unless an end or minutes is given. Refused if the new time overlaps a meeting or a planned session; allowOverlap overrides. Only events Life Stack added can be moved; use move_session for a goal session.",
+        inputSchema: { id: z.string(), start: z.string(), end: z.string().optional(), minutes: z.number().int().optional(), allowOverlap: z.boolean().optional() },
+      },
+      async ({ id, ...rest }) => {
+        try { return fromResult(await moveEvent(id, rest), (x) => summaries.moveEvent(x, TZ)); }
+        catch (e) { console.error("mcp: move_event failed", describeError(e)); return fail("The tool could not save that."); }
+      },
+    );
+    server.registerTool(
+      "delete_event",
+      {
+        description: "Removes a one-off event added with add_event, from the calendar and from Life Stack. Only events Life Stack added can be removed; to drop a goal session use replace_session or skip_session.",
+        inputSchema: { id: z.string() },
+      },
+      async ({ id }) => {
+        try { return fromResult(await removeEvent(id), (x) => summaries.removeEvent(x, TZ)); }
+        catch (e) { console.error("mcp: delete_event failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
     server.registerTool(

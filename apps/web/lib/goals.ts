@@ -156,7 +156,7 @@ export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title:
 // ---- free time
 // Meetings (not all-day events, not holidays) as busy time, leaving out the Outlook copies of Life Stack's own sessions: those are
 // counted from the sessions themselves, so a session being moved never blocks its own new slot.
-async function busyBetween(from: Date, to: Date, ownEventIds: Set<string>): Promise<eng.Interval[]> {
+export async function busyBetween(from: Date, to: Date, ownEventIds: Set<string>): Promise<eng.Interval[]> {
   const rows = await db().select().from(events).where(and(eq(events.source, "outlook"), eq(events.key, "calendar.event"), lt(events.ts, to), gte(events.ts, new Date(from.getTime() - 24 * 3_600_000))));
   const out: eng.Interval[] = [];
   for (const r of rows) {
@@ -168,7 +168,7 @@ async function busyBetween(from: Date, to: Date, ownEventIds: Set<string>): Prom
   return out;
 }
 
-async function context(from: Date, to: Date, exclude?: string | string[]) {
+export async function context(from: Date, to: Date, exclude?: string | string[]) {
   const [c, all] = await Promise.all([loadConstraints(), sessionsOf()]);
   const skip = new Set(Array.isArray(exclude) ? exclude : exclude ? [exclude] : []);
   const planned = all.filter((s) => s.status === "planned" && !skip.has(s.id));
