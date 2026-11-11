@@ -58,6 +58,7 @@ struct Screen<Content: View, Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
     @ViewBuilder var content: Content
     @Environment(\.scenePhase) private var phase
+    @Environment(PulseMonitor.self) private var pulse: PulseMonitor?
 
     init(title: String, refresh: (() async -> Void)? = nil, @ViewBuilder trailing: () -> Trailing, @ViewBuilder content: () -> Content) {
         self.title = title; self.refresh = refresh; self.trailing = trailing(); self.content = content()
@@ -71,11 +72,13 @@ struct Screen<Content: View, Trailing: View>: View {
         .scrollIndicators(.hidden)
         .refreshable { await refresh?() }
         // Changes made elsewhere (the web, an agent, the calendar) show up without pulling: reload when the app comes back to the
-        // front, and quietly every half minute while this screen is open. The first load stays with each screen's own task.
+        // front and whenever the server says something changed (PulseMonitor). The first load stays with each screen's own task.
         .onChange(of: phase) { _, new in if new == .active { Task { await refresh?() } } }
+        .onChange(of: pulse?.tick) { _, _ in Task { await refresh?() } }
         .task {
+            // A safety net for when the server cannot be reached for its pulse: still reload once a minute while open.
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                try? await Task.sleep(for: .seconds(60))
                 if !Task.isCancelled, UIApplication.shared.applicationState == .active { await refresh?() }
             }
         }
