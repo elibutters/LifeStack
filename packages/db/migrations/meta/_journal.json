@@ -148,6 +148,13 @@
       "when": 1793459634578,
       "tag": "0020_hot_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794431494582,
+      "tag": "0021_change_pulse",
+      "breakpoints": true
     }
   ]
 }
