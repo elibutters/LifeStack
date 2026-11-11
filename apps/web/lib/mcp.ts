@@ -6,7 +6,8 @@ import { insertLog, loadToday } from "./capture";
 import { loadOverview, loadWeekSummary } from "./overview";
 import { calendarItems } from "./calendar";
 import { connectionsStatus } from "./app-data";
-import { addDays, isValidDay, startOfDay, ymd } from "./dates";
+import { addDays, isValidDay, startOfDay, TZ, ymd } from "./dates";
+import { addLocalTimes } from "./mcp-times";
 import { describeError } from "./errors";
 import { classify, fmtMoney, insights, merchantName, monthOf, netWorth, shiftMonthKey, summarizeMonth, accountLabel } from "./finance-calc";
 import { loadFinance, loadHoldings } from "./finance-data";
@@ -32,7 +33,8 @@ import type { VerifiedToken } from "./tokens";
 // MCP tools for agents. A tool is only offered to a key that carries its scope, so a key made for
 // one area cannot reach another. Everything returned is read from the database; account numbers and
 // credentials are never stored, so they cannot be returned.
-const ok = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data) }] });
+// Every answer carries the owner's local time next to each UTC timestamp, so an agent never has to guess the zone (lib/mcp-times.ts).
+const ok = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(addLocalTimes(data, TZ)) }] });
 const fail = (message: string) => ({ content: [{ type: "text" as const, text: message }], isError: true });
 const guard = (fn: () => Promise<ReturnType<typeof ok>>) => async () => {
   try {
