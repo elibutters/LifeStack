@@ -57,6 +57,8 @@ const now = new Date(); const soon = new Date(now.getTime() + 2 * 86400_000);
 await db().insert(events).values({ ts: soon, domain: "calendar", key: "calendar.event", source: "outlook", sourceId: "c1", payload: { title: "Dentist", end: new Date(soon.getTime() + 3600_000).toISOString(), allDay: false, location: "Main St" } } as any);
 const cal = text(await rpc(calOnly2, "tools/call", { name: "get_calendar", arguments: {} }));
 assert.deepEqual(cal.map((c: any) => c.title), ["Dentist"]);
+assert.match(cal[0].startLocal, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/, "each event also carries the owner's local time with its offset");
+assert.equal(Math.floor(new Date(cal[0].startLocal).getTime() / 1000), Math.floor(new Date(cal[0].start).getTime() / 1000), "and it is the same instant, to the second");
 const calOv = text(await rpc(calOnly2, "tools/call", { name: "get_overview", arguments: {} }));
 assert.equal(calOv.log, undefined, "a calendar-only key never receives the log");
 assert.ok(Array.isArray(calOv.calendar.upcoming) || Array.isArray(calOv.calendar.today));
