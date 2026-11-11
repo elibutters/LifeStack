@@ -196,6 +196,7 @@ struct SessionBody: View {
     let extra: [NoteBlock]?   // cautions and context, collapsed so the plan stays short
     let summary: String?
     let url: String?
+    var comment: String? = nil
     var done: Bool = false   // a finished session keeps its plan out of the way, one tap from open
     private func label(_ text: String) -> some View { Text(text).foregroundStyle(Theme.muted).frame(width: 44, alignment: .leading) }
 
@@ -221,11 +222,18 @@ struct SessionBody: View {
         let note = blocks ?? []
         let more = extra ?? []
         let actual = summary?.replacingOccurrences(of: "Actual: ", with: "").replacingOccurrences(of: " (Strava)", with: "")
-        if !note.isEmpty || !more.isEmpty || actual != nil {
+        let said = comment?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !note.isEmpty || !more.isEmpty || actual != nil || (said?.isEmpty == false) {
             VStack(alignment: .leading, spacing: 8) {
                 if !note.isEmpty {
                     if done { DisclosureGroup("Plan") { plan(note).padding(.top, 4) }.tint(Theme.muted).foregroundStyle(Theme.muted) }
                     else { HStack(alignment: .top, spacing: 8) { label("Plan"); plan(note) } }
+                }
+                if let said, !said.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Comment").foregroundStyle(Theme.muted)
+                        Text(said).frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 if let actual {
                     HStack(alignment: .top, spacing: 8) {
@@ -257,17 +265,19 @@ struct EventRow: View {
         default: Color.white.opacity(0.28)
         }
     }
+    // A planned session whose time has passed was not done, so it reads as skipped.
+    private var lapsed: Bool { item.session?.status == "planned" && (Format.date(item.end).map { $0 < Date() } ?? false) }
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Rectangle().fill(mark).frame(width: 2)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(item.title).font(.body.weight(.medium)).strikethrough(item.session?.status == "skipped").foregroundStyle(item.session?.status == "skipped" ? Theme.muted : .white)
+                    Text(item.title).font(.body.weight(.medium)).strikethrough(item.session?.status == "skipped" || lapsed).foregroundStyle(item.session?.status == "skipped" || lapsed ? Theme.muted : .white)
                     Spacer(minLength: 0)
                     if let s = item.session {
                         HStack(spacing: 6) {
                             if let goal = s.goal { Text(goal).foregroundStyle(Theme.muted) }
-                            Text(s.status.capitalized).foregroundStyle(sessionTint(s.status))
+                            Text(lapsed ? "Skipped" : s.status.capitalized).foregroundStyle(sessionTint(lapsed ? "skipped" : s.status))
                         }
                         .font(.caption2).lineLimit(1)
                     }
@@ -276,7 +286,7 @@ struct EventRow: View {
                     Text(Format.time(item)).font(.caption).foregroundStyle(Theme.muted)
                     if let place = item.location, !place.isEmpty { Text("· \(place)").font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
                 }
-                if let s = item.session { SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url, done: s.status == "done").padding(.top, 2) }
+                if let s = item.session { SessionBody(blocks: s.noteBlocks, extra: s.notesBlocks, summary: s.actual?.summary, url: s.actual?.url, comment: s.logNote, done: s.status == "done").padding(.top, 2) }
             }
             Spacer(minLength: 0)
         }
@@ -301,15 +311,31 @@ struct InsightRow: View {
 // Horizontal proportional bars, the way a budgeting app shows where money went.
 struct BarList: View {
     let rows: [(label: String, value: Double)]
+    var showsAmounts = true
+    // When set, each row shows its share of this total instead of a dollar amount.
+    var percentOf: Double? = nil
     var body: some View {
         let top = max(rows.map(\.value).max() ?? 1, 1)
         VStack(spacing: 12) {
             ForEach(rows, id: \.label) { r in
                 VStack(alignment: .leading, spacing: 5) {
-                    HStack { Text(r.label).font(.subheadline); Spacer(); Text(Format.money(r.value)).font(.subheadline.weight(.medium)).monospacedDigit() }
+                    HStack {
+                        Text(r.label).font(.subheadline)
+                        Spacer()
+                        if let total = percentOf {
+                            Text(Self.percent(r.value, of: total)).font(.subheadline.weight(.medium)).monospacedDigit()
+                        } else if showsAmounts {
+                            Text(Format.money(r.value)).font(.subheadline.weight(.medium)).monospacedDigit()
+                        }
+                    }
                     GeometryReader { g in Rectangle().fill(Theme.accent).frame(width: max(2, g.size.width * r.value / top)) }.frame(height: 4)
                 }
             }
         }
+    }
+
+    private static func percent(_ value: Double, of total: Double) -> String {
+        guard total > 0 else { return "0%" }
+        return "\(Int((value / total * 100).rounded()))%"
     }
 }

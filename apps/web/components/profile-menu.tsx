@@ -25,20 +25,22 @@ export function ProfileMenu({
   expanded?: boolean;
 }) {
   const pathname = usePathname();
-  const keepOpen = onAccountPath(pathname);
-  const [open, setOpen] = useState(keepOpen);
-  const showing = keepOpen || open;
+  // The sidebar keeps the account links open while you are on one of those pages.
+  // The phone header is a dropdown, so it closes on its own even on those pages.
+  const pinned = placement === "sidebar" && onAccountPath(pathname);
+  const [open, setOpen] = useState(false);
+  const showing = pinned || open;
   const compact = placement === "sidebar" && !expanded;
-  const inFlow = placement === "sidebar" && (keepOpen || compact);
+  const inFlow = placement === "sidebar" && (pinned || compact);
   const root = useRef<HTMLDivElement>(null);
   const menuId = useId();
 
   useEffect(() => {
-    if (!keepOpen) setOpen(false);
-  }, [keepOpen]);
+    setOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
-    if (!showing || keepOpen) return;
+    if (!showing || pinned) return;
     const onPointer = (e: PointerEvent) => {
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -51,7 +53,7 @@ export function ProfileMenu({
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
-  }, [showing, keepOpen]);
+  }, [showing, pinned]);
 
   const item = (href?: string) => {
     const active = href ? pathname.startsWith(href) : false;
@@ -69,12 +71,19 @@ export function ProfileMenu({
     ? "mb-1 flex flex-col gap-0.5"
     : placement === "header"
       ? "absolute top-full right-0 z-50 mt-1 min-w-44 rounded-md border border-line bg-surface p-1"
-      : keepOpen
+      : pinned
         ? "flex flex-col gap-0.5"
         : "absolute bottom-full left-0 right-0 z-50 mb-1 rounded-md border border-line bg-surface p-1";
 
   const menu = showing && (
-    <MenuList pathname={pathname} item={item} className={menuClass} id={menuId} compact={compact} />
+    <MenuList
+      pathname={pathname}
+      item={item}
+      className={menuClass}
+      id={menuId}
+      compact={compact}
+      onPick={pinned ? undefined : () => setOpen(false)}
+    />
   );
 
   return (
@@ -86,16 +95,16 @@ export function ProfileMenu({
         aria-haspopup="menu"
         aria-controls={menuId}
         onClick={() => {
-          if (keepOpen) return;
+          if (pinned) return;
           setOpen((v) => !v);
         }}
         className={
           placement === "sidebar"
             ? `flex w-full items-center rounded-md p-2 text-sm transition-colors ${
                 expanded ? "gap-2.5" : "justify-center"
-              } ${keepOpen || open ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"}`
+              } ${pinned || open ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"}`
             : `grid h-9 w-9 place-items-center rounded-md border border-line transition-colors ${
-                keepOpen || open ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"
+                pinned || open ? "bg-raised text-fg" : "text-muted hover:bg-raised hover:text-fg"
               }`
         }
       >
@@ -126,12 +135,14 @@ function MenuList({
   className,
   id,
   compact,
+  onPick,
 }: {
   pathname: string;
   item: (href?: string) => string;
   className: string;
   id: string;
   compact: boolean;
+  onPick?: () => void;
 }) {
   return (
     <div id={id} role="menu" className={className}>
@@ -144,6 +155,7 @@ function MenuList({
           aria-label={compact ? label : undefined}
           aria-current={pathname.startsWith(href) ? "page" : undefined}
           className={item(href)}
+          onClick={onPick}
         >
           <Icon width={16} height={16} />
           {compact ? <span className="sr-only">{label}</span> : label}

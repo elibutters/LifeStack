@@ -157,7 +157,7 @@ assert.equal(((await g.moveSession("snope", {}, NOW)) as any).ok, false); assert
 // ---- completing, skipping, and finding a new slot
 const [s1, s2] = (await g.sessionsOf(goal.id)).filter((s) => s.id !== forcedId && s.id !== withEvent.id);
 const done = await g.completeSession(s1!.id, { minutes: 70, note: "Covered cases 1 to 3", rating: 4 }, NOW) as any;
-assert.ok(done.ok); assert.deepEqual([done.session.status, done.session.minutesSpent, done.session.rating], ["done", 70, 4]);
+assert.ok(done.ok); assert.deepEqual([done.session.status, done.session.minutesSpent, done.session.rating, done.session.logNote], ["done", 70, 4, "Covered cases 1 to 3"]);
 assert.equal(((await g.completeSession(s1!.id, { rating: 9 }, NOW)) as any).ok, false); assert.equal(((await g.completeSession("snope", {}, NOW)) as any).ok, false);
 assert.equal(((await g.moveSession(s1!.id, {}, NOW)) as any).ok, false, "a finished session cannot be moved");
 calls.length = 0;
@@ -195,6 +195,23 @@ assert.equal((await act(todo.id, { action: "dance" })).status, 400); assert.equa
 assert.equal((await act("snope-1234", { action: "skip" })).status, 404); assert.equal((await act("bad id!", { action: "skip" })).status, 404);
 assert.equal((await act(todo.id, { action: "done", minutes: 30, rating: 5 })).status, 200); assert.equal((await act(todo.id, { action: "move" })).status, 409, "moving a finished session is refused");
 assert.ok(cap.AGENT_SCOPES.includes("goals:read") && cap.AGENT_SCOPES.includes("goals:write") && cap.APP_SCOPES.includes("goals:read") && cap.APP_SCOPES.includes("goals:write"), "agents and the phone can both use goals");
+const edit = (id: string, body: unknown, key: string | null = write.token) => g.handleGoal(rq("PATCH", `/${id}`, key, body), id);
+assert.equal((await edit(goal.id, { title: "x" }, null)).status, 401);
+assert.equal((await edit(goal.id, { title: "x" }, read.token)).status, 403, "reading is not renaming");
+assert.equal((await edit(goal.id, {})).status, 400); assert.equal((await edit(goal.id, { title: "  " })).status, 400);
+assert.equal((await edit(goal.id, { title: "Kept", notionPageId: "page" })).status, 400, "a notebook id cannot be set from the phone");
+assert.equal((await g.getGoal(goal.id))!.goal.notionPageId, null); assert.equal((await g.getGoal(goal.id))!.goal.title, "Interview prep", "a rejected edit changes nothing");
+assert.equal((await edit(goal.id, { mode: "wild" })).status, 400); assert.equal((await edit(goal.id, { targetDay: "soon" })).status, 400);
+assert.equal((await edit("bad id!", { title: "x" })).status, 404); assert.equal((await edit("gnope12", { title: "x" })).status, 404);
+assert.equal((await edit(goal.id, "{nope")).status, 400); assert.equal((await edit(goal.id, "x".repeat(9000))).status, 413);
+const renamed = await edit(goal.id, { title: "  Renamed goal  ", thesis: "A shorter description.", kind: "train", mode: "auto", status: "active", targetDay: null });
+assert.equal(renamed.status, 200);
+const edited = (await g.getGoal(goal.id))!.goal;
+assert.deepEqual([edited.title, edited.thesis, edited.kind, edited.mode, edited.status, edited.targetDay], ["Renamed goal", "A shorter description.", "train", "auto", "active", null]);
+assert.equal((await edit(goal.id, { status: "done", doneNote: "  The call went well.  " })).status, 200);
+assert.equal((await g.getGoal(goal.id))!.goal.doneNote, "The call went well.");
+assert.equal((await edit(goal.id, { doneNote: "x".repeat(1001) })).status, 400);
+assert.equal((await edit(goal.id, { title: "Interview prep", thesis: "Be ready to talk through any case.", kind: "prep", mode: "slide", status: "active", targetDay: "2026-11-09" })).status, 200);
 
 // ---- Strava: linking an activity to a session, by hand and automatically after a sync
 const { sql } = await import("drizzle-orm");
@@ -268,8 +285,9 @@ assert.equal((await g.sessionsOf(rg.id, NOW)).find((x) => x.id === viaApi)!.stat
 const legacy = (id: string, ts: Date, status: string, extra: object = {}) => db().insert(events).values({ ts, domain: "goal", key: "goal.session", valueText: status, payload: { goalId: rg.id, title: id, end: new Date(ts.getTime() + 3_600_000).toISOString(), ...extra }, source: "goals", sourceId: `session:${id}` });
 await legacy("old-future", at("2026-12-20", 7 * 60), "skipped"); await legacy("old-future-real", at("2026-12-21", 7 * 60), "skipped", { skippedAt: "2026-10-26T12:00:00.000Z" });
 await legacy("old-past", at("2026-10-05", 7 * 60), "skipped"); await legacy("old-swapped", at("2026-10-06", 7 * 60), "skipped"); await legacy("old-swap-new", at("2026-10-06", 7 * 60), "planned");
+await legacy("moved-old", at("2026-10-07", 7 * 60), "skipped"); await legacy("moved-new", at("2026-10-08", 7 * 60), "done", { movedFrom: [at("2026-10-07", 7 * 60).toISOString()] });
 const read2 = new Map((await g.sessionsOf(rg.id, NOW)).map((x) => [x.id, x.status]));
-assert.deepEqual(["old-future", "old-future-real", "old-past", "old-swapped"].map((k) => read2.get(k)), ["replaced", "skipped", "skipped", "replaced"], "a recent skip is a skip; an old one that was a plan change is replaced");
+assert.deepEqual(["old-future", "old-future-real", "old-past", "old-swapped", "moved-old"].map((k) => read2.get(k)), ["replaced", "skipped", "skipped", "replaced", "replaced"], "a recent skip is a skip; an old one that was a plan change, or that was moved, is replaced");
 // ---- refreshing old calendar events: every saved session's event is rewritten once, in the current layout
 const patchesBefore = graph("PATCH").length;
 const refreshed = await g.refreshEventBodies({ now: NOW });
@@ -285,14 +303,15 @@ const tempoPlan = await g.commitPlan(rg.id, { sessions: [{ title: "Tempo run", s
 const lateId = tempoPlan.sessions[0].id;
 assert.ok(((await g.skipSession(lateId)) as any).ok);
 let sd = await cs.skippedItems(at("2026-12-02", 0), at("2026-12-03", 0)); assert.equal(sd.sessions.get(sd.items[0]!.id)!.status, "skipped");
-const doneLate = await g.completeSession(lateId, {}, at("2026-12-03", 9 * 60)) as any;
+const doneLate = await g.completeSession(lateId, { note: "Did it late" }, at("2026-12-03", 9 * 60)) as any;
 assert.equal(doneLate.session.status, "done", "a skipped session can be marked done afterwards"); assert.equal(doneLate.session.minutesSpent, 60, "it counts for its planned length");
+assert.equal(doneLate.session.logNote, "Did it late");
 sd = await cs.skippedItems(at("2026-12-02", 0), at("2026-12-03", 0)); assert.equal(sd.items.length, 1, "a done session with no event stays on the calendar");
 assert.equal(sd.sessions.get(sd.items[0]!.id)!.status, "done");
 assert.equal((await act(lateId, { action: "reopen" }, read.token)).status, 403);
 assert.equal((await act(lateId, { action: "reopen" })).status, 200);
 const reopened = (await g.sessionsOf(rg.id, NOW)).find((x) => x.id === lateId)!;
-assert.deepEqual([reopened.status, reopened.doneAt, reopened.minutes, reopened.skippedAt], ["planned", null, null, null], "undone, as if it had never been marked");
+assert.deepEqual([reopened.status, reopened.doneAt, reopened.minutes, reopened.logNote, reopened.skippedAt], ["planned", null, null, null, null], "undone, as if it had never been marked");
 assert.equal(((await g.reopenSession("snope-1234")) as any).ok, false);
 // suggested times: a few different days, free of meetings and of other sessions, none of them right now; nothing is changed
 const sug = await g.suggestSlots(lateId, 3, NOW) as any;

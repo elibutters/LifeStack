@@ -3,7 +3,7 @@ import { and, desc, eq, gte } from "drizzle-orm";
 import { locationPoints, places } from "@lifestack/db";
 import { db } from "./db";
 import { describeError } from "./errors";
-import { BatchInput, notTooFuture, PlaceInput, staysOf, type Place } from "./location-core";
+import { BatchInput, notTooFuture, PlaceInput, pointFromCensus, staysOf, type Place } from "./location-core";
 import { verifyBearer } from "./tokens";
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -19,6 +19,56 @@ export async function addPlace(input: unknown): Promise<{ ok: true; id: number }
   if (!p.success) return { ok: false };
   const [row] = await db().insert(places).values({ label: p.data.label, lat: p.data.lat, lon: p.data.lon, radiusM: p.data.radiusM }).returning({ id: places.id });
   return { ok: true, id: row!.id };
+}
+
+export const OFFICE_LABEL = "Office";
+// A street geocode and the door where the phone reports an arrival are often a short walk apart.
+export const OFFICE_RADIUS_M = 150;
+
+export type PlaceMark = "marked" | "cleared" | "unchanged" | "unmatched";
+
+export async function geocodeUsAddress(address: string): Promise<{ lat: number; lon: number } | null> {
+  const url = new URL("https://geocoding.geo.census.gov/geocoder/locations/onelineaddress");
+  url.searchParams.set("address", address);
+  url.searchParams.set("benchmark", "Public_AR_Current");
+  url.searchParams.set("format", "json");
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(8_000),
+      headers: { accept: "application/json", "user-agent": "LifeStack (personal address lookup)" },
+    });
+    if (!res.ok) return null;
+    return pointFromCensus(await res.json());
+  } catch (e) {
+    console.error("geocode: failed", describeError(e));
+    return null;
+  }
+}
+
+// Keeps a single place named Office in step with the workplace address on the profile.
+// An unchanged address is left alone. Clearing the address removes that place and no other.
+export async function syncOfficePlace(
+  previous: string | undefined,
+  next: string | undefined,
+  geocode: (address: string) => Promise<{ lat: number; lon: number } | null>,
+): Promise<PlaceMark> {
+  const before = previous?.trim() ?? "";
+  const after = next?.trim() ?? "";
+  const [existing] = await db().select({ id: places.id }).from(places).where(eq(places.label, OFFICE_LABEL)).limit(1);
+  if (!after) {
+    if (!before || !existing) return "unchanged";
+    await db().delete(places).where(eq(places.id, existing.id));
+    return "cleared";
+  }
+  if (after === before && existing) return "unchanged";
+  const point = await geocode(after);
+  if (!point) return "unmatched";
+  if (existing) {
+    await db().update(places).set({ lat: point.lat, lon: point.lon, radiusM: OFFICE_RADIUS_M }).where(eq(places.id, existing.id));
+  } else {
+    await db().insert(places).values({ label: OFFICE_LABEL, lat: point.lat, lon: point.lon, radiusM: OFFICE_RADIUS_M });
+  }
+  return "marked";
 }
 
 export async function deletePlace(id: number): Promise<boolean> {

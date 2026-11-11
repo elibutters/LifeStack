@@ -14,6 +14,8 @@ final class AppModel {
     var pickedDay: Date?
     // The shown day's summary and entries (named for when it was always today).
     var today: TodaySummary?
+    // True once we know yesterday has no mood, caffeine or supplements, so the log can ask for it.
+    var yesterdayMissed = false
     var pending = false
     var options: LogOptions?
     // Supplement taps paint at once and save behind that. These keep a newer tap from being wiped by a refresh
@@ -22,6 +24,22 @@ final class AppModel {
     private var held: [String: HeldSupplement] = [:]
     private var chains: [String: Task<Int?, Never>] = [:]
     private var supplementInflight = 0
+    // Caffeine taps change the count at once. These keep a refresh from wiping a tap the server has not confirmed,
+    // and keep a remove of a just-added drink from leaving that drink behind.
+    private struct PendingDrink {
+        let localId: Int
+        let drink: String
+        let mg: Double
+        let label: String
+        let at: String
+        let day: Date?
+        var serverId: Int?
+        var cancelled: Bool
+    }
+    private var pendingDrinks: [Int: PendingDrink] = [:]
+    private var deletingDrinks: Set<Int> = []
+    private var caffeineInflight = 0
+    private var nextLocalDrinkId = -1_000_000
     var message: String?
     var busy = false
 
@@ -63,7 +81,7 @@ final class AppModel {
         LocationTracker.shared.enabled = false
         LocationTracker.shared.clearQueue()
         Keychain.delete()
-        today = nil; options = nil; pickedDay = nil; message = nil; signedIn = false
+        today = nil; options = nil; pickedDay = nil; yesterdayMissed = false; message = nil; signedIn = false
     }
 
     var isToday: Bool { pickedDay.map { Calendar.current.isDateInToday($0) } ?? true }
@@ -88,22 +106,39 @@ final class AppModel {
         if let d = Calendar.current.date(byAdding: .day, value: by, to: shownDay) { await showDay(d) }
     }
 
+    // A day counts as missed only when nothing was logged: no mood, no caffeine and no supplements.
+    private static func isBlank(_ day: TodaySummary) -> Bool {
+        let caffeine = day.caffeine.count > 0 || (day.entries ?? []).contains { $0.key == "caffeine" }
+        let supplements = day.supplements.contains { $0.count > 0 } || (day.entries ?? []).contains { $0.key == "supplement.taken" }
+        return day.mood == nil && !caffeine && !supplements
+    }
+
     func refresh() async {
         guard let client else { return }
         if pickedDay != nil && isToday { pickedDay = nil }
         let asked = pickedDay
+        let yesterdayKey: String? = asked == nil ? Calendar.current.date(byAdding: .day, value: -1, to: .now).map { Self.ymd.string(from: $0) } : nil
         // The supplement list is a nicety: if it cannot load, the rest of the screen still works.
         async let opts = try? client.options()
+        async let prior: TodaySummary? = yesterdayKey == nil ? nil : try? client.day(yesterdayKey!)
         do {
             let summary = try await client.day(asked.map { Self.ymd.string(from: $0) })
             // A slow answer for a day the person has already left is dropped.
             if asked == pickedDay {
-                today = summary
+                // A caffeine tap already changed the count. Applying this answer now would flash the old number back.
+                if caffeineInflight == 0 {
+                    today = summary
+                    reapplyCaffeine()
+                    if let asked, Calendar.current.isDateInYesterday(asked), let shown = today {
+                        yesterdayMissed = Self.isBlank(shown)
+                    }
+                }
                 if supplementInflight == 0 { held.removeAll() }
                 else { for item in held.values where item.day == pickedDay { paintSupplement(item.supplement, on: item.on) } }
             }
             message = nil
         } catch { handle(error) }
+        if let prior = await prior { yesterdayMissed = Self.isBlank(prior) }
         if let opts = await opts { options = opts }
         WidgetCenter.shared.reloadAllTimelines() // widgets show what the app just learned, including changes made on the web
     }
@@ -121,6 +156,138 @@ final class AppModel {
         var e = event
         e["at"] = ISO8601DateFormatter().string(from: shownInstant())
         return e
+    }
+
+    // Plus logs one of this drink. The count changes immediately; the save happens behind that, so the screen never dims.
+    func addDrink(_ drink: LogOptions.Drink) -> Bool {
+        guard client != nil else { return false }
+        let localId = nextLocalDrinkId
+        nextLocalDrinkId -= 1
+        let amount = drink.mg == drink.mg.rounded() ? String(Int(drink.mg)) : String(drink.mg)
+        let item = PendingDrink(localId: localId, drink: drink.drink, mg: drink.mg, label: "\(drink.drink) (\(amount) mg)", at: ISO8601DateFormatter().string(from: shownInstant()), day: pickedDay, serverId: nil, cancelled: false)
+        pendingDrinks[localId] = item
+        showDrink(item)
+        let body = stamped(["type": "caffeine", "drink": drink.drink])
+        caffeineInflight += 1
+        Task { @MainActor in
+            defer { self.finishCaffeine() }
+            do {
+                guard let client = self.client else { return }
+                let id = try await client.log(body)
+                guard var current = self.pendingDrinks[localId] else { return }
+                if current.cancelled {
+                    self.pendingDrinks.removeValue(forKey: localId)
+                    try await client.deleteEntry(id)
+                } else {
+                    current.serverId = id
+                    self.pendingDrinks[localId] = current
+                    self.adoptDrinkId(localId: localId, serverId: id)
+                }
+            } catch {
+                if self.pendingDrinks[localId]?.cancelled != true { self.hideDrink(id: localId) }
+                self.pendingDrinks.removeValue(forKey: localId)
+                self.handle(error)
+            }
+        }
+        return true
+    }
+
+    // Minus drops the newest one of this drink at once, including one whose save has not finished.
+    func removeDrink(_ entry: HistoryEntry) -> Bool {
+        guard client != nil, entry.key == "caffeine" else { return false }
+        hideDrink(id: entry.id)
+        if entry.id < 0 {
+            if var item = pendingDrinks[entry.id] {
+                item.cancelled = true
+                pendingDrinks[entry.id] = item
+                if let serverId = item.serverId {
+                    pendingDrinks.removeValue(forKey: entry.id)
+                    deleteSavedDrink(serverId)
+                }
+            }
+            return true
+        }
+        deleteSavedDrink(entry.id)
+        return true
+    }
+
+    private func deleteSavedDrink(_ id: Int) {
+        guard client != nil else { return }
+        deletingDrinks.insert(id)
+        caffeineInflight += 1
+        Task { @MainActor in
+            defer { self.finishCaffeine() }
+            do {
+                guard let client = self.client else { return }
+                try await client.deleteEntry(id)
+                self.deletingDrinks.remove(id)
+            } catch {
+                self.deletingDrinks.remove(id)
+                self.handle(error)
+            }
+        }
+    }
+
+    private func finishCaffeine() {
+        caffeineInflight -= 1
+        if caffeineInflight == 0 { Task { await refresh() } }
+    }
+
+    private func showDrink(_ item: PendingDrink) {
+        guard var day = today else { return }
+        var entries = day.entries ?? []
+        let id = item.serverId ?? item.localId
+        if entries.contains(where: { $0.id == id || $0.id == item.localId }) { return }
+        entries.append(HistoryEntry(id: id, at: item.at, key: "caffeine", label: item.label, source: "app", name: item.drink, dose: item.mg, unit: "mg"))
+        day.entries = entries
+        day.caffeine = .init(count: day.caffeine.count + 1, mg: day.caffeine.mg + item.mg)
+        today = day
+    }
+
+    private func hideDrink(id: Int) {
+        guard var day = today, var entries = day.entries, let idx = entries.firstIndex(where: { $0.id == id }) else { return }
+        let removed = entries.remove(at: idx)
+        day.entries = entries
+        let drop = removed.dose ?? options?.caffeine.first { $0.drink.caseInsensitiveCompare(removed.drinkName) == .orderedSame }?.mg ?? 0
+        day.caffeine = .init(count: max(0, day.caffeine.count - 1), mg: max(0, day.caffeine.mg - drop))
+        today = day
+    }
+
+    private func adoptDrinkId(localId: Int, serverId: Int) {
+        guard var day = today, var entries = day.entries, let idx = entries.firstIndex(where: { $0.id == localId }) else { return }
+        let old = entries[idx]
+        entries[idx] = HistoryEntry(id: serverId, at: old.at, key: old.key, label: old.label, source: old.source, name: old.name, dose: old.dose, unit: old.unit)
+        day.entries = entries
+        today = day
+    }
+
+    // Puts taps the server snapshot does not have yet back onto the day, and drops drinks a minus already removed.
+    private func reapplyCaffeine() {
+        guard var day = today else { return }
+        var entries = day.entries ?? []
+        var count = day.caffeine.count
+        var mg = day.caffeine.mg
+        entries.removeAll { e in
+            guard deletingDrinks.contains(e.id) else { return false }
+            count = max(0, count - 1)
+            let drop = e.dose ?? options?.caffeine.first { $0.drink.caseInsensitiveCompare(e.drinkName) == .orderedSame }?.mg ?? 0
+            mg = max(0, mg - drop)
+            return true
+        }
+        for item in pendingDrinks.values where !item.cancelled && item.day == pickedDay {
+            let id = item.serverId ?? item.localId
+            if entries.contains(where: { $0.id == id || $0.id == item.localId }) { continue }
+            entries.append(HistoryEntry(id: id, at: item.at, key: "caffeine", label: item.label, source: "app", name: item.drink, dose: item.mg, unit: "mg"))
+            count += 1
+            mg += item.mg
+        }
+        for key in Array(pendingDrinks.keys) {
+            guard let serverId = pendingDrinks[key]?.serverId, entries.contains(where: { $0.id == serverId }) else { continue }
+            pendingDrinks.removeValue(forKey: key)
+        }
+        day.entries = entries
+        day.caffeine = .init(count: count, mg: mg)
+        today = day
     }
 
     // One tap logs. More taps are ignored while a request is in flight, so a double tap cannot log twice.

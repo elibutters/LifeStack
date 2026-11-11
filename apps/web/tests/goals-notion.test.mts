@@ -35,6 +35,7 @@ const s = { goalId: "g1", title: "Interview prep", start: "2026-10-27T23:00:00.0
 const text = (e: any) => gn.describeEvent(e, new Date("2026-10-27T15:00:00Z")).blocks.map((b: any) => b.bulleted_list_item.rich_text[0].text.content);
 assert.deepEqual(text({ type: "done", session: { ...s, minutesSpent: 70, rating: 4 }, note: "Covered cases 1 to 3" }), ["Oct 27: Done: Interview prep (70 min), rated 4/5. Covered cases 1 to 3"]);
 assert.deepEqual(text({ type: "done", session: s }), ["Oct 27: Done: Interview prep"]);
+assert.deepEqual(text({ type: "finished", goalId: "g1", title: "Mike Prep", note: "Did the call" }), ["Oct 27: Done: Mike Prep. Did the call"]);
 assert.deepEqual(text({ type: "skipped", session: s }), ["Oct 27: Skipped: Interview prep (was Tue, Oct 27, 7:00 PM)"], "times are in the owner's time zone");
 assert.deepEqual(text({ type: "moved", session: { ...s, start: "2026-10-28T23:30:00.000Z", movedFrom: ["2026-10-27T23:00:00.000Z"] } }), ["Oct 27: Moved: Interview prep from Tue, Oct 27, 7:00 PM to Wed, Oct 28, 7:30 PM"]);
 const committed = text({ type: "committed", goalId: "g1", sessions: [s, { ...s, title: "Second", start: "2026-10-29T23:00:00.000Z" }] });

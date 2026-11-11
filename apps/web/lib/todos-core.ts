@@ -54,3 +54,30 @@ export function summarize(items: Pick<Todo, "status" | "due">[], today: string) 
   const open = items.filter((t) => t.status === "open");
   return { open: open.length, overdue: open.filter((t) => t.due != null && t.due < today).length, done: items.filter((t) => t.status === "done").length };
 }
+
+// Open items split by when they are due, so the page can separate overdue, today, later and undated.
+export const OPEN_BUCKETS = ["overdue", "today", "upcoming", "anytime"] as const;
+export type OpenBucket = (typeof OPEN_BUCKETS)[number];
+export type TodoBucket = OpenBucket | "done" | "dropped";
+
+export function bucketOf(t: Pick<Todo, "status" | "due">, today: string): TodoBucket {
+  if (t.status === "done") return "done";
+  if (t.status === "dropped") return "dropped";
+  if (t.due == null) return "anytime";
+  if (t.due < today) return "overdue";
+  if (t.due === today) return "today";
+  return "upcoming";
+}
+
+export function groupTodos<T extends Pick<Todo, "status" | "due">>(items: T[], today: string): { open: Record<OpenBucket, T[]>; done: T[]; dropped: T[] } {
+  const open: Record<OpenBucket, T[]> = { overdue: [], today: [], upcoming: [], anytime: [] };
+  const done: T[] = [];
+  const dropped: T[] = [];
+  for (const t of items) {
+    const b = bucketOf(t, today);
+    if (b === "done") done.push(t);
+    else if (b === "dropped") dropped.push(t);
+    else open[b].push(t);
+  }
+  return { open, done, dropped };
+}

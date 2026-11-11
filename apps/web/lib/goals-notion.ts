@@ -64,7 +64,8 @@ export type GoalEvent =
   | { type: "committed"; goalId: string; sessions: Pick<S, "title" | "start" | "minutes">[] }
   | { type: "done"; session: S; note?: string }
   | { type: "skipped"; session: S }
-  | { type: "moved"; session: S };
+  | { type: "moved"; session: S }
+  | { type: "finished"; goalId: string; title: string; note?: string };
 
 export function describeEvent(e: GoalEvent, now = new Date()): { goalId: string; blocks: Block[] } {
   const day = dayLabel(now);
@@ -82,6 +83,8 @@ export function describeEvent(e: GoalEvent, now = new Date()): { goalId: string;
       const from = e.session.movedFrom?.at(-1);
       return { goalId: e.session.goalId, blocks: logBlocks(day, `Moved: ${e.session.title}${from ? ` from ${when(from)}` : ""} to ${when(e.session.start)}`) };
     }
+    case "finished":
+      return { goalId: e.goalId, blocks: logBlocks(day, [`Done: ${e.title}`, e.note ? `. ${e.note}` : ""].join("")) };
   }
 }
 

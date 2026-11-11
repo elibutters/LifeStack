@@ -4,8 +4,6 @@ struct OverviewView: View {
     @Environment(AppModel.self) private var model
     @Environment(Navigator.self) private var nav
     @State private var loader = Loader<Overview>()
-    @State private var showAccount = false
-    @State private var showCalendar = false
 
     private var greeting: String {
         let h = Calendar.current.component(.hour, from: Date())
@@ -13,18 +11,11 @@ struct OverviewView: View {
     }
 
     var body: some View {
-        Screen(title: greeting, refresh: { await load() }, trailing: {
-            HStack(spacing: 14) {
-                Button { showCalendar = true } label: { Image(systemName: "calendar").font(.title2).foregroundStyle(Theme.sky) }
-                    .accessibilityLabel("Calendar").accessibilityIdentifier("calendar-button")
-                Button { showAccount = true } label: { Image(systemName: "person.crop.circle").font(.title2).foregroundStyle(Theme.sky) }
-                    .accessibilityLabel("Account").accessibilityIdentifier("account-button")
-            }
-        }) {
+        Screen(title: greeting, refresh: { await load() }) {
             ErrorBanner(text: loader.error)
             if let o = loader.value {
                 if let cal = o.calendar {
-                    Button { nav.open(.calendar, from: .overview) } label: { calendarCard(cal) }
+                    Button { nav.tab = .calendar } label: { calendarCard(cal) }
                         .buttonStyle(.plain).accessibilityIdentifier("calendar-card").accessibilityHint("Opens Calendar")
                 }
                 if let sleep = o.sleep {
@@ -32,15 +23,13 @@ struct OverviewView: View {
                     Button { nav.open(.sleep, from: .overview) } label: { sleepCard(sleep) }
                         .buttonStyle(.plain).accessibilityIdentifier("sleep-card").accessibilityHint("Opens Sleep")
                 }
-                if let f = o.finance {
+                if let f = o.finance, !f.insights.isEmpty {
                     Button { nav.open(.finance, from: .overview) } label: { moneyCard(f) }
                         .buttonStyle(.plain).accessibilityIdentifier("finance-card").accessibilityHint("Opens Finance")
                 }
                 if let t = o.log { logCard(t) }
             } else if loader.loading { ProgressView().padding(.top, 60) }
         }
-        .sheet(isPresented: $showAccount) { AccountView(dismiss: { showAccount = false }) }
-        .sheet(isPresented: $showCalendar) { CalendarView(dismiss: { showCalendar = false }).toolbar(.hidden, for: .navigationBar) }
         .task { await load() }
     }
 
@@ -50,13 +39,6 @@ struct OverviewView: View {
         Card(title: "Today", trailing: Format.longDay(Date())) {
             if cal.today.isEmpty { Empty(text: cal.failed ? "Could not load events." : cal.connected ? "Nothing scheduled today." : "Calendar not connected yet.") }
             ForEach(cal.today) { EventRow(item: $0) }
-            if !cal.soon.isEmpty {
-                Divider().overlay(Theme.line)
-                Text("COMING UP").font(.caption2.weight(.semibold)).tracking(0.8).foregroundStyle(Theme.muted)
-                ForEach(cal.soon.prefix(4)) { i in
-                    VStack(alignment: .leading, spacing: 2) { Text(Format.dayHeading(i)).font(.caption).foregroundStyle(Theme.muted); EventRow(item: i) }
-                }
-            }
         }
     }
 
@@ -76,19 +58,8 @@ struct OverviewView: View {
     }
 
     private func moneyCard(_ f: Overview.Finance) -> some View {
-        Card(title: "Money") {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Net worth").font(.caption).foregroundStyle(Theme.muted)
-                Big(text: Format.money(f.netWorth.net), size: 40)
-            }
-            HStack {
-                Stat(label: "In this month", value: Format.money(f.thisMonth.income), tint: Theme.good)
-                Stat(label: "Out this month", value: Format.money(f.thisMonth.spending))
-            }
-            if !f.insights.isEmpty {
-                Divider().overlay(Theme.line)
-                ForEach(f.insights) { InsightRow(insight: $0) }
-            }
+        Card(title: "Spending") {
+            ForEach(f.insights) { InsightRow(insight: $0) }
         }
     }
 

@@ -32,8 +32,8 @@ struct MainTabs: View {
             Tab(value: .goals) { GoalsView().toolbar(.hidden, for: .navigationBar) } label: {
                 Label { Text("Goals") } icon: { tabIcon("scope", UIColor(red: 0.718, green: 0.643, blue: 0.831, alpha: 1)) }
             }
-            Tab(value: .workouts) { WorkoutsView().toolbar(.hidden, for: .navigationBar) } label: {
-                Label { Text("Fitness") } icon: { tabIcon("figure.run", UIColor(red: 0.431, green: 0.682, blue: 0.565, alpha: 1)) }
+            Tab(value: .calendar) { CalendarView().toolbar(.hidden, for: .navigationBar) } label: {
+                Label { Text("Calendar") } icon: { tabIcon("calendar", UIColor(red: 0.769, green: 0.647, blue: 0.455, alpha: 1)) }
             }
             Tab(value: .more) { MoreView().toolbar(.hidden, for: .navigationBar) } label: {
                 Label { Text("More") } icon: { tabIcon("line.3.horizontal", UIColor(red: 0.604, green: 0.639, blue: 0.678, alpha: 1)) }

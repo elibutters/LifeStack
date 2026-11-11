@@ -27,11 +27,11 @@ export type EventInputT = z.infer<typeof EventInput>;
 
 // log:* are for shortcuts and widgets; the :read scopes below let an agent read each area through MCP.
 export const SCOPES = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read", "amazon:write", "account:read", "email:read", "location:read", "location:write", "notes:read", "notes:write", "settings:read", "settings:write", "goals:read", "goals:write"] as const;
-export const AGENT_SCOPES: Scope[] = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read", "email:read", "location:read", "location:write", "notes:read", "notes:write", "settings:read", "settings:write", "goals:read", "goals:write"];
+export const AGENT_SCOPES: Scope[] = ["log:write", "log:read", "calendar:read", "sleep:read", "finance:read", "fitness:read", "email:read", "location:read", "location:write", "notes:read", "notes:write", "settings:read", "settings:write", "goals:read", "goals:write", "account:read"];
 export type Scope = (typeof SCOPES)[number];
-// What the iPhone app's key carries: everything an agent reads, plus the account section.
-// Mail stays out of a new phone key by default: the app has no mail screen, so a lost phone key cannot read it. The owner can allow it per key.
-export const APP_SCOPES: Scope[] = [...AGENT_SCOPES.filter((s) => s !== "email:read" && s !== "notes:read" && s !== "notes:write" && s !== "settings:write"), "account:read"];
+// What the iPhone app's key carries. A new phone key matches an agent key except mail, Notion and changing preferences stay off:
+// the app has no mail screen, and a lost phone should not read notes or rewrite preferences. The owner can allow those per key.
+export const APP_SCOPES: Scope[] = AGENT_SCOPES.filter((s) => s !== "email:read" && s !== "notes:read" && s !== "notes:write" && s !== "settings:write");
 
 // What each permission lets a key do, for the keys page.
 export const SCOPE_LABELS: Partial<Record<Scope, string>> = {
@@ -43,7 +43,7 @@ export const SCOPE_LABELS: Partial<Record<Scope, string>> = {
   "fitness:read": "Read workouts",
   "email:read": "Read email",
   "amazon:write": "Send Amazon snapshots",
-  "account:read": "Read account and connections (phone app)",
+  "account:read": "Read account and connections",
   "location:read": "Read location history and places",
   "location:write": "Send location and name places",
   "notes:read": "Read Notion notes",

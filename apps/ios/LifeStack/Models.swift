@@ -21,6 +21,7 @@ struct CalendarSession: Decodable, Equatable {
     let minutes: Int?
     let minutesSpent: Int?
     let rating: Int?
+    let logNote: String?   // what the owner wrote when they marked it done
     let status: String   // planned | done | skipped
     let goal: String?
     let noteBlocks: [NoteBlock]?
@@ -217,6 +218,17 @@ enum Format {
         if item.allDay { return "All day" }
         guard let d = date(item.start) else { return "" }
         return d.formatted(date: .omitted, time: .shortened)
+    }
+    // Clock time alone, or with the weekday when the event is not today, so a later morning does not look like one that already passed.
+    static func upcoming(_ item: CalendarItem, now: Date = .now) -> String {
+        let cal = Calendar.current
+        if item.allDay {
+            guard let day = dayDate(String(item.start.prefix(10))) else { return "All day" }
+            return cal.isDate(day, inSameDayAs: now) ? "All day" : day.formatted(.dateTime.weekday(.abbreviated))
+        }
+        guard let d = date(item.start) else { return "" }
+        let clock = d.formatted(date: .omitted, time: .shortened)
+        return cal.isDate(d, inSameDayAs: now) ? clock : "\(d.formatted(.dateTime.weekday(.abbreviated))) \(clock)"
     }
     static func dayHeading(_ item: CalendarItem) -> String {
         let d = item.allDay ? dayDate(String(item.start.prefix(10))) : date(item.start)

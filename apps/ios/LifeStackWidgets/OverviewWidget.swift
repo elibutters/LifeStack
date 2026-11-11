@@ -24,14 +24,39 @@ struct OverviewProvider: TimelineProvider {
     }
 }
 
+// What the widgets put under Now / Next. A live event wins; otherwise the soonest one still to start, then an all-day item today.
+struct CalendarFocus {
+    let item: CalendarItem
+    let live: Bool
+    var label: String { live ? "NOW" : "NEXT" }
+    var when: String {
+        if live, let end = Format.date(item.end), let start = Format.date(item.start), end > start {
+            return "Until \(end.formatted(date: .omitted, time: .shortened))"
+        }
+        return Format.upcoming(item)
+    }
+}
+
 extension Overview {
     var score: Double? { sleep?.lastNight?.score }
     var asleep: String { Format.minutes(sleep?.lastNight?.sleepMin) }
-    // The next event that has not started yet, else the first all-day item today.
-    var nextEvent: CalendarItem? {
+    var focus: CalendarFocus? {
         let items = (calendar?.today ?? []) + (calendar?.soon ?? [])
-        let upcoming = items.filter { !$0.allDay && (Format.date($0.start).map { $0 > .now } ?? false) }
-        return upcoming.first ?? items.first { $0.allDay }
+        let now = Date()
+        let timed: [(CalendarItem, Date, Date)] = items.compactMap { item in
+            guard !item.allDay, let start = Format.date(item.start) else { return nil }
+            let end = Format.date(item.end).flatMap { $0 > start ? $0 : nil } ?? start.addingTimeInterval(60 * 60)
+            guard end > now else { return nil }
+            return (item, start, end)
+        }
+        if let live = timed.filter({ $0.1 <= now }).max(by: { $0.1 < $1.1 }) { return CalendarFocus(item: live.0, live: true) }
+        if let next = timed.filter({ $0.1 > now }).min(by: { $0.1 < $1.1 }) { return CalendarFocus(item: next.0, live: false) }
+        let cal = Foundation.Calendar.current
+        guard let allDay = items.first(where: { item in
+            guard item.allDay, let day = Format.dayDate(String(item.start.prefix(10))) else { return false }
+            return cal.isDate(day, inSameDayAs: now)
+        }) else { return nil }
+        return CalendarFocus(item: allDay, live: false)
     }
     var supplementsTaken: Int { log?.supplements.filter { $0.count > 0 }.count ?? 0 }
 }
@@ -69,7 +94,7 @@ struct OverviewWidgetView: View {
         VStack(alignment: .leading, spacing: 1) {
             Text("Sleep \(scoreText) \u{00B7} \(o?.asleep ?? "-")").font(.headline)
             Text(logLine).font(.caption)
-            if let e = o?.nextEvent { Text("\(Format.time(e)) \(e.title)").font(.caption).lineLimit(1) }
+            if let e = o?.focus { Text("\(e.live ? "Now" : e.when) \(e.item.title)").font(.caption).lineLimit(1) }
             else { Text("Nothing else today").font(.caption) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -103,26 +128,27 @@ struct OverviewWidgetView: View {
             small.frame(width: 100)
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("NEXT").font(.caption2.weight(.semibold)).foregroundStyle(WColor.muted)
-                    if let e = o?.nextEvent {
-                        Text(e.title).font(.subheadline.weight(.semibold)).lineLimit(2)
-                        Text(Format.time(e)).font(.caption).foregroundStyle(WColor.sky)
+                    Text(o?.focus?.label ?? "NEXT").font(.caption2.weight(.semibold)).foregroundStyle(WColor.muted)
+                    if let e = o?.focus {
+                        Text(e.item.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                        Text(e.when).font(.caption).foregroundStyle(WColor.sky)
                     } else { Text("Nothing scheduled").font(.subheadline).foregroundStyle(WColor.muted) }
                 }
                 HStack(spacing: 12) {
-                    stat("\(o?.supplementsTaken ?? 0)", "supps")
-                    stat(o?.log.map { String(Int($0.caffeine.mg)) } ?? "0", "mg caffeine")
-                    if let m = o?.log?.mood { stat(String(m.value), "mood") }
+                    stat("Supps", "\(o?.supplementsTaken ?? 0)")
+                    stat("Caffeine", o?.log.map { "\(Int($0.caffeine.mg)) mg" } ?? "0 mg")
+                    if let m = o?.log?.mood { stat("Mood", String(m.value)) }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private func stat(_ v: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(v).font(.system(.body).weight(.semibold)).monospacedDigit()
-            Text(label).font(.caption2).foregroundStyle(WColor.muted)
+    // One word on the top left, the current amount underneath, so nothing wraps mid-word.
+    private func stat(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(.caption2.weight(.semibold)).foregroundStyle(WColor.muted).lineLimit(1)
+            Text(value).font(.system(.body).weight(.semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
         }
     }
 }

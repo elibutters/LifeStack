@@ -1,8 +1,8 @@
 import SwiftUI
 
-// Three ways to read the same events, in the order they are offered. Rolling is seven days starting on the
-// selected day, moved one day at a time, and is where the screen opens. Month is a grid. Week is the
-// calendar week around the selected day.
+// Three ways to read the same events. Rolling is seven days, moved one day at a time: the chosen day stays
+// put, and only follows the window when it would otherwise fall off the end. Month is a grid. Week is the
+// calendar week around the chosen day.
 private enum CalendarMode: String, CaseIterable {
     case rolling = "Rolling"
     case month = "Month"
@@ -19,30 +19,87 @@ struct CalendarView: View {
     @State private var error: String?
     @State private var loading = false
     @State private var generation = 0
+    @State private var scrollToken = 0
+    @State private var scrollTarget: Date?
+    @State private var scrolledDay: String?
+    @State private var followScroll = true
+    @State private var scrollAnimated = true
     var dismiss: (() -> Void)? = nil
 
     private var cal: Calendar { Calendar.current }
     private var today: Date { cal.startOfDay(for: Date()) }
 
     var body: some View {
-        Screen(title: "Calendar", refresh: { await load() }, trailing: {
-            if let dismiss { Button("Done", action: dismiss).foregroundStyle(Theme.sky) }
-        }) {
+        VStack(spacing: 10) {
             ErrorBanner(text: error)
             modePicker
             pager
-            switch mode {
-            case .month:
-                monthGrid
-                dayAgenda(focus)
-            case .week, .rolling:
-                weekStrip(windowDays)
-                windowAgenda
-            }
-            if items.isEmpty && loading { ProgressView().padding(.top, 24) }
+            if mode != .month { weekStrip(windowDays) }
+            agenda
+        }
+        .padding(.horizontal, 14).padding(.top, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Ambient())
+        .screenHeader("Calendar") {
+            if let dismiss { Button("Done", action: dismiss).foregroundStyle(Theme.sky) }
         }
         .task(id: loadKey) { await load() }
         .sheet(item: $selected) { item in CalendarItemSheet(item: item) { await load() } }
+    }
+
+    // The agenda is the only part that scrolls. Picking a day in the strip brings that day to the top of it.
+    private var agenda: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 10) {
+                    switch mode {
+                    case .month:
+                        monthGrid
+                        dayAgenda(focus)
+                    case .week, .rolling:
+                        windowAgenda
+                    }
+                    if items.isEmpty && loading { ProgressView().padding(.top, 24) }
+                }
+                .padding(.bottom, 110)
+            }
+            .scrollIndicators(.hidden)
+            .refreshable { await load() }
+            .scrollPosition(id: $scrolledDay, anchor: .top)
+            .onChange(of: scrolledDay) { _, id in
+                guard followScroll, mode != .month, let id, let day = windowDays.first(where: { ymd($0) == id }) else { return }
+                if !cal.isDate(day, inSameDayAs: focus) { focus = day }
+            }
+            .onChange(of: scrollToken) {
+                guard let day = scrollTarget, mode != .month else { return }
+                let animated = scrollAnimated
+                Task { @MainActor in
+                    if animated {
+                        withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(ymd(day), anchor: .top) }
+                    } else {
+                        proxy.scrollTo(ymd(day), anchor: .top)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func reveal(_ day: Date) { hold(day, animated: true) }
+
+    // Keeps the agenda on this day. A plain window step does not animate, so the list does not jump to the new edge.
+    private func hold(_ day: Date, animated: Bool = false) {
+        followScroll = false
+        focus = cal.startOfDay(for: day)
+        scrollTarget = focus
+        scrollAnimated = animated
+        scrolledDay = ymd(focus)
+        scrollToken += 1
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            followScroll = true
+            scrollAnimated = true
+        }
     }
 
     private var modePicker: some View {
@@ -69,7 +126,7 @@ struct CalendarView: View {
             stepButton("chevron.left", "Previous", -1)
             Text(rangeTitle).font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity)
             stepButton("chevron.right", "Next", 1)
-            Button("Today") { focus = today; page = today }
+            Button("Today") { page = today; reveal(today) }
                 .font(.subheadline.weight(.medium)).foregroundStyle(Theme.accent)
                 .padding(.leading, 4)
         }
@@ -126,7 +183,7 @@ struct CalendarView: View {
         HStack(spacing: 4) {
             ForEach(days, id: \.timeIntervalSince1970) { day in
                 let selected = cal.isDate(day, inSameDayAs: focus)
-                Button { focus = day } label: {
+                Button { reveal(day) } label: {
                     VStack(spacing: 4) {
                         Text(day.formatted(.dateTime.weekday(.narrow))).font(.caption2).foregroundStyle(Theme.muted)
                         Text("\(cal.component(.day, from: day))")
@@ -150,11 +207,17 @@ struct CalendarView: View {
     private var windowAgenda: some View {
         Card {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(windowDays.enumerated()), id: \.offset) { index, day in
-                    if index > 0 { Divider().overlay(Theme.line).padding(.vertical, 8) }
-                    dayBlock(day)
+                ForEach(windowDays, id: \.timeIntervalSince1970) { day in
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let first = windowDays.first, !cal.isDate(day, inSameDayAs: first) {
+                            Rectangle().fill(Color.white.opacity(0.28)).frame(height: 2).padding(.vertical, 16).padding(.horizontal, -14)
+                        }
+                        dayBlock(day)
+                    }
+                    .id(ymd(day))
                 }
             }
+            .scrollTargetLayout()
         }
     }
 
@@ -173,11 +236,13 @@ struct CalendarView: View {
         let list = events(on: day)
         return VStack(alignment: .leading, spacing: 6) {
             Button { focus = day } label: {
-                HStack(spacing: 6) {
-                    Text(day.formatted(.dateTime.weekday(.abbreviated))).foregroundStyle(cal.isDateInToday(day) ? Theme.accent : Theme.muted)
+                HStack(spacing: 8) {
+                    Text(day.formatted(.dateTime.weekday(.wide))).foregroundStyle(cal.isDateInToday(day) ? Theme.accent : (cal.isDate(day, inSameDayAs: focus) ? Color.white : Theme.muted))
                     Text(day.formatted(.dateTime.month(.abbreviated).day())).foregroundStyle(cal.isDate(day, inSameDayAs: focus) ? Color.white : Theme.muted)
+                    Spacer(minLength: 0)
                 }
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
+                .padding(.bottom, 2)
             }
             .buttonStyle(.plain)
             if list.isEmpty {
@@ -227,10 +292,14 @@ struct CalendarView: View {
             focus = cal.startOfDay(for: next)
             page = focus
         case .rolling:
-            guard let nextPage = cal.date(byAdding: .day, value: delta, to: page),
-                  let nextFocus = cal.date(byAdding: .day, value: delta, to: focus) else { return }
-            page = cal.startOfDay(for: nextPage)
-            focus = cal.startOfDay(for: nextFocus)
+            guard let nextPage = cal.date(byAdding: .day, value: delta, to: page) else { return }
+            let start = cal.startOfDay(for: nextPage)
+            guard let last = cal.date(byAdding: .day, value: 6, to: start) else { return }
+            let end = cal.startOfDay(for: last)
+            page = start
+            if focus < start { reveal(start) }
+            else if focus > end { reveal(end) }
+            else { hold(focus) }
         }
     }
 
@@ -470,7 +539,7 @@ struct CalendarItemSheet: View {
                 HStack(spacing: 8) {
                     if let goal = s.goal { Text(goal.uppercased()).font(.caption.weight(.semibold)).tracking(0.8).foregroundStyle(Theme.muted).lineLimit(1) }
                     Spacer(minLength: 0)
-                    if missed(s) { pill("Missed", Theme.warm) } else { pill(s.status.capitalized, sessionTint(s.status)) }
+                    if missed(s) { pill("Skipped", sessionTint("skipped")) } else { pill(s.status.capitalized, sessionTint(s.status)) }
                 }
             }
             Text(item.title).font(.title.weight(.bold)).strikethrough(s?.status == "skipped").fixedSize(horizontal: false, vertical: true)
@@ -490,7 +559,7 @@ struct CalendarItemSheet: View {
         if missed(s) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "questionmark.circle.fill").foregroundStyle(Theme.warm)
-                Text("This was planned for earlier and is still open. Did you do it?").font(.subheadline)
+                Text("This time has passed, so it counts as skipped. Mark it done if you did it.").font(.subheadline)
             }
             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.warm.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.r, style: .continuous))
@@ -508,7 +577,7 @@ struct CalendarItemSheet: View {
         }
         // Only once it can have happened: a session still ahead has nothing to log. For a planned one the details go with the Mark done button
         // below; a session that is already done has its own button to update them.
-        if s.status == "done" || (s.status == "planned" && missed(s)) {
+        if s.status == "done" || s.status == "planned" || s.status == "skipped" {
             card(s.status == "done" ? "Your log" : "How it went (optional)") {
                 Stepper(value: $minutes, in: 1...720, step: 5) { Text("\(minutes) min").font(.body.monospacedDigit()) }
                 HStack(spacing: 6) {
@@ -640,7 +709,7 @@ struct CalendarItemSheet: View {
                 if let s = item.session, s.id != nil, !editing { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { beginEditing(s) } } }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { if let s = item.session { minutes = s.minutesSpent ?? length(s); rating = s.rating ?? 0 } }
+            .onAppear { if let s = item.session { minutes = s.minutesSpent ?? length(s); rating = s.rating ?? 0; logNote = s.logNote ?? "" } }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
