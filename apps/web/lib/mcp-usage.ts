@@ -19,7 +19,8 @@ export async function recordCalls(body: unknown, res: Response, tokenId: number,
   const calls = callsIn(body);
   if (!calls.length) return;
   const ms = Date.now() - started;
-  const parsed = await res.clone().json().catch(() => null);
+  // `res` is the caller's own copy: the original is sent (and its body consumed) before this runs, so it cannot be cloned here.
+  const parsed = await res.json().catch(() => null);
   const out = outcomeOf(parsed);
   const rows = calls.map((c) => ({
     ts: new Date(), domain: "mcp", key: "mcp.call", valueNum: ms, valueText: c.tool,
