@@ -20,6 +20,6 @@ node scripts/guard-git.test.mjs
 bash scripts/test-db.sh
 export DATABASE_URL=postgres://lifestack:lifestack@127.0.0.1:5432/lifestack_test
 export DATABASE_URL_UNPOOLED= # never let a .env pointing at the live database leak into a test run
-for t in plaid finance-calc finance-data capture eight backup mcp app-api amazon profile overview strava workouts-core wants todos notes-write email location notion settings goals-core outlook-write goals goals-notion session-log mcp-usage; do
+for t in plaid finance-calc finance-data capture eight backup mcp app-api amazon profile overview strava workouts-core wants todos notes-write email location notion settings goals-core outlook-write goals goals-notion session-log mcp-instructions mcp-usage; do
   pnpm --filter @lifestack/db exec tsx --conditions=react-server "../../apps/web/tests/$t.test.mts"
 done
