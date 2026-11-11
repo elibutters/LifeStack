@@ -4,7 +4,7 @@ import { and, desc, eq, gte } from "drizzle-orm";
 import { after } from "next/server";
 import { events } from "@lifestack/db";
 import { db } from "./db";
-import { outcomeOf, type Call } from "./mcp-usage-core";
+import { clientOf, outcomeOf, type Call } from "./mcp-usage-core";
 
 // Every tools/call is recorded as an events row (domain "mcp", key "mcp.call"): the tool, which key, how long, whether it worked, the
 // size of the answer, and the NAMES of the arguments. Argument values and results are never stored. Recording never fails a call.
@@ -15,7 +15,7 @@ export function callsIn(body: unknown): { tool: string; argKeys: string[] }[] {
   return list.flatMap((m: Rpc) => (m && m.method === "tools/call" && typeof m.params?.name === "string" ? [{ tool: m.params.name.slice(0, 80), argKeys: Object.keys(m.params.arguments ?? {}).slice(0, 30).map((k) => k.slice(0, 40)) }] : []));
 }
 
-export async function recordCalls(body: unknown, res: Response, tokenId: number, started: number) {
+export async function recordCalls(body: unknown, res: Response, tokenId: number, started: number, userAgent?: string | null) {
   const calls = callsIn(body);
   if (!calls.length) return;
   const ms = Date.now() - started;
@@ -24,15 +24,15 @@ export async function recordCalls(body: unknown, res: Response, tokenId: number,
   const out = outcomeOf(parsed);
   const rows = calls.map((c) => ({
     ts: new Date(), domain: "mcp", key: "mcp.call", valueNum: ms, valueText: c.tool,
-    payload: { tokenId, argKeys: c.argKeys, outcome: out.outcome, bytes: out.bytes, ...(out.error ? { error: out.error } : {}) },
+    payload: { tokenId, argKeys: c.argKeys, outcome: out.outcome, bytes: out.bytes, client: clientOf(userAgent), ...(userAgent ? { ua: userAgent.slice(0, 100) } : {}), ...(out.error ? { error: out.error } : {}) },
     source: "mcp", sourceId: randomUUID(),
   }));
   await db().insert(events).values(rows);
 }
 
 // After the response has gone out when in a request, otherwise in the background. Never throws.
-export function recordAfter(body: unknown, res: Response, tokenId: number, started: number) {
-  const run = () => recordCalls(body, res, tokenId, started).catch(() => {});
+export function recordAfter(body: unknown, res: Response, tokenId: number, started: number, userAgent?: string | null) {
+  const run = () => recordCalls(body, res, tokenId, started, userAgent).catch(() => {});
   try {
     after(run);
   } catch {
@@ -44,7 +44,7 @@ export async function loadCalls(days: number, now = new Date()): Promise<Call[]>
   const since = new Date(now.getTime() - days * 86_400_000);
   const rows = await db().select().from(events).where(and(eq(events.source, "mcp"), eq(events.key, "mcp.call"), gte(events.ts, since))).orderBy(desc(events.ts)).limit(20000);
   return rows.map((r) => {
-    const p = r.payload as { tokenId?: number; argKeys?: string[]; outcome?: Call["outcome"]; bytes?: number; error?: string };
-    return { at: r.ts, tool: r.valueText ?? "?", tokenId: p.tokenId ?? null, ms: r.valueNum ?? 0, outcome: p.outcome ?? "ok", bytes: p.bytes ?? 0, argKeys: p.argKeys ?? [], error: p.error };
+    const p = r.payload as { tokenId?: number; argKeys?: string[]; outcome?: Call["outcome"]; bytes?: number; error?: string; client?: string; ua?: string };
+    return { at: r.ts, tool: r.valueText ?? "?", tokenId: p.tokenId ?? null, ms: r.valueNum ?? 0, outcome: p.outcome ?? "ok", bytes: p.bytes ?? 0, argKeys: p.argKeys ?? [], error: p.error, client: p.client, ua: p.ua };
   });
 }

@@ -27,5 +27,14 @@ assert.equal((rows[0]!.payload as any).outcome, "ok");
 assert.equal((rows[0]!.payload as any).tokenId, 7);
 assert.ok(!JSON.stringify(rows[0]).includes("2026-11-11T12:00"), "no argument value is stored");
 
+// ---- the caller's signature is kept, as a label and the short raw string, so agents on one key can be told apart
+await db().delete(events);
+const ua = "claude-code/2.1.0 (cli)";
+const res2 = answer(); const forLog2 = res2.clone(); await res2.text();
+await recordCalls(body, forLog2, 20, Date.now() - 5, ua);
+await recordCalls(body, answer(), 20, Date.now() - 5); // an older caller that sent none
+const withUa = (await db().select().from(events)).filter((e) => e.source === "mcp").map((e) => e.payload as any);
+assert.deepEqual(withUa.map((p) => [p.client, p.ua ?? null]).sort(), [["Claude Code", ua], ["unknown", null]]);
+
 await db().delete(events);
 console.log("mcp-usage-record tests passed");
