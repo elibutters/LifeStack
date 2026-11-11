@@ -8,6 +8,7 @@ import { calendarItems } from "./calendar";
 import { connectionsStatus } from "./app-data";
 import { addDays, isValidDay, startOfDay, TZ, ymd } from "./dates";
 import { addLocalTimes } from "./mcp-times";
+import { summaries } from "./mcp-summaries";
 import { describeError } from "./errors";
 import { classify, fmtMoney, insights, merchantName, monthOf, netWorth, shiftMonthKey, summarizeMonth, accountLabel } from "./finance-calc";
 import { loadFinance, loadHoldings } from "./finance-data";
@@ -510,7 +511,9 @@ export function buildServer(token: VerifiedToken): McpServer {
   }
 
   if (has("goals:write")) {
-    const fromResult = <T extends { ok: boolean }>(r: T) => ((r as { ok: boolean }).ok ? ok(r) : fail((r as unknown as { error: string }).error));
+    // A write tool can add a one-sentence `summary` (lib/mcp-summaries.ts) for the agent to pass on to the owner.
+    const fromResult = <T extends { ok: boolean }>(r: T, summarize?: (done: Extract<T, { ok: true }>) => string) =>
+      (r as { ok: boolean }).ok ? ok(summarize ? { ...r, summary: summarize(r as Extract<T, { ok: true }>) } : r) : fail((r as unknown as { error: string }).error);
     server.registerTool(
       "create_goal",
       {
@@ -545,7 +548,7 @@ export function buildServer(token: VerifiedToken): McpServer {
         try {
           const r = await commitPlan(goalId, rest);
           if (r.ok) afterResponse(() => notebookHook({ type: "committed", goalId, sessions: r.sessions.map((x) => ({ title: x.title, start: x.start, minutes: x.minutes })) }));
-          return fromResult(r);
+          return fromResult(r, (x) => summaries.commit(x));
         } catch (e) { console.error("mcp: commit_plan failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
@@ -571,7 +574,7 @@ export function buildServer(token: VerifiedToken): McpServer {
       "set_session_note",
       { description: "Sets the note on a session, replacing the old one (empty text clears it), and updates the Outlook event body to match. Use it to add detail to a workout before it happens or comments after, such as pace, how it felt, or what to fuel with. The note is also returned by get_goal and get_tonight. " + NOTE_FORMAT, inputSchema: { id: z.string(), note: z.string() } },
       async ({ id, note }) => {
-        try { return fromResult(await setSessionNote(id, { note })); } catch (e) { console.error("mcp: set_session_note failed", describeError(e)); return fail("The tool could not save that."); }
+        try { return fromResult(await setSessionNote(id, { note }), (x) => summaries.note(x)); } catch (e) { console.error("mcp: set_session_note failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
     server.registerTool(
@@ -584,7 +587,7 @@ export function buildServer(token: VerifiedToken): McpServer {
         try {
           const r = await linkActivity(id, activityId);
           if (r.ok && r.completed) afterResponse(() => notebookHook({ type: "done", session: r.session }));
-          return fromResult(r);
+          return fromResult(r, (x) => summaries.link(x));
         } catch (e) { console.error("mcp: link_strava_activity failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
@@ -597,7 +600,7 @@ export function buildServer(token: VerifiedToken): McpServer {
       "push_to_calendar",
       { description: "Adds calendar events for sessions that were saved without one (for example before Outlook was reconnected). Optionally for one goal.", inputSchema: { goalId: z.string().optional() } },
       async ({ goalId }) => {
-        try { return ok(await pushToCalendar(goalId)); } catch (e) { console.error("mcp: push_to_calendar failed", describeError(e)); return fail("The tool could not update the calendar."); }
+        try { const r = await pushToCalendar(goalId); return ok({ ...r, summary: summaries.push(r) }); } catch (e) { console.error("mcp: push_to_calendar failed", describeError(e)); return fail("The tool could not update the calendar."); }
       },
     );
     server.registerTool(
@@ -621,7 +624,7 @@ export function buildServer(token: VerifiedToken): McpServer {
         try {
           const r = await completeSession(id, rest);
           if (r.ok) afterResponse(() => notebookHook({ type: "done", session: r.session, note: rest.note }));
-          return fromResult(r);
+          return fromResult(r, (x) => summaries.complete(x));
         } catch (e) { console.error("mcp: complete_session failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
@@ -632,7 +635,7 @@ export function buildServer(token: VerifiedToken): McpServer {
         try {
           const r = await skipSession(id);
           if (r.ok) afterResponse(() => notebookHook({ type: "skipped", session: r.session }));
-          return fromResult(r);
+          return fromResult(r, (x) => summaries.skip(x, TZ));
         } catch (e) { console.error("mcp: skip_session failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
@@ -641,7 +644,7 @@ export function buildServer(token: VerifiedToken): McpServer {
       { description: "Drops a session because the plan changed. It is kept as a record of an earlier version of the plan, but it is not counted as skipped, it does not show on the calendar and its Outlook event is removed. Use this (or commit_plan's replaces) whenever you rewrite part of a plan; use skip_session only for something the owner chose not to do. A session already done is refused.", inputSchema: { id: z.string() } },
       async ({ id }) => {
         try {
-          return fromResult(await replaceSession(id));
+          return fromResult(await replaceSession(id), (x) => summaries.replace(x));
         } catch (e) { console.error("mcp: replace_session failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
@@ -652,7 +655,7 @@ export function buildServer(token: VerifiedToken): McpServer {
         try {
           const r = await moveSession(id, { start });
           if (r.ok) afterResponse(() => notebookHook({ type: "moved", session: r.session }));
-          return fromResult(r);
+          return fromResult(r, (x) => summaries.move(x, TZ));
         } catch (e) { console.error("mcp: move_session failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );

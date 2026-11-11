@@ -66,7 +66,7 @@ const r = await log.logSession("legs", { start: "2026-11-11T12:00", note: "Squat
 assert.ok(r.ok, r.error);
 assert.equal(r.session.status, "done"); assert.equal(r.session.start, at("2026-11-11", 12 * 60).toISOString(), "the session now sits at the real time");
 assert.equal(r.session.minutes, 60, "the planned length is kept for the calendar block"); assert.equal(r.session.minutesSpent, 60);
-assert.deepEqual([r.session.rating, r.session.logNote], [4, "Squats felt good"]);
+assert.equal(r.session.rating, 4); assert.equal(((await db().select().from(events)).find((e) => e.sourceId === "session:legs")!.payload as any).logNote, "Squats felt good", "the note is stored");
 assert.deepEqual(r.session.movedFrom, [at("2026-11-10", 18 * 60 + 30).toISOString()], "the planned time is remembered as a move");
 assert.equal(r.session.doneAt, at("2026-11-11", 13 * 60).toISOString(), "done when it finished, not when it was recorded");
 assert.match(r.summary, /moved from Tue 6:30 PM to Wed 12:00 PM/); assert.equal(r.calendar, "ok");
