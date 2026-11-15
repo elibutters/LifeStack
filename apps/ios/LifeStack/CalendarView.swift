@@ -382,7 +382,7 @@ struct CalendarView: View {
             Button { selected = item } label: { EventRow(item: item) }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if NextEventActivity.canTime(item) { timerButton(item) }
+            if NextEventActivity.showsStart(item) { timerButton(item) }
         }
     }
 
@@ -678,7 +678,7 @@ struct CalendarItemSheet: View {
 
     private func sessionBar(_ id: String, _ s: CalendarSession) -> some View {
         VStack(spacing: 10) {
-            if NextEventActivity.canTime(item) { clockButton }
+            if NextEventActivity.showsStart(item) { clockButton }
             sessionButtons(id, s)
         }
         .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8)
@@ -790,7 +790,7 @@ struct CalendarItemSheet: View {
                         }
                         .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8).background(.bar)
                     } else { sessionBar(id, s) }
-                } else if NextEventActivity.canTime(item) {
+                } else if NextEventActivity.showsStart(item) {
                     clockButton
                         .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8)
                         .background(.bar)

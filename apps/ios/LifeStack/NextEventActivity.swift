@@ -35,6 +35,15 @@ enum NextEventActivity {
         return Format.date(item.start) != nil
     }
 
+    // The Start button in the calendar is only for today, so other days stay uncluttered. A timer already running for the item keeps its Stop.
+    static func showsStart(_ item: CalendarItem) -> Bool {
+        guard canTime(item) else { return false }
+        if current()?.id == item.id { return true }
+        let cal = Calendar.current
+        if item.allDay { return Format.dayDate(String(item.start.prefix(10))).map { cal.isDateInToday($0) } ?? false }
+        return Format.date(item.start).map { cal.isDateInToday($0) } ?? false
+    }
+
     static func current() -> Clock? {
         guard let activity = Activity<NextEventAttributes>.activities.first(where: { $0.content.state.phase == .timing }),
               let started = activity.content.state.startedAt else { return nil }
