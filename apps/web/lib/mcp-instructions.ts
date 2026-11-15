@@ -13,7 +13,7 @@ export function buildInstructions(scopes: readonly string[]): string {
     out.push(
       [
         "Goal sessions (workouts, study blocks, anything planned toward a goal):",
-        "- To see today, or what slipped and needs a decision: get_tonight. To find a session's id by day or name: get_sessions (short rows, with state planned, done, skipped or missed). get_goal shows one whole goal.",
+        "- To see which goals exist and where each stands: get_goals (a short summary; it has no session lists, so it is cheap). To see today, or what slipped and needs a decision: get_tonight. To find a session's id by day or name: get_sessions (short rows, with state planned, done, skipped or missed). get_goal shows one whole goal.",
         ...(has("goals:write")
           ? [
               "- Pick the write tool by what happened:",
