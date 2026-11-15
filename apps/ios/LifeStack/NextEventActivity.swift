@@ -241,7 +241,7 @@ enum NextEventActivity {
         if mode == "run" || mode == "lift" {
             let style: NextEventAttributes.Style = mode == "run" ? .run : .lift
             let start = now.addingTimeInterval(-5 * 60)
-            let attrs = NextEventAttributes(id: 9_999, title: style == .run ? "Easy run" : "Lift", start: start, end: start.addingTimeInterval(60 * 60), allDay: false, place: nil, style: style, plan: style == .run ? ["Warm-up:", "10 minutes easy jog", "Main set:", "3 x 1 mile at 7:10 to 7:20, 2 minutes easy between", "Cool-down:", "10 minutes easy jog"] : ["Main lifts:", "Bench press: 4 x 5 at effort 7, rest 2 to 3 min", "Pull-ups: 3 x 8", "Overhead press: 3 x 8", "Accessories:", "Face pulls: 3 x 15", "Hammer curls: 3 x 12"])
+            let attrs = NextEventAttributes(id: 9_999, title: style == .run ? "Easy run" : "Lift", start: start, end: start.addingTimeInterval(60 * 60), allDay: false, place: nil, style: style, plan: style == .run ? ["10 min easy", "3 \u{00D7} 1 mi at 7:45, 2 min jog between", "5 min easy"] : ["Bench press 4\u{00D7}6", "Pull-ups 3\u{00D7}8", "Overhead press 3\u{00D7}10", "Romanian deadlift 3\u{00D7}8", "Face pull 3\u{00D7}15", "Plank 3\u{00D7}40 s"])
             let state = NextEventAttributes.ContentState(phase: .timing, rangeStart: now, rangeEnd: attrs.end, startedAt: now.addingTimeInterval(-90))
             DispatchQueue.main.async {
                 for a in Activity<NextEventAttributes>.activities { Task { await a.end(nil, dismissalPolicy: .immediate) } }

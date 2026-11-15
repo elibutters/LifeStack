@@ -91,7 +91,7 @@ struct NextEventAttributes: ActivityAttributes {
             var t = b.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if t.isEmpty { continue }
             if b.kind == "heading" { t = t.hasSuffix(":") ? t : t + ":" }
-            if t.count > 64 { t = String(t.prefix(61)) + "..." }
+            if t.count > 90 { t = String(t.prefix(87)) + "..." }
             if out.count >= 10 || used + t.count > 640 { break }
             out.append(t); used += t.count
         }
