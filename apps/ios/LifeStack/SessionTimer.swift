@@ -99,8 +99,13 @@ enum SessionMemory {
     }
 
     private static var group: String? {
+        // The simulator build is not signed with the shared group, so using it there fails every save.
+        #if targetEnvironment(simulator)
+        return nil
+        #else
         let g = Bundle.main.object(forInfoDictionaryKey: "LSKeychainGroup") as? String
         return g?.contains("$(") == false ? g : nil
+        #endif
     }
 
     private static func query() -> [String: Any] {
