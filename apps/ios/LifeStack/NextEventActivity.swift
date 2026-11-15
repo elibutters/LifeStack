@@ -9,7 +9,10 @@ import Foundation
 // and the card never appears.
 @MainActor
 enum NextEventActivity {
-    struct Clock: Equatable { let id: Int; let startedAt: Date }
+    struct Clock: Equatable { let id: Int; let itemKey: String; let startedAt: Date }
+
+    // The same name for a calendar item on every device: a goal session by its id, anything else by its calendar id.
+    static func key(for item: CalendarItem) -> String { item.session?.id.map { "s:\($0)" } ?? "ev:\(item.id)" }
 
     private static var pending: Task<Void, Never>?
 
@@ -47,7 +50,7 @@ enum NextEventActivity {
     static func current() -> Clock? {
         guard let activity = Activity<NextEventAttributes>.activities.first(where: { $0.content.state.phase == .timing }),
               let started = activity.content.state.startedAt else { return nil }
-        return Clock(id: activity.attributes.id, startedAt: started)
+        return Clock(id: activity.attributes.id, itemKey: activity.attributes.itemKey, startedAt: started)
     }
 
     // Start goes to the server first; the clock on this phone then follows the start time the server settled on.
@@ -209,7 +212,7 @@ enum NextEventActivity {
     private static func event(for item: CalendarItem) -> NextEventAttributes? {
         guard canTime(item) else { return nil }
         let style = NextEventAttributes.Style.choose(title: item.title, kind: item.kind)
-        let key = item.session?.id.map { "s:\($0)" } ?? "ev:\(item.id)"
+        let key = key(for: item)
         let plan = NextEventAttributes.planLines((item.session?.noteBlocks ?? []).map { ($0.kind, $0.text) })
         if item.allDay {
             let day = Format.dayDate(String(item.start.prefix(10))) ?? Date()
