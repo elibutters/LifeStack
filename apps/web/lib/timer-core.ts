@@ -30,3 +30,9 @@ export function split(rows: TimerState[], now: Date): { running: TimerState | nu
     .sort((a, b) => b.stoppedAt.localeCompare(a.stoppedAt));
   return { running, recentlyStopped };
 }
+
+// Whole minutes between two ISO times, rounded; 0 when the order is wrong.
+export const minutesBetween = (from: string, to: string): number => Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 60000));
+
+// The item keys the phone sends for a goal session look like "s:<session id>".
+export const sessionIdOf = (itemKey: string): string | null => (itemKey.startsWith("s:") && itemKey.length > 2 ? itemKey.slice(2) : null);

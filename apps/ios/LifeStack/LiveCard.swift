@@ -48,7 +48,7 @@ struct LiveCard: View {
             Button {
                 Task { if timing { _ = try? await StopSessionIntent().perform() } else { _ = try? await StartSessionIntent().perform() } }
             } label: {
-                Text(timing ? "Stop" : "Start").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 10)
+                Image(systemName: timing ? "stop.fill" : "play.fill").font(.title3).accessibilityLabel(timing ? "Stop" : "Play").frame(maxWidth: .infinity).padding(.vertical, 10)
                     .background(timing ? Theme.bad : color, in: RoundedRectangle(cornerRadius: Theme.r))
                     .foregroundStyle(timing ? Color.white : Color.black)
             }

@@ -186,7 +186,7 @@ enum SessionClock {
 
 // The Start button on the lock-screen card. It turns the card that is already up into a running timer.
 struct StartSessionIntent: LiveActivityIntent {
-    static var title: LocalizedStringResource = "Start"
+    static var title: LocalizedStringResource = "Play"
     static var openAppWhenRun = false
 
     func perform() async throws -> some IntentResult {
