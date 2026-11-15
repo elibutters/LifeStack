@@ -27,10 +27,11 @@ struct NextEventLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 8) {
                         ProgressRow(context: context)
+                        TimerButton(context: context)
                         HStack {
                             Text(detail(context)).lineLimit(1)
                             Spacer()
-                            if !context.attributes.allDay {
+                            if !context.attributes.allDay, context.state.phase != .timing {
                                 Text(context.attributes.end.formatted(date: .omitted, time: .shortened))
                             }
                         }
@@ -40,14 +41,22 @@ struct NextEventLiveActivity: Widget {
                     .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 10)
                 }
             } compactLeading: {
-                LogoMark().frame(width: 22, height: 18)
+                if context.state.phase == .timing {
+                    Image(systemName: context.attributes.style.symbol).foregroundStyle(phaseColor(context))
+                } else {
+                    LogoMark().frame(width: 22, height: 18)
+                }
             } compactTrailing: {
                 Countdown(context: context)
                     .font(.system(.caption, design: .rounded).weight(.semibold).monospacedDigit())
                     .foregroundStyle(phaseColor(context))
-                    .frame(maxWidth: 58)
+                    .frame(maxWidth: 64)
             } minimal: {
-                LogoMark().frame(width: 18, height: 15)
+                if context.state.phase == .timing {
+                    Image(systemName: context.attributes.style.symbol).font(.caption2).foregroundStyle(phaseColor(context))
+                } else {
+                    LogoMark().frame(width: 18, height: 15)
+                }
             }
             .keylineTint(phaseColor(context))
         }
@@ -99,8 +108,30 @@ private struct LockCard: View {
                     .frame(maxWidth: 128, alignment: .trailing)
             }
             if !context.attributes.allDay { ProgressRow(context: context) }
+            TimerButton(context: context)
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
+    }
+}
+
+// Start turns the automatic card into a timer. Stop ends that timer.
+private struct TimerButton: View {
+    let context: ActivityViewContext<NextEventAttributes>
+
+    var body: some View {
+        if context.state.phase == .timing {
+            Button(intent: StopSessionIntent()) {
+                Text("Stop").font(.headline).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(red: 0.941, green: 0.443, blue: 0.471))
+        } else if context.state.phase != .allDay {
+            Button(intent: StartSessionIntent()) {
+                Text("Start").font(.headline).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(phaseColor(context))
+        }
     }
 }
 
@@ -118,8 +149,11 @@ private struct StatusLabel: View {
 private struct ProgressRow: View {
     let context: ActivityViewContext<NextEventAttributes>
     var body: some View {
-        if context.state.phase == .now, !context.isStale {
-            ProgressView(timerInterval: context.attributes.start...context.attributes.end, countsDown: false) { EmptyView() } currentValueLabel: { EmptyView() }
+        if context.state.phase == .timing, let started = context.state.startedAt, started < context.attributes.end {
+            ProgressView(timerInterval: started...context.attributes.end, countsDown: false) { EmptyView() } currentValueLabel: { EmptyView() }
+                .progressViewStyle(.linear).tint(phaseColor(context))
+        } else if countingUp(context), let range = firstHalfHour(context) {
+            ProgressView(timerInterval: range, countsDown: false) { EmptyView() } currentValueLabel: { EmptyView() }
                 .progressViewStyle(.linear).tint(phaseColor(context))
         } else {
             Capsule().fill(Color.white.opacity(0.12)).frame(height: 4)
@@ -131,10 +165,14 @@ private struct Countdown: View {
     let context: ActivityViewContext<NextEventAttributes>
 
     var body: some View {
-        if context.state.phase == .allDay {
+        if context.state.phase == .timing, let started = context.state.startedAt {
+            Text(started, style: .timer)
+        } else if context.state.phase == .allDay {
             Text("All day")
-        } else if context.isStale {
-            Text(context.state.phase == .now ? "Ended" : "Now")
+        } else if context.state.phase == .now, context.isStale {
+            Text("Ended")
+        } else if countingUp(context), let range = firstHalfHour(context) {
+            Text(timerInterval: range, countsDown: false, showsHours: true)
         } else if let range = context.state.countdown {
             Text(timerInterval: range, countsDown: true, showsHours: true)
         } else {
@@ -143,25 +181,48 @@ private struct Countdown: View {
     }
 }
 
+// The first half hour of the event, which is as long as the automatic card stays up.
+private func firstHalfHour(_ context: ActivityViewContext<NextEventAttributes>) -> ClosedRange<Date>? {
+    let close = SessionWindow.closes(start: context.attributes.start, end: context.attributes.end)
+    return context.attributes.start < close ? context.attributes.start...close : nil
+}
+
+// True once the event has started and the user has not started a timer of their own.
+private func countingUp(_ context: ActivityViewContext<NextEventAttributes>) -> Bool {
+    context.state.phase == .now || (context.state.phase == .upcoming && context.isStale)
+}
+
 private func phaseLabel(_ context: ActivityViewContext<NextEventAttributes>) -> String {
+    if context.state.phase == .timing { return context.attributes.style.label }
     if context.state.phase == .allDay { return "Today" }
-    if context.isStale { return context.state.phase == .now ? "Ended" : "Starting" }
-    return context.state.phase == .now ? "Now" : "Up next"
+    if context.state.phase == .now, context.isStale { return "Ended" }
+    if countingUp(context) { return "Now" }
+    return "Up next"
 }
 
 private func phaseIcon(_ context: ActivityViewContext<NextEventAttributes>) -> String {
+    if context.state.phase == .timing { return context.attributes.style.symbol }
     switch context.state.phase {
-    case .now: "clock.fill"
-    case .upcoming: "calendar"
-    case .allDay: "sun.max.fill"
+    case .now: return "clock.fill"
+    case .upcoming: return context.isStale ? "clock.fill" : "calendar"
+    case .allDay: return "sun.max.fill"
+    case .timing: return context.attributes.style.symbol
     }
 }
 
 private func phaseColor(_ context: ActivityViewContext<NextEventAttributes>) -> Color {
+    if context.state.phase == .timing {
+        switch context.attributes.style {
+        case .run: return WColor.good
+        case .lift: return Color(red: 0.902, green: 0.694, blue: 0.361)
+        case .event: return WColor.blue
+        }
+    }
     switch context.state.phase {
-    case .now: WColor.good
-    case .upcoming: WColor.blue
-    case .allDay: Color(red: 0.902, green: 0.694, blue: 0.361)
+    case .now: return WColor.good
+    case .upcoming: return context.isStale ? WColor.good : WColor.blue
+    case .allDay: return Color(red: 0.902, green: 0.694, blue: 0.361)
+    case .timing: return WColor.good
     }
 }
 

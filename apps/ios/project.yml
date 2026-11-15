@@ -53,6 +53,7 @@ targets:
       - LifeStack/APIClient.swift
       - LifeStack/Models.swift
       - LifeStack/NextEventAttributes.swift
+      - LifeStack/SessionTimer.swift
     entitlements:
       path: LifeStackWidgets/LifeStackWidgets.entitlements
       properties:

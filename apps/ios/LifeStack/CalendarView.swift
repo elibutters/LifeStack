@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 // Three ways to read the same events. Rolling is seven days, moved one day at a time: the chosen day stays
@@ -24,6 +25,7 @@ struct CalendarView: View {
     @State private var scrolledDay: String?
     @State private var followScroll = true
     @State private var scrollAnimated = true
+    @State private var running: NextEventActivity.Clock?
     var dismiss: (() -> Void)? = nil
 
     private var cal: Calendar { Calendar.current }
@@ -44,6 +46,8 @@ struct CalendarView: View {
             if let dismiss { Button("Done", action: dismiss).foregroundStyle(Theme.sky) }
         }
         .task(id: loadKey) { await load() }
+        .task { running = NextEventActivity.current() }
+        .onReceive(NotificationCenter.default.publisher(for: .sessionTimerChanged)) { _ in running = NextEventActivity.current() }
         .sheet(item: $selected) { item in CalendarItemSheet(item: item) { await load() } }
     }
 
@@ -227,7 +231,7 @@ struct CalendarView: View {
             if list.isEmpty {
                 Empty(text: "Nothing scheduled.")
             } else {
-                ForEach(list) { item in Button { selected = item } label: { EventRow(item: item) }.buttonStyle(.plain) }
+                ForEach(list) { item in eventLink(item) }
             }
         }
     }
@@ -248,7 +252,7 @@ struct CalendarView: View {
             if list.isEmpty {
                 Text("Nothing scheduled").font(.subheadline).foregroundStyle(Theme.muted)
             } else {
-                ForEach(list) { item in Button { selected = item } label: { EventRow(item: item) }.buttonStyle(.plain) }
+                ForEach(list) { item in eventLink(item) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -373,6 +377,37 @@ struct CalendarView: View {
         return f.string(from: date)
     }
 
+    private func eventLink(_ item: CalendarItem) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Button { selected = item } label: { EventRow(item: item) }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if NextEventActivity.canTime(item) { timerButton(item) }
+        }
+    }
+
+    private func timerButton(_ item: CalendarItem) -> some View {
+        let on = running?.id == item.id
+        return Button {
+            if on {
+                NextEventActivity.stop()
+                running = nil
+            } else {
+                NextEventActivity.start(item)
+                running = NextEventActivity.Clock(id: item.id, startedAt: Date())
+            }
+        } label: {
+            Text(on ? "Stop" : "Start")
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .foregroundStyle(Color.black)
+                .background(on ? Theme.bad : Theme.good, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(on ? "Stop \(item.title)" : "Start \(item.title)")
+    }
+
     private func load() async {
         let days = windowDays
         guard let from = days.first, let to = days.last, let client = model.client else { return }
@@ -412,6 +447,8 @@ struct CalendarItemSheet: View {
     @State private var error: String?
     @State private var suggestions: [Slot] = []
     @State private var loadingSuggestions = false
+    @State private var timing = false
+    @State private var startedAt: Date?
 
     private struct Slot: Hashable { let start: Date; let end: Date }
 
@@ -551,6 +588,14 @@ struct CalendarItemSheet: View {
                 if let place = item.location, !place.isEmpty { Label(place, systemImage: "mappin.and.ellipse") }
             }
             .font(.subheadline).foregroundStyle(Theme.muted).labelStyle(.titleAndIcon)
+            if timing, let startedAt {
+                Label {
+                    Text(startedAt, style: .timer).monospacedDigit()
+                } icon: {
+                    Image(systemName: NextEventAttributes.Style.choose(title: item.title, kind: item.kind).symbol)
+                }
+                .font(.title3.weight(.semibold)).foregroundStyle(Theme.good).labelStyle(.titleAndIcon)
+            }
         }
     }
 
@@ -595,7 +640,52 @@ struct CalendarItemSheet: View {
         if let more = s.notesBlocks, !more.isEmpty { card("Notes") { blocks(more) } }
     }
 
+    private func refreshClock() {
+        if let clock = NextEventActivity.current(), clock.id == item.id {
+            timing = true
+            startedAt = clock.startedAt
+        } else {
+            timing = false
+            startedAt = nil
+        }
+    }
+
+    private var clockButton: some View {
+        Button {
+            if timing {
+                NextEventActivity.stop()
+                timing = false
+                startedAt = nil
+            } else {
+                NextEventActivity.start(item)
+                timing = true
+                startedAt = Date()
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: timing ? "stop.fill" : "play.fill")
+                Text(timing ? "Stop" : "Start")
+                if timing, let startedAt { Text(startedAt, style: .timer).monospacedDigit() }
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .foregroundStyle(Color.black)
+            .background(timing ? Theme.bad : Theme.good, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(timing ? "Stop \(item.title)" : "Start \(item.title)")
+    }
+
     private func sessionBar(_ id: String, _ s: CalendarSession) -> some View {
+        VStack(spacing: 10) {
+            if NextEventActivity.canTime(item) { clockButton }
+            sessionButtons(id, s)
+        }
+        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8)
+        .background(.bar)
+    }
+
+    private func sessionButtons(_ id: String, _ s: CalendarSession) -> some View {
         HStack(spacing: 10) {
             switch s.status {
             case "done": bigButton("Undo done", "arrow.uturn.backward") { run(id, [["action": "reopen"]]) }
@@ -607,8 +697,6 @@ struct CalendarItemSheet: View {
                 bigButton(missed(s) ? "I did it" : "Mark done", "checkmark", primary: true) { run(id, [doneBody(s, withLog: false)]) }
             }
         }
-        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8)
-        .background(.bar)
     }
 
     // ---- editing a goal session
@@ -702,6 +790,10 @@ struct CalendarItemSheet: View {
                         }
                         .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8).background(.bar)
                     } else { sessionBar(id, s) }
+                } else if NextEventActivity.canTime(item) {
+                    clockButton
+                        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 8)
+                        .background(.bar)
                 }
             }
             .toolbar {
@@ -709,7 +801,11 @@ struct CalendarItemSheet: View {
                 if let s = item.session, s.id != nil, !editing { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { beginEditing(s) } } }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { if let s = item.session { minutes = s.minutesSpent ?? length(s); rating = s.rating ?? 0; logNote = s.logNote ?? "" } }
+            .onAppear {
+                if let s = item.session { minutes = s.minutesSpent ?? length(s); rating = s.rating ?? 0; logNote = s.logNote ?? "" }
+                refreshClock()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .sessionTimerChanged)) { _ in refreshClock() }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)

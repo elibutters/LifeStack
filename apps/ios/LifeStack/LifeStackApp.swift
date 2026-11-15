@@ -18,7 +18,7 @@ struct LifeStackApp: App {
                     Keychain.shareWithWidgets()
                     if phase == .active { pulse.start(model) }
                     #if DEBUG
-                    // Design aid: shows a sample card without signing in. Launch with -LS_SAMPLE_ACTIVITY now|next|allday.
+                    // Design aid: shows a sample card without signing in. Launch with -LS_SAMPLE_ACTIVITY now|next|allday|run|lift.
                     if let mode = UserDefaults.standard.string(forKey: "LS_SAMPLE_ACTIVITY") { NextEventActivity.showSample(mode); return }
                     #endif
                     await NextEventActivity.sync(model)
