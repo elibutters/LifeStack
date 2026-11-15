@@ -155,6 +155,13 @@
       "when": 1794431494582,
       "tag": "0021_change_pulse",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794711476491,
+      "tag": "0022_brief_scopes_for_agent_keys",
+      "breakpoints": true
     }
   ]
 }
