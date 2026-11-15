@@ -286,8 +286,10 @@ const legacy = (id: string, ts: Date, status: string, extra: object = {}) => db(
 await legacy("old-future", at("2026-12-20", 7 * 60), "skipped"); await legacy("old-future-real", at("2026-12-21", 7 * 60), "skipped", { skippedAt: "2026-10-26T12:00:00.000Z" });
 await legacy("old-past", at("2026-10-05", 7 * 60), "skipped"); await legacy("old-swapped", at("2026-10-06", 7 * 60), "skipped"); await legacy("old-swap-new", at("2026-10-06", 7 * 60), "planned");
 await legacy("moved-old", at("2026-10-07", 7 * 60), "skipped"); await legacy("moved-new", at("2026-10-08", 7 * 60), "done", { movedFrom: [at("2026-10-07", 7 * 60).toISOString()] });
+await legacy("old-swap-skipped", at("2026-10-09", 7 * 60), "skipped"); await legacy("old-swap-new-skipped", at("2026-10-09", 7 * 60), "skipped", { skippedAt: "2026-10-09T12:00:00.000Z" });
 const read2 = new Map((await g.sessionsOf(rg.id, NOW)).map((x) => [x.id, x.status]));
 assert.deepEqual(["old-future", "old-future-real", "old-past", "old-swapped", "moved-old"].map((k) => read2.get(k)), ["replaced", "skipped", "skipped", "replaced", "replaced"], "a recent skip is a skip; an old one that was a plan change, or that was moved, is replaced");
+assert.deepEqual(["old-swap-skipped", "old-swap-new-skipped"].map((k) => read2.get(k)), ["replaced", "skipped"], "skipping the replacement does not bring the replaced session back");
 // ---- refreshing old calendar events: every saved session's event is rewritten once, in the current layout
 const patchesBefore = graph("PATCH").length;
 const refreshed = await g.refreshEventBodies({ now: NOW });
