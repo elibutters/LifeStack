@@ -147,13 +147,13 @@ private struct TimerButton: View {
     var body: some View {
         if context.state.phase == .timing {
             Button(intent: StopSessionIntent()) {
-                Text("Stop").font(.headline).frame(maxWidth: .infinity)
+                Image(systemName: "stop.fill").font(.title3).frame(maxWidth: .infinity).accessibilityLabel("Stop")
             }
             .buttonStyle(.borderedProminent)
             .tint(Color(red: 0.941, green: 0.443, blue: 0.471))
         } else if context.state.phase != .allDay {
             Button(intent: StartSessionIntent()) {
-                Text("Start").font(.headline).frame(maxWidth: .infinity)
+                Image(systemName: "play.fill").font(.title3).frame(maxWidth: .infinity).accessibilityLabel("Play")
             }
             .buttonStyle(.borderedProminent)
             .tint(phaseColor(context))

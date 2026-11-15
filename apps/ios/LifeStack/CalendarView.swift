@@ -397,15 +397,15 @@ struct CalendarView: View {
                 running = NextEventActivity.Clock(id: item.id, startedAt: Date())
             }
         } label: {
-            Text(on ? "Stop" : "Start")
+            Image(systemName: on ? "stop.fill" : "play.fill")
                 .font(.caption.weight(.semibold))
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .foregroundStyle(Color.black)
                 .background(on ? Theme.bad : Theme.good, in: Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(on ? "Stop \(item.title)" : "Start \(item.title)")
+        .accessibilityLabel(on ? "Stop \(item.title)" : "Play \(item.title)")
     }
 
     private func load() async {
@@ -664,7 +664,6 @@ struct CalendarItemSheet: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: timing ? "stop.fill" : "play.fill")
-                Text(timing ? "Stop" : "Start")
                 if timing, let startedAt { Text(startedAt, style: .timer).monospacedDigit() }
             }
             .font(.headline)

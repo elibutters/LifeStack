@@ -4,7 +4,8 @@ import { events } from "@lifestack/db";
 import { db } from "./db";
 import { describeError } from "./errors";
 import { verifyBearer } from "./tokens";
-import { split, STOPPED_MEMORY_MS, TimerInput, type TimerState } from "./timer-core";
+import { logSession } from "./session-log";
+import { minutesBetween, sessionIdOf, split, STOPPED_MEMORY_MS, TimerInput, type TimerState } from "./timer-core";
 
 // The session timer: one row per calendar item in `events` (source "timer"), so a start or stop on one device is seen by every other
 // device, the Mac and the agents. The pulse (migration 0021) moves on every change, which is how the open apps learn of it.
@@ -41,12 +42,19 @@ export async function startTimer(input: { itemKey: string; title: string; style:
   });
 }
 
-export async function stopTimer(itemKey: string, now = new Date()): Promise<{ stopped: boolean }> {
+// Stopping a goal session's timer is how it gets done: the session is logged as done at the time it started, for as long as it ran. Under a
+// minute is a mistaken tap, not a session, so nothing is logged then. Other calendar items only keep the length in the timer record.
+export async function stopTimer(itemKey: string, now = new Date()): Promise<{ stopped: boolean; minutes?: number; logged?: string; error?: string }> {
   const rows = await db().select().from(events).where(and(eq(events.source, SRC), eq(events.sourceId, `timer:${itemKey}`)));
   const row = rows[0];
   if (!row || row.valueText !== "running") return { stopped: false };
-  await db().update(events).set({ valueText: "stopped", payload: { ...(row.payload as object), stoppedAt: now.toISOString() } }).where(eq(events.id, row.id));
-  return { stopped: true };
+  const t = shape(row);
+  const minutes = minutesBetween(t.startedAt, now.toISOString());
+  await db().update(events).set({ valueText: "stopped", payload: { ...(row.payload as object), stoppedAt: now.toISOString(), minutes } }).where(eq(events.id, row.id));
+  const sessionId = sessionIdOf(itemKey);
+  if (!sessionId || minutes < 1) return { stopped: true, minutes };
+  const r = await logSession(sessionId, { start: t.startedAt, minutes }, now);
+  return r.ok ? { stopped: true, minutes, logged: r.summary } : { stopped: true, minutes, error: r.error };
 }
 
 // GET /api/v1/timer: the running timer and the items stopped lately. POST: {action:"start"|"stop", itemKey, ...}. Any phone key can use it.
@@ -65,7 +73,8 @@ export async function handleTimer(req: Request): Promise<Response> {
       const { action: _a, ...rest } = p.data;
       await startTimer(rest);
     } else {
-      await stopTimer(p.data.itemKey);
+      const r = await stopTimer(p.data.itemKey);
+      return json({ ...(await readTimers()), ...(r.stopped ? { minutes: r.minutes, logged: r.logged ?? null } : {}) });
     }
     return json(await readTimers());
   } catch (e) {

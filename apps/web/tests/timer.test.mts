@@ -27,7 +27,7 @@ await t.startTimer({ itemKey: "b", title: "Lift", style: "lift", plan: [] }, new
 let st = await t.readTimers(new Date(t0.getTime() + 180_000));
 assert.equal(st.running?.itemKey, "b", "starting another stops the first");
 assert.deepEqual(st.recentlyStopped.map((x) => x.itemKey), ["a"]);
-assert.deepEqual(await t.stopTimer("b", new Date(t0.getTime() + 240_000)), { stopped: true });
+assert.deepEqual(await t.stopTimer("b", new Date(t0.getTime() + 240_000)), { stopped: true, minutes: 2 });
 assert.deepEqual(await t.stopTimer("b"), { stopped: false }, "stopping twice is harmless");
 assert.deepEqual(await t.stopTimer("nope"), { stopped: false });
 st = await t.readTimers(new Date(t0.getTime() + 300_000));
@@ -37,6 +37,23 @@ st = await t.readTimers(new Date(t0.getTime() + 40 * 3_600_000));
 assert.deepEqual(st.recentlyStopped, [], "a stop is forgotten after 36 hours");
 const again2 = await t.startTimer({ itemKey: "a", title: "Easy run", style: "run", plan: [] }, new Date(t0.getTime() + 400_000));
 assert.equal(again2.startedAt, new Date(t0.getTime() + 400_000).toISOString(), "a stopped item can be started again");
+
+// ---- stopping a goal session's timer marks it done, for as long as it ran
+assert.equal(core.minutesBetween("2026-11-14T20:00:00Z", "2026-11-14T20:44:40Z"), 45);
+assert.equal(core.sessionIdOf("s:g1-abc"), "g1-abc"); assert.equal(core.sessionIdOf("ev:12"), null);
+const tsNow = new Date(Date.now() - 3_600_000);
+await db().insert(events).values({ ts: tsNow, domain: "goal", key: "goal.session", valueText: "planned", payload: { goalId: "gt", title: "Easy run", end: new Date(tsNow.getTime() + 1_800_000).toISOString() }, source: "goals", sourceId: "session:tsess-1" });
+const began = new Date(Date.now() - 40 * 60_000);
+await t.startTimer({ itemKey: "s:tsess-1", title: "Easy run", style: "run", plan: [] }, began);
+const done = await t.stopTimer("s:tsess-1", new Date());
+assert.equal(done.minutes, 40); assert.ok(done.logged, "the session was logged");
+const row = (await db().select().from(events).where(eq(events.sourceId, "session:tsess-1")))[0]!;
+assert.equal(row.valueText, "done"); assert.equal((row.payload as any).minutes, 40);
+await db().insert(events).values({ ts: tsNow, domain: "goal", key: "goal.session", valueText: "planned", payload: { goalId: "gt", title: "Tap", end: new Date(tsNow.getTime() + 1_800_000).toISOString() }, source: "goals", sourceId: "session:tsess-2" });
+const t1 = new Date(); await t.startTimer({ itemKey: "s:tsess-2", title: "Tap", style: "run", plan: [] }, new Date(t1.getTime() - 20_000));
+const tap = await t.stopTimer("s:tsess-2", t1);
+assert.equal(tap.logged, undefined, "under a minute is a mistaken tap");
+assert.equal((await db().select().from(events).where(eq(events.sourceId, "session:tsess-2")))[0]!.valueText, "planned");
 
 // ---- API
 await db().delete(apiTokens);
