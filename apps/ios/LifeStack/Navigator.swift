@@ -7,11 +7,12 @@ enum AppTab: Hashable {
 
 // The screens that live inside the More tab. Add a case to add a screen.
 enum MoreItem: String, CaseIterable, Identifiable, Hashable {
-    case finance = "Finance", sleep = "Sleep", wants = "Wants", calendar = "Calendar"
+    case finance = "Finance", todos = "To do", sleep = "Sleep", wants = "Wants", calendar = "Calendar"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .finance: "chart.bar"
+        case .todos: "checklist"
         case .sleep: "bed.double"
         case .wants: "bag"
         case .calendar: "calendar"
@@ -19,7 +20,8 @@ enum MoreItem: String, CaseIterable, Identifiable, Hashable {
     }
     var blurb: String {
         switch self {
-        case .finance: "Net worth, cash flow and spending"
+        case .finance: "Net worth, cash flow, bills and holdings"
+        case .todos: "Open items, shared with your agents"
         case .sleep: "Last night and recent nights"
         case .wants: "Things you are on the lookout for"
         case .calendar: "The next 30 days"
@@ -29,6 +31,7 @@ enum MoreItem: String, CaseIterable, Identifiable, Hashable {
     var tint: Color {
         switch self {
         case .finance: Color(red: 0.498, green: 0.686, blue: 0.769)
+        case .todos: Color(red: 0.624, green: 0.722, blue: 0.541)
         case .sleep: Color(red: 0.541, green: 0.620, blue: 0.784)
         case .wants: Color(red: 0.831, green: 0.627, blue: 0.659)
         case .calendar: Color(red: 0.769, green: 0.647, blue: 0.455)

@@ -112,14 +112,16 @@ struct APIClient {
         return (try await get("api/v1/sleep", [.init(name: "nights", value: String(nights))]) as R).nights
     }
     func finance() async throws -> FinanceSummary { try await get("api/v1/finance") }
-    func transactions(limit: Int = 30) async throws -> [Transaction] {
+    func transactions(text: String? = nil, from: String? = nil, to: String? = nil, category: String? = nil, limit: Int = 40) async throws -> [Transaction] {
         struct R: Decodable { let transactions: [Transaction] }
-        return (try await get("api/v1/finance/transactions", [.init(name: "limit", value: String(limit))]) as R).transactions
+        var q: [URLQueryItem] = [.init(name: "limit", value: String(limit))]
+        if let text, !text.trimmingCharacters(in: .whitespaces).isEmpty { q.append(.init(name: "text", value: text)) }
+        if let from { q.append(.init(name: "from", value: from)) }
+        if let to { q.append(.init(name: "to", value: to)) }
+        if let category, !category.isEmpty { q.append(.init(name: "category", value: category)) }
+        return (try await get("api/v1/finance/transactions", q) as R).transactions
     }
-    func holdings() async throws -> [Holding] {
-        struct R: Decodable { let holdings: [Holding] }
-        return (try await get("api/v1/finance/holdings") as R).holdings
-    }
+    func holdings() async throws -> HoldingsReport { try await get("api/v1/finance/holdings") }
     func workouts(weeks: Int = 26, recent: Int = 40) async throws -> WorkoutsOverview {
         try await get("api/v1/workouts", [.init(name: "weeks", value: String(weeks)), .init(name: "recent", value: String(recent))])
     }
@@ -195,6 +197,22 @@ struct APIClient {
     func deleteWant(_ id: Int) async throws { try await send("api/v1/wants/\(id)", "DELETE") }
     func updateOption(_ id: Int, _ fields: [String: Any]) async throws { try await send("api/v1/want-options/\(id)", "PATCH", fields) }
     func deleteOption(_ id: Int) async throws { try await send("api/v1/want-options/\(id)", "DELETE") }
+
+    // MARK: To-dos
+
+    func todos() async throws -> [TodoItem] {
+        struct R: Decodable { let todos: [TodoItem] }
+        return (try await get("api/v1/todos") as R).todos
+    }
+    func addTodo(title: String, note: String, due: String?) async throws {
+        var body: [String: Any] = ["title": title]
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { body["note"] = trimmed }
+        if let due, !due.isEmpty { body["due"] = due }
+        try await send("api/v1/todos", "POST", body)
+    }
+    func setTodoStatus(_ id: Int, _ status: String) async throws { try await send("api/v1/todos/\(id)", "PATCH", ["status": status]) }
+    func deleteTodo(_ id: Int) async throws { try await send("api/v1/todos/\(id)", "DELETE") }
 
     func sendLocations(_ points: [[String: Any]]) async throws {
         _ = try await request("api/v1/location", method: "POST", body: try JSONSerialization.data(withJSONObject: ["points": points]))

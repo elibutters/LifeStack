@@ -41,6 +41,7 @@ assert.equal((await get(api.handleCalendar, "/api/v1/calendar", logOnly)).status
 
 const ov = await (await get(api.handleOverview, "/api/v1/overview", app)).json() as any;
 assert.deepEqual(Object.keys(ov).sort(), ["calendar", "date", "finance", "fitness", "log", "sleep"]); assert.ok(ov.calendar && ov.sleep && ov.finance && ov.log);
+assert.equal(ov.finance.months, undefined, "the home screen stays a snapshot");
 const ovLog = await (await get(api.handleOverview, "/api/v1/overview", logOnly)).json() as any;
 assert.equal(ovLog.calendar, null); assert.equal(ovLog.sleep, null); assert.equal(ovLog.finance, null); assert.ok(ovLog.log, "a log-only key sees only its own section");
 
@@ -50,6 +51,11 @@ const cal = await (await get(api.handleCalendar, "/api/v1/calendar", app)).json(
 for (const bad of ["?from=nope", "?from=2026-01-01&to=2026-12-31", "?from=2026-05-02&to=2026-05-01"]) assert.equal((await get(api.handleCalendar, "/api/v1/calendar" + bad, app)).status, 400, bad);
 assert.equal((await get(api.handleSleep, "/api/v1/sleep?nights=999", app)).status, 400); assert.equal((await get(api.handleTransactions, "/api/v1/finance/transactions?limit=0", app)).status, 400);
 assert.deepEqual((await (await get(api.handleHoldings, "/api/v1/finance/holdings", app)).json() as any).holdings, []);
+const fin = await (await get(api.handleFinance, "/api/v1/finance", app)).json() as any;
+assert.equal(fin.cashflow.length, 12); assert.equal(fin.months.length, 12); assert.ok(Array.isArray(fin.history));
+assert.equal(fin.recurring.monthly, 0); assert.deepEqual(fin.recurring.buckets, []); assert.equal(fin.recurring.track.length, 12);
+const held = await (await get(api.handleHoldings, "/api/v1/finance/holdings", app)).json() as any;
+assert.equal(held.summary.held, 0); assert.equal(held.summary.cost, null); assert.deepEqual(held.summary.byType, []);
 const conns = await (await get(api.handleConnections, "/api/v1/connections", app)).json() as any; assert.deepEqual(Object.keys(conns).sort(), ["banks", "calendar", "sleep"]);
 
 // ---- a phone's key follows the app's current permissions, so features added later work without signing in again

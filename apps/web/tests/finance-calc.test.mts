@@ -224,4 +224,19 @@ const equalSmall = c.inferSofiAutoCategories([
 assert.equal([...equalSmall.values()].every((v) => v === "CC_PAYMENTS"), true);
 assert.equal(c.inferSofiAutoCategories([T("2026-09-15", 12, "Coffee Co", "FOOD_AND_DRINK"), T("2026-09-15", -12, "Coffee Co refund", "FOOD_AND_DRINK")]).size, 0);
 
+assert.deepEqual(c.investmentRollup([]), { held: 0, cost: null, gain: null, gainRate: null, byType: [] });
+const roll = c.investmentRollup([
+  { securityType: "etf", value: 100, costBasis: 80 },
+  { securityType: "equity", value: 50, costBasis: null },
+  { securityType: "etf", value: 20, costBasis: 30 },
+]);
+assert.equal(roll.held, 170);
+assert.equal(roll.cost, 110);
+assert.equal(roll.gain, 10, "a position with no cost basis is left out of gain");
+assert.equal(roll.gainRate, 10 / 110);
+assert.deepEqual(roll.byType, [{ label: "ETFs", value: 120 }, { label: "Stocks", value: 50 }]);
+assert.equal(c.securityLabel("fixed income"), "Bonds");
+assert.equal(c.securityLabel(null), "Other");
+assert.equal(c.securityLabel("private_equity"), "Private equity");
+
 console.log("FINANCE CALC OK");

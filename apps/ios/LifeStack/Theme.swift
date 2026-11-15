@@ -301,14 +301,18 @@ struct InsightRow: View {
 // Horizontal proportional bars, the way a budgeting app shows where money went.
 struct BarList: View {
     let rows: [(label: String, value: Double)]
+    var tint: Color = Theme.accent
+    var onTap: ((String) -> Void)? = nil
     var body: some View {
         let top = max(rows.map(\.value).max() ?? 1, 1)
         VStack(spacing: 12) {
             ForEach(rows, id: \.label) { r in
                 VStack(alignment: .leading, spacing: 5) {
                     HStack { Text(r.label).font(.subheadline); Spacer(); Text(Format.money(r.value)).font(.subheadline.weight(.medium)).monospacedDigit() }
-                    GeometryReader { g in Rectangle().fill(Theme.accent).frame(width: max(2, g.size.width * r.value / top)) }.frame(height: 4)
+                    GeometryReader { g in Rectangle().fill(tint).frame(width: max(2, g.size.width * r.value / top)) }.frame(height: 4)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { onTap?(r.label) }
             }
         }
     }

@@ -48,13 +48,73 @@ struct Night: Decodable, Identifiable, Equatable {
 }
 
 struct NetWorth: Decodable, Equatable { let assets: Double; let liabilities: Double; let net: Double }
+struct MerchantTotal: Decodable, Equatable, Identifiable {
+    var id: String { "\(name)-\(amount)" }
+    let name: String
+    let amount: Double
+    let count: Int
+}
+
 struct MonthSummary: Decodable, Equatable {
-    struct Category: Decodable, Equatable, Identifiable { var id: String { label }; let label: String; let amount: Double; let count: Int }
+    struct Category: Decodable, Equatable, Identifiable { var id: String { label }; let category: String?; let label: String; let amount: Double; let count: Int }
     let month: String
     let income: Double
     let spending: Double
     let net: Double
+    let savingsRate: Double?
     let byCategory: [Category]?
+    let topMerchants: [MerchantTotal]?
+    let incomeByCategory: [Category]?
+    let topIncome: [MerchantTotal]?
+}
+
+struct HistoryPoint: Decodable, Equatable, Identifiable {
+    var id: String { day }
+    let day: String
+    let value: Double
+}
+
+struct RecurringReport: Decodable, Equatable {
+    struct Charge: Decodable, Equatable, Identifiable {
+        let key: String
+        var id: String { key }
+        let name: String
+        let amount: Double
+        let cadence: String
+        let nextDate: String
+        let monthlyCost: Double
+        let on: String?
+        let count: Int
+    }
+    struct Bucket: Decodable, Equatable, Identifiable {
+        let id: String
+        let label: String
+        let total: Double
+        let items: [Charge]
+    }
+    struct Month: Decodable, Equatable, Identifiable {
+        var id: String { month }
+        let month: String
+        let budget: Double
+        let cash: Double
+    }
+    let monthly: Double
+    let buckets: [Bucket]
+    let track: [Month]
+}
+
+struct InvestmentSummary: Decodable, Equatable {
+    struct Slice: Decodable, Equatable, Identifiable { var id: String { label }; let label: String; let value: Double }
+    let held: Double
+    let cost: Double?
+    let gain: Double?
+    let gainRate: Double?
+    let byType: [Slice]
+}
+
+struct HoldingsReport: Decodable, Equatable {
+    let holdings: [Holding]
+    let summary: InvestmentSummary?
 }
 struct Insight: Decodable, Equatable, Identifiable { let id: String; let tone: String; let title: String; let detail: String }
 
@@ -74,6 +134,10 @@ struct FinanceSummary: Decodable, Equatable {
     let lastMonth: MonthSummary
     let cashflow: [Flow]
     let insights: [Insight]
+    // Present on the finance screen. The home-screen snapshot leaves them out.
+    let months: [MonthSummary]?
+    let history: [HistoryPoint]?
+    let recurring: RecurringReport?
 }
 
 struct Transaction: Decodable, Equatable, Identifiable {
@@ -90,10 +154,13 @@ struct Holding: Decodable, Equatable, Identifiable {
     var id: String { "\(symbol ?? name ?? "")-\(quantity)" }
     let symbol: String?
     let name: String?
+    let securityType: String?
     let quantity: Double
     let price: Double
     let value: Double
     let costBasis: Double?
+    // Value minus cost, when the brokerage sent a cost. Nil when it did not.
+    var gain: Double? { guard let costBasis, costBasis > 0 else { return nil }; return value - costBasis }
 }
 
 struct Overview: Decodable, Equatable {
@@ -226,6 +293,20 @@ enum Format {
         item.allDay ? String(item.start.prefix(10)) : (date(item.start).map { $0.formatted(.iso8601.year().month().day()) } ?? item.start)
     }
     static func clock(_ iso: String) -> String { date(iso)?.formatted(date: .omitted, time: .shortened) ?? "" }
+    static func pct(_ rate: Double) -> String { "\(Int((rate * 100).rounded()))%" }
+    static func monthStart(_ ym: String) -> String { "\(ym)-01" }
+    // The last calendar day of YYYY-MM, as YYYY-MM-DD.
+    static func monthEnd(_ ym: String) -> String? {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let f = DateFormatter(); f.calendar = cal; f.timeZone = cal.timeZone; f.dateFormat = "yyyy-MM-dd"
+        guard let start = f.date(from: monthStart(ym)), let next = cal.date(byAdding: .month, value: 1, to: start), let end = cal.date(byAdding: .day, value: -1, to: next) else { return nil }
+        return f.string(from: end)
+    }
+    static func todayString() -> String {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = .current
+        return f.string(from: Date())
+    }
     static func monthShort(_ ym: String) -> String {
         let f = DateFormatter(); f.dateFormat = "yyyy-MM"; f.timeZone = .current
         return f.date(from: ym)?.formatted(.dateTime.month(.abbreviated)) ?? ym
@@ -233,6 +314,19 @@ enum Format {
     static func longDay(_ d: Date) -> String { d.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()) }
     static func isToday(_ iso: String) -> Bool { date(iso).map { Calendar.current.isDateInToday($0) } ?? false }
     static func shortDay(_ s: String) -> String { dayDate(s)?.formatted(.dateTime.weekday(.abbreviated).month().day()) ?? s }
+}
+
+struct TodoItem: Decodable, Identifiable, Equatable {
+    let id: Int
+    let title: String
+    let note: String?
+    let status: String   // open | done | dropped
+    let due: String?
+    let source: String
+    let createdAt: String
+    let completedAt: String?
+    var isOpen: Bool { status == "open" }
+    var overdue: Bool { isOpen && due != nil && due! < Format.todayString() }
 }
 
 struct WantOption: Decodable, Identifiable, Equatable {

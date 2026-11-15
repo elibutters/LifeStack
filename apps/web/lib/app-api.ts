@@ -8,7 +8,7 @@ import { loadActivities, totals } from "./activities";
 import { workoutsOverview } from "./workouts";
 import { syncEightIfStale } from "./eight";
 import { syncOutlookIfStale } from "./outlook";
-import { calendarRange, connectionsStatus, financeSummary, holdingsList, MAX_RANGE_DAYS, overview, searchTransactions, sleepNights } from "./app-data";
+import { calendarRange, connectionsStatus, financeSummary, holdingsReport, MAX_RANGE_DAYS, overview, searchTransactions, sleepNights } from "./app-data";
 
 // Read-only JSON endpoints for the iPhone app (and any other client). /api/v1/ skips the session gate
 // in proxy.ts, so each handler authenticates with a bearer key and its scope, and fails closed.
@@ -68,7 +68,7 @@ export const handleSleep = (req: Request) =>
 
 export const handleFinance = (req: Request) =>
   run(req, "finance:read", async () => {
-    const s = await financeSummary();
+    const s = await financeSummary(true);
     return s ? json(s) : json({ error: "unavailable" }, 503);
   });
 
@@ -83,7 +83,7 @@ export const handleTransactions = (req: Request) =>
     return rows ? json({ transactions: rows }) : json({ error: "unavailable" }, 503);
   });
 
-export const handleHoldings = (req: Request) => run(req, "finance:read", async () => json({ holdings: await holdingsList() }));
+export const handleHoldings = (req: Request) => run(req, "finance:read", async () => json(await holdingsReport()));
 
 export const handleConnections = (req: Request) => run(req, "account:read", async () => json(await connectionsStatus()));
 

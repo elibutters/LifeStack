@@ -22,6 +22,7 @@ struct MoreView: View {
     @ViewBuilder private func destination(_ item: MoreItem) -> some View {
         switch item {
         case .finance: FinanceView()
+        case .todos: TodosView()
         case .sleep: SleepView()
         case .wants: WantsView()
         case .calendar: CalendarView()

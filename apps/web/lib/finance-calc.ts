@@ -545,6 +545,51 @@ export function subscriptionMonthHits(recurring: Recurring[], txns: Txn[], month
   });
 }
 
+// ---- investments
+const SECURITY_LABELS: Record<string, string> = {
+  etf: "ETFs",
+  equity: "Stocks",
+  "mutual fund": "Mutual funds",
+  "fixed income": "Bonds",
+  cash: "Cash",
+  cryptocurrency: "Crypto",
+  derivative: "Options and derivatives",
+  other: "Other",
+};
+
+export function securityLabel(type: string | null): string {
+  if (!type) return "Other";
+  return SECURITY_LABELS[type] ?? type.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
+export type InvestmentRollup = {
+  held: number;
+  cost: number | null;
+  gain: number | null;
+  gainRate: number | null;
+  byType: { label: string; value: number }[];
+};
+
+// Totals for the holdings screen. Positions with no cost basis count toward value and allocation, and stay out of gain.
+export function investmentRollup(holdings: { securityType: string | null; value: number; costBasis: number | null }[]): InvestmentRollup {
+  const held = round2(holdings.reduce((s, h) => s + h.value, 0));
+  const priced = holdings.filter((h) => h.costBasis != null && h.costBasis > 0);
+  const cost = round2(priced.reduce((s, h) => s + (h.costBasis ?? 0), 0));
+  const gain = round2(priced.reduce((s, h) => s + (h.value - (h.costBasis ?? 0)), 0));
+  const byType = new Map<string, number>();
+  for (const h of holdings) {
+    const label = securityLabel(h.securityType);
+    byType.set(label, (byType.get(label) ?? 0) + h.value);
+  }
+  return {
+    held,
+    cost: cost > 0 ? cost : null,
+    gain: cost > 0 ? gain : null,
+    gainRate: cost > 0 ? gain / cost : null,
+    byType: [...byType.entries()].map(([label, value]) => ({ label, value: round2(value) })).sort((a, b) => b.value - a.value),
+  };
+}
+
 // ---- insights
 export type Insight = { id: string; tone: "good" | "warn" | "info"; title: string; detail: string };
 

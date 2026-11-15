@@ -195,10 +195,6 @@ struct TodayView: View {
     }
 }
 
-private extension HistoryEntry {
-    var drinkName: String { name ?? String(label.split(separator: "(").first ?? "").trimmingCharacters(in: .whitespaces) }
-}
-
 // A calendar to jump to any past day. Picking a day shows it and closes the sheet.
 private struct DayPicker: View {
     @Environment(AppModel.self) private var model
