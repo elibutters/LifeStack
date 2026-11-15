@@ -13,6 +13,7 @@ struct OverviewView: View {
     var body: some View {
         Screen(title: greeting, refresh: { await load() }) {
             ErrorBanner(text: loader.error)
+            LiveCard()
             if let o = loader.value {
                 if let cal = o.calendar {
                     Button { nav.tab = .calendar } label: { calendarCard(cal) }

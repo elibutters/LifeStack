@@ -78,8 +78,27 @@ struct NextEventAttributes: ActivityAttributes {
     var allDay: Bool
     var place: String?
     var style: Style
+    // The session's plan, a few short lines: a heading ends in a colon, anything else is a step or a movement.
+    var plan: [String]
+    // Names the calendar item the same way on every device, so the server timer can say which one is running.
+    var itemKey: String
 
-    init(id: Int, title: String, start: Date, end: Date, allDay: Bool, place: String?, style: Style = .event) {
+    // ActivityKit keeps attributes small, so a plan is cut to a few short lines.
+    static func planLines(_ blocks: [(kind: String, text: String)]) -> [String] {
+        var out: [String] = []
+        var used = 0
+        for b in blocks {
+            var t = b.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.isEmpty { continue }
+            if b.kind == "heading" { t = t.hasSuffix(":") ? t : t + ":" }
+            if t.count > 64 { t = String(t.prefix(61)) + "..." }
+            if out.count >= 10 || used + t.count > 640 { break }
+            out.append(t); used += t.count
+        }
+        return out
+    }
+
+    init(id: Int, title: String, start: Date, end: Date, allDay: Bool, place: String?, style: Style = .event, plan: [String] = [], itemKey: String? = nil) {
         self.id = id
         self.title = title
         self.start = start
@@ -87,9 +106,11 @@ struct NextEventAttributes: ActivityAttributes {
         self.allDay = allDay
         self.place = place
         self.style = style
+        self.plan = plan
+        self.itemKey = itemKey ?? "ev:\(id)"
     }
 
-    private enum CodingKeys: String, CodingKey { case id, title, start, end, allDay, place, style }
+    private enum CodingKeys: String, CodingKey { case id, title, start, end, allDay, place, style, plan, itemKey }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -100,6 +121,8 @@ struct NextEventAttributes: ActivityAttributes {
         allDay = try c.decode(Bool.self, forKey: .allDay)
         place = try c.decodeIfPresent(String.self, forKey: .place)
         style = try c.decodeIfPresent(Style.self, forKey: .style) ?? .event
+        plan = try c.decodeIfPresent([String].self, forKey: .plan) ?? []
+        itemKey = try c.decodeIfPresent(String.self, forKey: .itemKey) ?? "ev:\(id)"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -111,5 +134,7 @@ struct NextEventAttributes: ActivityAttributes {
         try c.encode(allDay, forKey: .allDay)
         try c.encodeIfPresent(place, forKey: .place)
         try c.encode(style, forKey: .style)
+        try c.encode(plan, forKey: .plan)
+        try c.encode(itemKey, forKey: .itemKey)
     }
 }
