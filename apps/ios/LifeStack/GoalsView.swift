@@ -304,14 +304,17 @@ struct GoalsView: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens this session")
-            if s.status == "planned" && !lapsed(s) {
-                Menu {
-                    Button("Done", systemImage: "checkmark") { logging = s }
-                    Button("Move", systemImage: "arrow.right") { moving = s }
-                    Button("Skip", systemImage: "xmark") { act(s.id, ["action": "skip"]) }
-                } label: { Image(systemName: "ellipsis.circle").foregroundStyle(Theme.muted).frame(width: 32, height: 32) }
-            } else if s.status == "planned" {
-                Button { logging = s } label: { Text("Done").font(.caption.weight(.semibold)).foregroundStyle(Theme.good) }.buttonStyle(.plain)
+            if s.status == "planned" {
+                // A planned session whose time has passed is listed as skipped. It keeps the same actions (it can still be logged as done,
+                // moved, or officially skipped) behind the menu, and says "Skipped", never a green "Done" that reads as its status.
+                HStack(spacing: 2) {
+                    if lapsed(s) { Text("Skipped").font(.caption2).foregroundStyle(sessionTint("skipped")) }
+                    Menu {
+                        Button("Done", systemImage: "checkmark") { logging = s }
+                        Button("Move", systemImage: "arrow.right") { moving = s }
+                        Button("Skip", systemImage: "xmark") { act(s.id, ["action": "skip"]) }
+                    } label: { Image(systemName: "ellipsis.circle").foregroundStyle(Theme.muted).frame(width: 32, height: 32) }
+                }
             } else {
                 Text(skipped ? "Skipped" : s.status.capitalized).font(.caption2).foregroundStyle(sessionTint(skipped ? "skipped" : s.status))
             }
