@@ -86,7 +86,7 @@ globalThis.fetch = (async (input: any, init: any = {}) => {
   return json({ object: "error", message: "unexpected " + url }, 500);
 }) as typeof fetch;
 
-const noSleep = { sleep: async () => {} };
+const noSleep = { sleep: async () => {}, sweepPages: 0 }; // the walk tests run without the recent-pages sweep; its own tests turn it on
 const reset = async () => {
   await db().delete(notes); await db().delete(connections); await db().delete(syncState); await db().delete(apiTokens);
   build(); calls.length = 0; access = "at-0"; refresh = "rt-0"; refreshCount = 0; rotation = 0; refreshMode = "ok"; alwaysUnauthorized = false; onRefresh = null; rateLimit = null;
@@ -273,8 +273,41 @@ await sync.syncNotionIfStale(); assert.equal(calls.length, afterFull, "a fresh c
 const oldIso = new Date(Date.now() - 20 * 60_000);
 await db().update(syncState).set({ lastOkAt: oldIso, cursor: JSON.stringify({ ...core.readCursor((await sync.getSyncState())!.cursor), tried: new Date(Date.now() - 60_000).toISOString() }) }).where(eq(syncState.source, "notion"));
 await sync.syncNotionIfStale(); assert.equal(calls.length, afterFull, "never more than once in two minutes, even when stale");
-await db().update(syncState).set({ cursor: JSON.stringify({ ...core.readCursor((await sync.getSyncState())!.cursor), tried: new Date(Date.now() - 5 * 60_000).toISOString() }) }).where(eq(syncState.source, "notion"));
-await sync.syncNotionIfStale(); assert.ok(calls.length > afterFull, "stale and past the retry window: it syncs");
+const setTried = async (msAgo: number, more: Record<string, unknown> = {}) => {
+  const cursor = JSON.stringify({ ...core.readCursor((await sync.getSyncState())!.cursor), tried: new Date(Date.now() - msAgo).toISOString() });
+  await db().update(syncState).set({ ...("lastOkAt" in more ? { lastOkAt: more.lastOkAt as Date } : {}), cursor }).where(eq(syncState.source, "notion"));
+};
+await setTried(5 * 60_000);
+await sync.syncNotionIfStale(); assert.equal(calls.length, afterFull, "between walks nothing runs within 15 minutes of the last run");
+
+// between walks: a run is only the sweep of recent pages. It starts no walk and touches neither the generation nor the last finished walk's time.
+await setTried(20 * 60_000);
+const walkBefore = core.readCursor((await sync.getSyncState())!.cursor); const okBefore = (await sync.getSyncState())!.lastOkAt!.getTime();
+const callsBefore = calls.length;
+await sync.syncNotionIfStale();
+assert.ok(calls.length > callsBefore, "past 15 minutes it sweeps");
+assert.equal(calls[callsBefore]!.path, "/v1/search"); assert.deepEqual(JSON.parse(calls[callsBefore]!.body).sort, { direction: "descending", timestamp: "last_edited_time" });
+const walkAfter = core.readCursor((await sync.getSyncState())!.cursor);
+assert.equal(walkAfter.gen, walkBefore.gen, "no new walk was started"); assert.equal(walkAfter.active, false); assert.deepEqual(walkAfter.queue, [], "nothing is queued between walks");
+assert.equal((await sync.getSyncState())!.lastOkAt!.getTime(), okBefore, "a sweep does not move the last finished walk's time");
+assert.ok(!calls.slice(callsBefore).some((c) => c.path.includes("/data_sources/") || c.path.includes("/databases/")), "no discovery of databases or data sources");
+
+// the cron entry point does the same: a sweep, not a full re-read, while the last walk is recent
+const callsCron = calls.length; await sync.syncNotionAuto(); assert.equal(core.readCursor((await sync.getSyncState())!.cursor).gen, walkBefore.gen, "the daily run does not start another walk");
+assert.ok(calls.length > callsCron, "but it does sweep");
+
+// after a week a full walk starts again, to notice deletions and anything the sweep missed
+await setTried(20 * 60_000, { lastOkAt: new Date(Date.now() - 8 * 86_400_000) });
+await sync.syncNotionIfStale();
+assert.ok(core.readCursor((await sync.getSyncState())!.cursor).gen > walkBefore.gen, "a week on, a new walk starts");
+assert.ok((await sync.getSyncState())!.lastOkAt!.getTime() > Date.now() - 60_000 || core.readCursor((await sync.getSyncState())!.cursor).active, "and it finishes or carries on");
+
+// a walk in progress is continued, not replaced by a sweep
+await reset(); await connect();
+await sync.syncNotion({ ...noSleep, maxRequests: 3 });
+const midWalk = core.readCursor((await sync.getSyncState())!.cursor); assert.ok(midWalk.active && midWalk.queue.length > 0, "setup: a walk is part way");
+await setTried(10 * 60_000); await sync.syncNotionAuto();
+const resumed = core.readCursor((await sync.getSyncState())!.cursor); assert.equal(resumed.gen, midWalk.gen, "the same walk carries on"); assert.ok(resumed.count > midWalk.count || !resumed.active, "and makes progress");
 
 // ---------------------------------------------------------------- reading: the API, search and MCP scope
 const nav = await rd.searchNotes({ q: "milk" }); assert.deepEqual(nav.map((n) => n.title), ["Project Alpha"]); assert.ok(nav[0]!.snippet.includes("milk"));
@@ -303,4 +336,34 @@ assert.deepEqual([(await db().select().from(connections)).length, (await db().se
 
 await reset();
 console.log("notion: ok");
+
+// ---------------------------------------------------------------- the sweep: recently edited pages do not wait for the long walk
+await reset(); await connect();
+let guardS = 0; while (!(await byId(1)) && guardS++ < 40) await sync.syncNotion({ ...noSleep, maxRequests: 3 });
+assert.ok(await byId(1), "setup: the first page is copied");
+assert.doesNotMatch((await byId(1))!.bodyText ?? "", /edited today/);
+pages.get(u(1))!.edited = "2026-11-14T10:00:00.000Z"; kids.set(u(1), [para(u(202), "edited today")]);
+calls.length = 0;
+await sync.syncNotion({ ...noSleep, maxRequests: 8, sweepPages: 2 });
+const first = api()[0]!; const sweepBody = JSON.parse(first.body);
+assert.equal(first.path, "/v1/search", "a run starts by asking for recent pages"); assert.equal(sweepBody.filter.value, "page");
+assert.deepEqual(sweepBody.sort, { direction: "descending", timestamp: "last_edited_time" }, "newest first");
+const refreshed = (await byId(1))!;
+assert.match(refreshed.bodyText ?? "", /edited today/, "a page edited after it was copied is read again, ahead of the walk");
+// nothing changed since: the sweep costs one request and reads no page
+calls.length = 0;
+await sync.syncNotion({ ...noSleep, maxRequests: 1, sweepPages: 3 });
+assert.equal(api().filter((c) => c.path.includes("/blocks/")).length, 0, "an unchanged page is not read again"); assert.equal(api().length, 1);
+// the cap: only sweepPages changed pages are read per run, so the sweep cannot starve the walk
+pages.get(u(1))!.edited = "2026-11-15T10:00:00.000Z"; pages.get(u(10))!.edited = "2026-11-15T10:00:00.000Z";
+kids.set(u(1), [para(u(202), "second edit")]); kids.set(u(10), [para(u(300), "level zero rewritten")]);
+const tenBefore = (await byId(10))?.bodyText ?? null;
+await sync.syncNotion({ ...noSleep, maxRequests: 4, sweepPages: 1 });
+assert.match((await byId(1))!.bodyText ?? "", /second edit/, "the first changed page was read");
+assert.equal((await byId(10))?.bodyText ?? null, tenBefore, "the second waits for the next run");
+// a rate limit during the sweep stops the run politely, like one during the walk
+rateLimit = { remaining: 1, retryAfter: "999" }; pages.get(u(1))!.edited = "2026-11-17T10:00:00.000Z";
+const limited = await sync.syncNotion({ ...noSleep, sweepPages: 1 }); rateLimit = null;
+assert.deepEqual(limited, { pages: 0, done: false }); assert.equal((await sync.getSyncState())!.lastError, "Notion rate limit reached. It will retry.");
+
 process.exit(0);
