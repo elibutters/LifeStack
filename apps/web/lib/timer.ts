@@ -42,8 +42,8 @@ export async function startTimer(input: { itemKey: string; title: string; style:
   });
 }
 
-// Stopping a goal session's timer is how it gets done: the session is logged as done at the time it started, for as long as it ran. Under a
-// minute is a mistaken tap, not a session, so nothing is logged then. Other calendar items only keep the length in the timer record.
+// Stopping a goal session's timer is how it gets done: the session is logged as done at the time it started, for as long as it ran (at least a
+// minute). Other calendar items only keep the length in the timer record.
 export async function stopTimer(itemKey: string, now = new Date()): Promise<{ stopped: boolean; minutes?: number; logged?: string; error?: string }> {
   const rows = await db().select().from(events).where(and(eq(events.source, SRC), eq(events.sourceId, `timer:${itemKey}`)));
   const row = rows[0];
@@ -52,8 +52,8 @@ export async function stopTimer(itemKey: string, now = new Date()): Promise<{ st
   const minutes = minutesBetween(t.startedAt, now.toISOString());
   await db().update(events).set({ valueText: "stopped", payload: { ...(row.payload as object), stoppedAt: now.toISOString(), minutes } }).where(eq(events.id, row.id));
   const sessionId = sessionIdOf(itemKey);
-  if (!sessionId || minutes < 1) return { stopped: true, minutes };
-  const r = await logSession(sessionId, { start: t.startedAt, minutes }, now);
+  if (!sessionId) return { stopped: true, minutes };
+  const r = await logSession(sessionId, { start: t.startedAt, minutes: Math.max(1, minutes) }, now);
   return r.ok ? { stopped: true, minutes, logged: r.summary } : { stopped: true, minutes, error: r.error };
 }
 
