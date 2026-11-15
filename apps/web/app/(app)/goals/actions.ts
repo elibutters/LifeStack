@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { addDays, TZ, ymd } from "@/lib/dates";
-import { completeSession, moveSession, refreshEventBodies, skipSession, suggestSlots } from "@/lib/goals";
+import { completeSession, moveSession, refreshEventBodies, skipSession, suggestSlots, updateGoal } from "@/lib/goals";
 import { afterResponse, ensureNotebook, notebookHook } from "@/lib/goals-notion";
 
 // Every action checks the session itself (server actions are POSTs to the page) and goes back to /goals with a short note when
@@ -15,12 +15,33 @@ const back = (note?: string) => {
 };
 const idOf = (f: FormData) => String(f.get("id") ?? "").trim();
 
+const commentOf = (f: FormData) => String(f.get("note") ?? "").trim().slice(0, 1000);
+
 export async function doneAction(form: FormData): Promise<void> {
   await requireSession();
   const minutes = Number(form.get("minutes"));
-  const r = await completeSession(idOf(form), Number.isInteger(minutes) && minutes > 0 ? { minutes } : {});
+  const note = commentOf(form);
+  const r = await completeSession(idOf(form), { ...(Number.isInteger(minutes) && minutes > 0 ? { minutes } : {}), ...(note ? { note } : {}) });
   if (!r.ok) return back(r.error);
-  afterResponse(() => notebookHook({ type: "done", session: r.session }));
+  afterResponse(() => notebookHook({ type: "done", session: r.session, ...(note ? { note } : {}) }));
+  back();
+}
+
+// A draft becomes a live goal. Its sessions stay as they are.
+export async function startGoalAction(form: FormData): Promise<void> {
+  await requireSession();
+  const r = await updateGoal(String(form.get("goalId") ?? "").trim(), { status: "active" });
+  if (!r.ok) return back(r.error);
+  back();
+}
+
+// Marks the goal itself finished and keeps the comment on it. Sessions are left as they are, so a call can be marked done on its own.
+export async function finishGoalAction(form: FormData): Promise<void> {
+  await requireSession();
+  const note = commentOf(form);
+  const r = await updateGoal(String(form.get("goalId") ?? "").trim(), { status: "done", ...(note ? { doneNote: note } : {}) });
+  if (!r.ok) return back(r.error);
+  afterResponse(() => notebookHook({ type: "finished", goalId: r.goal.id, title: r.goal.title, ...(note ? { note } : {}) }));
   back();
 }
 

@@ -72,10 +72,10 @@ struct LargeWidgetView: View {
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 1) {
-                Text("NEXT").font(.caption2.weight(.semibold)).foregroundStyle(WColor.muted)
-                if let e = o?.nextEvent {
-                    Text(e.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                    Text(Format.time(e)).font(.caption).foregroundStyle(WColor.sky)
+                Text(o?.focus?.label ?? "NEXT").font(.caption2.weight(.semibold)).foregroundStyle(WColor.muted)
+                if let e = o?.focus {
+                    Text(e.item.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text(e.when).font(.caption).foregroundStyle(WColor.sky)
                 } else { Text("Nothing today").font(.subheadline).foregroundStyle(WColor.muted) }
             }
         }
@@ -128,15 +128,18 @@ struct LargeWidgetView: View {
         }
     }
 
+    // Label on the top left, the current value underneath, so "Caffeine" never wraps onto a second line.
     private func tab(title: String, value: String, name: String, selected: Bool, tint: Color?) -> some View {
         Button(intent: TogglePickerIntent(name: name)) {
-            HStack(spacing: 8) {
-                Text(title).font(.caption2.weight(.semibold)).foregroundStyle(selected ? Color.white.opacity(0.85) : WColor.muted)
-                Text(value).font(.system(size: 14, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
-                Spacer(minLength: 0)
-                Image(systemName: selected ? "chevron.up" : "chevron.down").font(.system(size: 11, weight: .semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(title).font(.caption2.weight(.semibold)).foregroundStyle(selected ? Color.white.opacity(0.85) : WColor.muted).lineLimit(1)
+                    Spacer(minLength: 4)
+                    Image(systemName: selected ? "chevron.up" : "chevron.down").font(.system(size: 11, weight: .semibold))
+                }
+                Text(value).font(.system(size: 15, weight: .semibold)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
             }
-            .padding(.horizontal, 12).frame(maxWidth: .infinity).frame(height: 38)
+            .padding(.horizontal, 12).frame(maxWidth: .infinity, alignment: .leading).frame(height: 50)
             .background(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(Color.white.opacity(selected ? 0.16 : 0.08)), in: RoundedRectangle(cornerRadius: 4))
         }
         .buttonStyle(.plain)

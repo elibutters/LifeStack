@@ -3,18 +3,26 @@ import SwiftUI
 
 struct FinanceView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("finance-amounts-hidden") private var hideAmounts = true
     @State private var summary = Loader<FinanceSummary>()
     @State private var pickedMonth: String?
     @State private var txns = Loader<[Transaction]>()
     @State private var holdings = Loader<[Holding]>()
 
     var body: some View {
-        Screen(title: "Finance", refresh: { await load() }) {
+        Screen(title: "Finance", refresh: { await load() }, trailing: {
+            Button { hideAmounts.toggle() } label: {
+                Image(systemName: hideAmounts ? "eye.slash" : "eye").font(.title3).foregroundStyle(Theme.sky).frame(width: 44, height: 36)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(hideAmounts ? "Show amounts" : "Hide amounts")
+            .accessibilityIdentifier("finance-hide-amounts")
+        }) {
             ErrorBanner(text: summary.error)
             if let s = summary.value {
                 Card(title: "Net worth") {
-                    Big(text: Format.money(s.netWorth.net), size: 46)
-                    HStack { Stat(label: "Assets", value: Format.money(s.netWorth.assets), tint: Theme.good); Stat(label: "Owed", value: Format.money(s.netWorth.liabilities)) }
+                    Big(text: money(s.netWorth.net), size: 46)
+                    HStack { Stat(label: "Assets", value: money(s.netWorth.assets), tint: Theme.good); Stat(label: "Owed", value: money(s.netWorth.liabilities)) }
                 }
                 Card(title: "Cash flow", trailing: "last 6 months") {
                     Chart {
@@ -22,30 +30,30 @@ struct FinanceView: View {
                             BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.income)).position(by: .value("Type", "In")).foregroundStyle(Theme.good).cornerRadius(1)
                             BarMark(x: .value("Month", Format.monthShort(f.month)), y: .value("Amount", f.spending)).position(by: .value("Type", "Out")).foregroundStyle(Theme.violet).cornerRadius(1)
                         }
-                        SelectionMark(x: pickedMonth, lines: s.cashflow.first { Format.monthShort($0.month) == pickedMonth }.map { [Format.monthShort($0.month), "In " + Format.money($0.income), "Out " + Format.money($0.spending)] } ?? [])
+                        SelectionMark(x: pickedMonth, lines: s.cashflow.first { Format.monthShort($0.month) == pickedMonth }.map { [Format.monthShort($0.month), "In " + money($0.income), "Out " + money($0.spending)] } ?? [])
                     }
                     .chartXSelection(value: $pickedMonth)
-                    .chartYAxis { AxisMarks { v in AxisGridLine().foregroundStyle(Theme.line); AxisValueLabel { if let d = v.as(Double.self) { Text(Format.money(d)).foregroundStyle(Theme.muted) } } } }
+                    .chartYAxis { AxisMarks { v in AxisGridLine().foregroundStyle(Theme.line); if !hideAmounts { AxisValueLabel { if let d = v.as(Double.self) { Text(Format.money(d)).foregroundStyle(Theme.muted) } } } } }
                     .chartXAxis { AxisMarks { _ in AxisValueLabel().foregroundStyle(Theme.muted) } }
                     .frame(height: 170)
                     HStack(spacing: 16) { legend(Theme.good, "Money in"); legend(Theme.violet, "Money out") }
                 }
-                Card(title: "Spending this month", trailing: Format.money(s.thisMonth.spending)) {
+                Card(title: "Spending this month", trailing: hideAmounts ? nil : money(s.thisMonth.spending)) {
                     let rows = (s.thisMonth.byCategory ?? []).prefix(6).map { (label: $0.label, value: $0.amount) }
-                    if rows.isEmpty { Empty(text: "Nothing spent yet this month.") } else { BarList(rows: Array(rows)) }
+                    if rows.isEmpty { Empty(text: "Nothing spent yet this month.") } else { BarList(rows: Array(rows), showsAmounts: !hideAmounts, percentOf: hideAmounts ? s.thisMonth.spending : nil) }
                 }
-                if !s.insights.isEmpty { Card(title: "Insights") { ForEach(s.insights) { InsightRow(insight: $0) } } }
+                if !s.insights.isEmpty { Card(title: "Insights") { ForEach(s.insights) { InsightRow(insight: Insight(id: $0.id, tone: $0.tone, title: redact($0.title), detail: redact($0.detail))) } } }
                 ForEach(s.groups) { g in
-                    Card(title: g.label, trailing: Format.money(g.total)) {
+                    Card(title: g.label, trailing: money(g.total)) {
                         ForEach(g.accounts) { a in
-                            HStack { VStack(alignment: .leading, spacing: 1) { Text(a.name).font(.subheadline); if let i = a.institution { Text(i).font(.caption).foregroundStyle(Theme.muted) } }; Spacer(); Text(a.balance.map { Format.money($0, cents: true) } ?? "-").font(.subheadline.weight(.medium)).monospacedDigit() }
+                            HStack { VStack(alignment: .leading, spacing: 1) { Text(a.name).font(.subheadline); if let i = a.institution { Text(i).font(.caption).foregroundStyle(Theme.muted) } }; Spacer(); Text(a.balance.map { money($0, cents: true) } ?? "-").font(.subheadline.weight(.medium)).monospacedDigit() }
                         }
                     }
                 }
             } else if summary.loading { ProgressView().padding(.top, 60) }
             if let h = holdings.value, !h.isEmpty {
                 Card(title: "Holdings") {
-                    ForEach(h) { x in HStack { Text(x.symbol ?? x.name ?? "Position").font(.subheadline.weight(.medium)); Spacer(); Text(Format.money(x.value)).font(.subheadline).monospacedDigit() } }
+                    ForEach(h) { x in HStack { Text(x.symbol ?? x.name ?? "Position").font(.subheadline.weight(.medium)); Spacer(); Text(money(x.value)).font(.subheadline).monospacedDigit() } }
                 }
             }
             if let t = txns.value, !t.isEmpty {
@@ -55,7 +63,7 @@ struct FinanceView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) { Text(x.merchant).font(.subheadline).lineLimit(1); Text(Format.shortDay(x.date)).font(.caption).foregroundStyle(Theme.muted) }
                                 Spacer()
-                                Text(Format.money(-x.amount, cents: true)).font(.subheadline.weight(.medium)).monospacedDigit().foregroundStyle(x.amount < 0 ? Theme.good : .white)
+                                Text(money(-x.amount, cents: true)).font(.subheadline.weight(.medium)).monospacedDigit().foregroundStyle(x.amount < 0 ? Theme.good : .white)
                             }
                             .padding(.vertical, 8)
                             if x.id != t.last?.id { Divider().overlay(Theme.line) }
@@ -68,6 +76,14 @@ struct FinanceView: View {
     }
 
     private func legend(_ c: Color, _ t: String) -> some View { HStack(spacing: 6) { Circle().fill(c).frame(width: 8, height: 8); Text(t).font(.caption).foregroundStyle(Theme.muted) } }
+
+    // Dollar amounts become a mask. The charts keep their shape, so a glance still shows the pattern.
+    private func money(_ v: Double, cents: Bool = false) -> String { hideAmounts ? "••••" : Format.money(v, cents: cents) }
+
+    private func redact(_ text: String) -> String {
+        guard hideAmounts, let regex = try? NSRegularExpression(pattern: #"-?\$[\d,]+(?:\.\d+)?"#) else { return text }
+        return regex.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "••••")
+    }
 
     private func load() async {
         async let a: Void = summary.load(model) { try await $0.finance() }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { type Contact, type ContactKind } from "@/lib/profile-core";
+import { ProfileEditContext } from "./profile-form";
 
 const input = "h-9 w-full min-w-0 rounded-md border border-line bg-bg px-2.5 text-sm outline-none focus:border-accent";
 const KINDS: { value: ContactKind; label: string }[] = [
@@ -15,11 +16,22 @@ type Row = { id: string; kind: ContactKind; value: string; description: string }
 const blank = (): Row => ({ id: crypto.randomUUID(), kind: "email", value: "", description: "" });
 
 export function ContactList({ items }: { items: Contact[] }) {
+  const onEdit = useContext(ProfileEditContext);
   const [rows, setRows] = useState<Row[]>(() =>
     items.length
       ? items.map((item) => ({ id: crypto.randomUUID(), kind: item.kind, value: item.value, description: item.description ?? "" }))
       : [blank()],
   );
+  const edit = useRef(onEdit);
+  edit.current = onEdit;
+  const skip = useRef(true);
+  useEffect(() => {
+    if (skip.current) {
+      skip.current = false;
+      return;
+    }
+    edit.current?.();
+  }, [rows]);
   const set = (id: string, patch: Partial<Row>) => setRows((list) => list.map((row) => (row.id === id ? { ...row, ...patch } : row)));
 
   return (

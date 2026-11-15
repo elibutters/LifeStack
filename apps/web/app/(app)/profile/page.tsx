@@ -6,6 +6,7 @@ import { fieldValue, PROFILE_SECTIONS, type Profile, type ProfileField } from "@
 import { loadProfile } from "@/lib/profile";
 import { saveProfile } from "./actions";
 import { ContactList } from "./contact-list";
+import { ProfileForm } from "./profile-form";
 
 export const metadata: Metadata = { title: "Profile" };
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 const input = "h-9 w-full min-w-0 rounded-md border border-line bg-bg px-2.5 text-sm outline-none focus:border-accent";
 const area = "min-h-16 w-full min-w-0 rounded-md border border-line bg-bg px-2.5 py-1.5 text-sm outline-none focus:border-accent";
 
-export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
+export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string; place?: string }> }) {
   await requireSession();
   const sp = await searchParams;
   const profile = await loadProfile().catch(() => ({}) as Profile);
@@ -26,7 +27,15 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       <div className="space-y-6">
 
       {sp.saved === "1" && (
-        <p className="max-w-4xl rounded-md border border-accent/30 bg-accent/10 px-4 py-3 text-accent">Saved. Agents will see the filled-in fields.</p>
+        <p className="max-w-4xl rounded-md border border-accent/30 bg-accent/10 px-4 py-3 text-accent">
+          {sp.place === "marked"
+            ? "Saved. Office is marked on the map."
+            : sp.place === "unmatched"
+              ? "Saved. That workplace address did not match a street address. Include the street, city, and state."
+              : sp.place === "cleared"
+                ? "Saved. Office was removed from the map."
+                : "Saved. Agents will see the filled-in fields."}
+        </p>
       )}
       {sp.error === "invalid" && (
         <p className="max-w-4xl rounded-md border border-danger/30 bg-danger/10 px-4 py-3 text-danger">
@@ -34,7 +43,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
         </p>
       )}
 
-      <form action={saveProfile} className="max-w-4xl space-y-4">
+      <ProfileForm action={saveProfile}>
         {PROFILE_SECTIONS.map((section) => (
           <Card key={section.title} title={section.title}>
             <p className="mb-2 text-sm text-muted">{section.blurb}</p>
@@ -46,10 +55,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
             </div>
           </Card>
         ))}
-        <button type="submit" className="h-9 rounded-md bg-fg px-4 text-sm font-medium text-bg">
-          Save profile
-        </button>
-      </form>
+      </ProfileForm>
     </div>
     </>
   );
@@ -58,7 +64,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
 function Field({ field, value }: { field: ProfileField; value: string }) {
   const id = `profile-${field.key}`;
   return (
-    <div className="min-w-0">
+    <div className={field.wide ? "col-span-2 min-w-0" : "min-w-0"}>
       <label htmlFor={id} className="mb-0.5 block text-xs text-muted">
         {field.label}
       </label>

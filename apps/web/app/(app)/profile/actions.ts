@@ -11,5 +11,7 @@ export async function saveProfile(form: FormData): Promise<void> {
   const result = await saveProfileData(fromForm(form));
   if (!result.ok) redirect("/profile?error=invalid");
   revalidatePath("/profile");
-  redirect("/profile?saved=1");
+  revalidatePath("/map");
+  const place = result.place === "unchanged" ? "" : `&place=${result.place}`;
+  redirect(`/profile?saved=1${place}`);
 }

@@ -1,37 +1,38 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { addTodo, deleteTodo, updateTodo } from "@/lib/todos";
-import { TODO_STATUSES } from "@/lib/todos-core";
+import { TODO_STATUSES, type TodoStatus } from "@/lib/todos-core";
 
-const str = (f: FormData, k: string) => String(f.get(k) ?? "");
-const num = (f: FormData, k: string) => {
-  const n = Number(str(f, k));
-  return Number.isInteger(n) && n > 0 ? n : null;
-};
+const idOk = (id: number) => Number.isInteger(id) && id > 0;
 
-export async function addTodoAction(form: FormData): Promise<void> {
+export async function addTodoAction(input: { title: string; note: string; due: string }): Promise<{ ok: boolean }> {
   await requireSession();
-  const r = await addTodo({ title: str(form, "title"), note: str(form, "note"), due: str(form, "due") }, "web");
-  if (!r.ok) redirect("/todos?error=invalid");
+  const r = await addTodo({ title: input.title, note: input.note, due: input.due }, "web");
+  if (!r.ok) return { ok: false };
   revalidatePath("/todos");
-  redirect("/todos");
+  return { ok: true };
 }
 
-export async function setTodoStatus(form: FormData): Promise<void> {
+export async function editTodo(id: number, input: { title: string; note: string; due: string }): Promise<{ ok: boolean }> {
   await requireSession();
-  const id = num(form, "id");
-  const status = str(form, "status");
-  if (!id || !(TODO_STATUSES as readonly string[]).includes(status)) return;
-  await updateTodo(id, { status });
+  if (!idOk(id)) return { ok: false };
+  const r = await updateTodo(id, { title: input.title, note: input.note, due: input.due });
+  if (!r.ok || !r.found) return { ok: false };
   revalidatePath("/todos");
+  return { ok: true };
 }
 
-export async function removeTodo(form: FormData): Promise<void> {
+export async function setTodoStatus(id: number, status: TodoStatus): Promise<void> {
   await requireSession();
-  const id = num(form, "id");
-  if (id) await deleteTodo(id);
-  revalidatePath("/todos");
+  if (!idOk(id) || !TODO_STATUSES.includes(status)) return;
+  const r = await updateTodo(id, { status });
+  if (r.ok) revalidatePath("/todos");
+}
+
+export async function removeTodo(id: number): Promise<void> {
+  await requireSession();
+  if (!idOk(id)) return;
+  if (await deleteTodo(id)) revalidatePath("/todos");
 }

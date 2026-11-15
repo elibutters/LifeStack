@@ -268,8 +268,10 @@ export function QuickLog({
                     className={`flex min-h-14 min-w-0 flex-1 items-center gap-2.5 rounded-md border px-3 text-left text-base transition-colors focus-visible:border-accent disabled:opacity-50 ${on ? "border-ok/40 bg-ok/10 active:bg-ok/20" : "border-line bg-raised active:bg-white/10"}`}
                   >
                     <StatusMark ok={on} choice />
-                    <span className="min-w-0 flex-1 truncate">{s.name}</span>
-                    {s.dose != null && !editing ? <span className="shrink-0 text-sm tabular-nums text-muted">{s.dose} {s.unit}</span> : null}
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1.5">
+                      <span className="line-clamp-2 leading-snug">{s.name}</span>
+                      {s.dose != null && !editing ? <span className="text-right text-sm tabular-nums leading-none text-muted">{s.dose} {s.unit}</span> : null}
+                    </span>
                   </button>
                   {editing && (
                     <DoseEditor

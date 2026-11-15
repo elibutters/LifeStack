@@ -10,7 +10,7 @@ const core = await import("../lib/profile-core.ts");
 const prof = await import("../lib/profile.ts");
 const tok = await import("../lib/tokens.ts");
 const { db } = await import("../lib/db.ts");
-const { ownerProfile, apiTokens } = await import("@lifestack/db");
+const { ownerProfile, apiTokens, places } = await import("@lifestack/db");
 
 // ---- parsing
 const ok = (v: unknown) => core.parseProfile(v);
@@ -21,6 +21,7 @@ assert.deepEqual((ok({ name: "Ada Example Person" }) as any).profile, { firstNam
 assert.ok(!("pronouns" in ((ok({ pronouns: "they" }) as any).profile as object)));
 assert.ok(!("gender" in ((ok({ gender: "x", sex: "female" }) as any).profile as object)));
 assert.equal((ok({ sex: "female" }) as any).profile.sex, "female");
+assert.equal((ok({ workplace: "  1 Example St, Example City, NY  " }) as any).profile.workplace, "1 Example St, Example City, NY");
 assert.equal(ok({ dateOfBirth: "1990-06-15" }).ok, true);
 assert.equal(ok({ dateOfBirth: "not-a-day" }).ok, false);
 assert.equal(ok({ dateOfBirth: "1899-01-01" }).ok, false);
@@ -75,6 +76,29 @@ assert.equal(body.timezone, "UTC");
 assert.equal(typeof body.ageYears, "number");
 assert.ok(!JSON.stringify(body).includes("writer"));
 
+const here = { lat: 40.71, lon: -74.01 };
+let lookups = 0;
+const marked = await prof.saveProfileData({ workplace: "1 Example St, Example City, NY" }, async () => {
+  lookups += 1;
+  return here;
+});
+assert.equal(marked.ok, true);
+assert.equal(marked.ok && marked.place, "marked");
+assert.equal(lookups, 1);
+const office = (await db().select().from(places)).filter((p) => p.label === "Office");
+assert.equal(office.length, 1);
+assert.equal(office[0]!.lat, here.lat);
+const same = await prof.saveProfileData({ firstName: "Example", workplace: "1 Example St, Example City, NY" }, async () => {
+  lookups += 1;
+  return { lat: 0, lon: 0 };
+});
+assert.equal(same.ok && same.place, "unchanged");
+assert.equal(lookups, 1, "an unchanged address is not looked up again");
+const missed = await prof.saveProfileData({ workplace: "not a street" }, async () => null);
+assert.equal(missed.ok && missed.place, "unmatched");
+assert.equal((missed.ok && missed.profile.workplace), "not a street");
+
+await db().delete(places);
 await db().delete(ownerProfile);
 await db().delete(apiTokens);
 console.log("PROFILE OK");

@@ -78,7 +78,7 @@ final class SignInTests: XCTestCase {
         let more = app.tabBars.buttons["More"]
         XCTAssertTrue(more.waitForExistence(timeout: 10))
         more.tap()
-        for (id, title) in [("more-calendar", "Calendar"), ("more-log", "Log"), ("more-wants", "Wants")] {
+        for (id, title) in [("more-fitness", "Fitness"), ("more-log", "Log"), ("more-wants", "Wants")] {
             app.buttons[id].tap()
             XCTAssertTrue(app.buttons["back-button"].waitForExistence(timeout: 5), "\(title) should open in place")
             XCTAssertTrue(app.tabBars.buttons["More"].isSelected, "\(title) should stay on the More tab")
@@ -92,7 +92,7 @@ final class SignInTests: XCTestCase {
         app.buttons["add-want"].tap()
         XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
         app.buttons["Cancel"].tap()
-        app.tabBars.buttons["Overview"].tap()
+        app.buttons["back-button"].tap()
         app.buttons["account-button"].tap()
         XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
     }

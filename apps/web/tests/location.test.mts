@@ -29,6 +29,10 @@ const home = { id: 1, label: "Home", lat: 40.7, lon: -74, radiusM: 100 }, gym = 
 assert.equal(core.placeAt({ lat: 40.7001, lon: -74 }, [home, gym])?.label, "Home");
 assert.equal(core.placeAt({ lat: 40.7, lon: -74.0009 }, [home, gym])?.label, "Gym", "the closer place wins");
 assert.equal(core.placeAt({ lat: 41, lon: -74 }, [home, gym]), null);
+assert.deepEqual(core.pointFromCensus({ result: { addressMatches: [{ coordinates: { x: -74.01, y: 40.71 } }] } }), { lat: 40.71, lon: -74.01 });
+assert.equal(core.pointFromCensus({ result: { addressMatches: [] } }), null);
+assert.equal(core.pointFromCensus({}), null);
+assert.equal(core.pointFromCensus({ result: { addressMatches: [{ coordinates: { x: "nope", y: 40 } }] } }), null);
 const P = (iso: string, source: string, lat = 40.7, lon = -74) => ({ ts: new Date(iso), lat, lon, source });
 const st = core.staysOf([P("2026-10-12T08:00:00Z", "visit-arrival"), P("2026-10-12T09:30:00Z", "visit-departure"), P("2026-10-12T10:00:00Z", "visit-arrival", 41, -74)], [home], new Date("2026-10-12T11:00:00Z"));
 assert.deepEqual(st.map((s) => [s.place, s.minutes, s.to === null, s.estimated]), [[null, 60, true, false], ["Home", 90, false, false]], "newest first; the latest stay with no departure and fresh data is ongoing");
@@ -71,6 +75,20 @@ assert.equal((await loc.handlePlace(req("DELETE", `/places/${pid}`, writer.token
 const map = await loc.loadMapData(new Date());
 assert.ok(map.points.length >= 2 && map.points.every((p, i, a) => i === 0 || a[i - 1]!.t <= p.t), "map points come oldest first");
 assert.ok(map.stays.length >= 1 && map.places.length === 0, "stays and places travel with the points");
+assert.equal(await loc.syncOfficePlace(undefined, undefined, async () => { throw new Error("unused"); }), "unchanged");
+assert.equal(await loc.syncOfficePlace(undefined, "1 Example St, Example City, NY", async () => null), "unmatched");
+assert.equal(await loc.syncOfficePlace(undefined, "1 Example St, Example City, NY", async () => ({ lat: 40.71, lon: -74.01 })), "marked");
+const office = (await db().select().from(places)).filter((p) => p.label === "Office");
+assert.equal(office.length, 1);
+assert.equal(office[0]!.radiusM, loc.OFFICE_RADIUS_M);
+assert.equal(await loc.syncOfficePlace("1 Example St, Example City, NY", "1 Example St, Example City, NY", async () => { throw new Error("unused"); }), "unchanged");
+assert.equal(await loc.syncOfficePlace("1 Example St, Example City, NY", "2 Example St, Example City, NY", async () => ({ lat: 40.8, lon: -73.9 })), "marked");
+assert.equal((await db().select().from(places)).filter((p) => p.label === "Office").length, 1);
+assert.equal((await db().select().from(places)).find((p) => p.label === "Office")!.lat, 40.8);
+await db().insert(places).values({ label: "Home", lat: 1, lon: 2, radiusM: 100 });
+assert.equal(await loc.syncOfficePlace("2 Example St, Example City, NY", "", async () => { throw new Error("unused"); }), "cleared");
+const left = await db().select().from(places);
+assert.deepEqual(left.map((p) => p.label), ["Home"], "clearing the workplace removes Office only");
 assert.ok(cap.APP_SCOPES.includes("location:write") && !cap.APP_SCOPES.includes("email:read"), "the phone can upload location but not read mail");
 
 await db().delete(locationPoints); await db().delete(places); await db().delete(apiTokens);

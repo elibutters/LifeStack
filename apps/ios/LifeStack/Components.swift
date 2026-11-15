@@ -19,16 +19,21 @@ private struct ScreenHeader<T: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 8) {
-                if let back {
-                    Button(action: back) { Image(systemName: "chevron.left").font(.title3.weight(.semibold)).foregroundStyle(Theme.sky).frame(width: 32, height: 36) }
-                        .accessibilityLabel("Back").accessibilityIdentifier("back-button")
+            // An empty title means the screen has no heading. The row stays only when something else needs it, such as a back button.
+            if !title.isEmpty || back != nil {
+                HStack(alignment: .center, spacing: 8) {
+                    if let back {
+                        Button(action: back) { Image(systemName: "chevron.left").font(.title3.weight(.semibold)).foregroundStyle(Theme.sky).frame(width: 32, height: 36) }
+                            .accessibilityLabel("Back").accessibilityIdentifier("back-button")
+                    }
+                    if !title.isEmpty {
+                        Text(title).font(.system(size: 30, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
+                    }
+                    Spacer()
+                    trailing
                 }
-                Text(title).font(.system(size: 30, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
-                Spacer()
-                trailing
+                .padding(.horizontal, 18).padding(.top, 2).padding(.bottom, 0)
             }
-            .padding(.horizontal, 18).padding(.top, 2).padding(.bottom, 0)
             content
         }
     }

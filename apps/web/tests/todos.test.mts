@@ -32,6 +32,29 @@ const sorted = core.sortTodos([
 ]);
 assert.deepEqual(sorted.map((x) => x.id), [4, 3, 2, 1]);
 assert.deepEqual(core.summarize(sorted, "2026-11-02"), { open: 3, overdue: 1, done: 1 });
+assert.equal(core.bucketOf({ status: "open", due: "2026-11-01" }, "2026-11-02"), "overdue");
+assert.equal(core.bucketOf({ status: "open", due: "2026-11-02" }, "2026-11-02"), "today");
+assert.equal(core.bucketOf({ status: "open", due: "2026-11-05" }, "2026-11-02"), "upcoming");
+assert.equal(core.bucketOf({ status: "open", due: null }, "2026-11-02"), "anytime");
+assert.equal(core.bucketOf({ status: "done", due: "2026-11-01" }, "2026-11-02"), "done");
+assert.equal(core.bucketOf({ status: "dropped", due: null }, "2026-11-02"), "dropped");
+const grouped = core.groupTodos(
+  [
+    { id: 1, status: "open" as const, due: "2026-11-01" },
+    { id: 2, status: "open" as const, due: "2026-11-02" },
+    { id: 3, status: "open" as const, due: "2026-12-01" },
+    { id: 4, status: "open" as const, due: null },
+    { id: 5, status: "done" as const, due: null },
+    { id: 6, status: "dropped" as const, due: "2026-11-01" },
+  ],
+  "2026-11-02",
+);
+assert.deepEqual(grouped.open.overdue.map((x) => x.id), [1]);
+assert.deepEqual(grouped.open.today.map((x) => x.id), [2]);
+assert.deepEqual(grouped.open.upcoming.map((x) => x.id), [3]);
+assert.deepEqual(grouped.open.anytime.map((x) => x.id), [4]);
+assert.deepEqual(grouped.done.map((x) => x.id), [5]);
+assert.deepEqual(grouped.dropped.map((x) => x.id), [6]);
 
 // ---- storage
 await db().delete(todos);

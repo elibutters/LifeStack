@@ -27,7 +27,7 @@ export function Sidebar() {
   const width = expanded ? "w-56" : "w-14";
 
   return (
-    <aside className={`sticky top-0 hidden h-dvh shrink-0 md:block ${width}`}>
+    <aside className={`sticky top-0 z-30 hidden h-dvh shrink-0 md:block ${width}`}>
       <div
         className={`flex h-full ${width} flex-col border-r border-line bg-bg pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(0.5rem,env(safe-area-inset-left))] transition-[width] duration-150`}
       >

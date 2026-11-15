@@ -15,6 +15,19 @@ export const PointInput = z.object({
 export const BatchInput = z.object({ points: z.array(PointInput).min(1).max(200) });
 export type PointIn = z.infer<typeof PointInput>;
 
+// The Census one-line geocoder returns longitude as x and latitude as y. The first match is the one it prefers.
+export function pointFromCensus(body: unknown): { lat: number; lon: number } | null {
+  if (!body || typeof body !== "object") return null;
+  const matches = (body as { result?: { addressMatches?: unknown } }).result?.addressMatches;
+  if (!Array.isArray(matches) || matches.length === 0) return null;
+  const coordinates = (matches[0] as { coordinates?: { x?: unknown; y?: unknown } }).coordinates;
+  const lon = typeof coordinates?.x === "number" ? coordinates.x : Number(coordinates?.x);
+  const lat = typeof coordinates?.y === "number" ? coordinates.y : Number(coordinates?.y);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
+}
+
 export const PlaceInput = z.object({
   label: z.string().trim().min(1).max(60),
   lat: z.number().min(-90).max(90),

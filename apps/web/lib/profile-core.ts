@@ -71,6 +71,7 @@ export const ProfileInput = z.object({
   conditions: text(2000),
   injuries: text(2000),
   occupation: text(200),
+  workplace: text(200),
   household: text(1000),
   relationship: text(120),
   address1: text(120),
@@ -129,6 +130,7 @@ export type ProfileField = {
   kind: FieldKind;
   max?: number;
   step?: string;
+  wide?: boolean;
   options?: { value: string; label: string }[];
 };
 export type ProfileSection = { title: string; blurb: string; fields: ProfileField[] };
@@ -181,6 +183,14 @@ export const PROFILE_SECTIONS: ProfileSection[] = [
     blurb: "Context around work and home. Do not put workplace systems or firm data here.",
     fields: [
       { key: "occupation", label: "Occupation", kind: "text", max: 200 },
+      {
+        key: "workplace",
+        label: "Workplace",
+        kind: "text",
+        max: 200,
+        wide: true,
+        hint: "Street, city, and state. Saving looks up the address and marks it on the map as Office.",
+      },
       { key: "household", label: "Household", kind: "textarea", max: 1000 },
       { key: "relationship", label: "Relationship", kind: "text", max: 120 },
       { key: "languages", label: "Languages", kind: "text", max: 200 },

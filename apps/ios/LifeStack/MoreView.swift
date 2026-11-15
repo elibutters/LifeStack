@@ -5,6 +5,7 @@ struct MoreView: View {
     // Pushed on a stack that stays inside this tab. Replacing the tab's root view makes TabView
     // drop back to Overview, leaving the chosen screen underneath until More is opened again.
     @Environment(Navigator.self) private var nav
+    @State private var showAccount = false
 
     var body: some View {
         @Bindable var nav = nav
@@ -24,7 +25,8 @@ struct MoreView: View {
         case .finance: FinanceView()
         case .sleep: SleepView()
         case .wants: WantsView()
-        case .calendar: CalendarView()
+        case .todos: TodosView()
+        case .fitness: WorkoutsView()
         }
     }
 
@@ -48,7 +50,24 @@ struct MoreView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("more-\(item.rawValue.lowercased())")
                 }
+                Button { showAccount = true } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.crop.circle").font(.title3).foregroundStyle(Theme.sky).frame(width: 30)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Profile").font(.body.weight(.semibold)).foregroundStyle(.white)
+                            Text("Account, connections and this device").font(.caption).foregroundStyle(Theme.muted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.muted)
+                    }
+                    .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                    .panel()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Profile")
+                .accessibilityIdentifier("account-button")
             }
         }
+        .sheet(isPresented: $showAccount) { AccountView(dismiss: { showAccount = false }) }
     }
 }

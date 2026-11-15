@@ -6,7 +6,7 @@ struct TodaySummary: Decodable, Equatable {
     struct Supplement: Decodable, Equatable { let name: String; let count: Int }
     let date: String
     let mood: Mood?
-    let caffeine: Caffeine
+    var caffeine: Caffeine
     let supplements: [Supplement]
     // Only on /api/v1/log/today: that day's entries, oldest first. The overview's copy leaves it out.
     var entries: [HistoryEntry]? = nil
@@ -45,12 +45,13 @@ struct APIClient {
         return parts.url
     }
 
-    func request(_ path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) async throws -> Data {
+    func request(_ path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil, accept: String? = nil) async throws -> Data {
         var url = base.appending(path: path)
         if !query.isEmpty { url.append(queryItems: query) }
         var req = URLRequest(url: url, timeoutInterval: 20)
         req.httpMethod = method
         req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        if let accept { req.setValue(accept, forHTTPHeaderField: "Accept") }
         if let body { req.httpBody = body; req.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         let data: Data, response: URLResponse
         do { (data, response) = try await URLSession.shared.data(for: req) }

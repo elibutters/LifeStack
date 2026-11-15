@@ -41,18 +41,25 @@ function PlanBlocks({ blocks }: { blocks: Block[] }) {
   return <div className="space-y-1">{out}</div>;
 }
 
-export function SessionBody({ noteBlocks, notesBlocks, actual }: { noteBlocks: Block[]; notesBlocks: Block[]; actual: SessionDetail["actual"] }) {
-  if (noteBlocks.length === 0 && notesBlocks.length === 0 && !actual) return null;
+export function SessionBody({ noteBlocks, notesBlocks, actual, comment }: { noteBlocks: Block[]; notesBlocks: Block[]; actual: SessionDetail["actual"]; comment?: string | null }) {
+  const said = comment?.trim();
+  if (noteBlocks.length === 0 && notesBlocks.length === 0 && !actual && !said) return null;
   return (
     <div className="mt-1.5 whitespace-normal text-sm">
       {noteBlocks.length > 0 && (
-        <div className="grid grid-cols-[3.25rem_1fr] gap-x-2 py-1.5">
+        <div className="grid grid-cols-[4.5rem_1fr] gap-x-2 py-1.5">
           <span className="text-xs text-muted">Plan</span>
           <PlanBlocks blocks={noteBlocks} />
         </div>
       )}
+      {said && (
+        <div className="grid grid-cols-[4.5rem_1fr] gap-x-2 py-1.5">
+          <span className="text-xs text-muted">Comment</span>
+          <p className="whitespace-pre-line">{said}</p>
+        </div>
+      )}
       {actual && (
-        <div className="grid grid-cols-[3.25rem_1fr] gap-x-2 py-1.5">
+        <div className="grid grid-cols-[4.5rem_1fr] gap-x-2 py-1.5">
           <span className="text-xs text-muted">Actual</span>
           <div className="flex items-end justify-between gap-3">
             <p className="whitespace-pre-line">{actual.summary.replace(/^Actual: /, "").replace(/ \(Strava\)$/, "")}</p>
@@ -63,7 +70,7 @@ export function SessionBody({ noteBlocks, notesBlocks, actual }: { noteBlocks: B
       {notesBlocks.length > 0 && (
         <details className="py-1.5">
           <summary className="cursor-pointer text-xs text-muted">Notes</summary>
-          <div className="grid grid-cols-[3.25rem_1fr] gap-x-2 pt-1.5">
+          <div className="grid grid-cols-[4.5rem_1fr] gap-x-2 pt-1.5">
             <span />
             <PlanBlocks blocks={notesBlocks} />
           </div>
@@ -94,7 +101,7 @@ export function EventRow({ item, day, showDate = false, session }: { item: Calen
           {session && <SessionTag session={session} />}
         </div>
         {detail && <p className="text-sm text-muted">{detail}</p>}
-        {session && <SessionBody noteBlocks={session.noteBlocks} notesBlocks={session.notesBlocks} actual={session.actual} />}
+        {session && <SessionBody noteBlocks={session.noteBlocks} notesBlocks={session.notesBlocks} actual={session.actual} comment={session.logNote} />}
       </div>
     </li>
   );

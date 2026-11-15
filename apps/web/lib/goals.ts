@@ -36,13 +36,16 @@ export const GoalInput = z.object({
   mode: z.enum(GOAL_MODES).default("ask"),
   config: z.record(z.string(), z.unknown()).default({}),
 });
-export const GoalPatch = z.object({ title: z.string().trim().min(1).max(120), thesis: z.string().trim().max(2000), kind: z.enum(GOAL_KINDS), targetDay: Day.nullable(), mode: z.enum(GOAL_MODES), status: z.enum(GOAL_STATUSES), config: z.record(z.string(), z.unknown()), notionPageId: z.string().max(100).nullable() }).partial().refine((o) => Object.keys(o).length > 0, "nothing to change");
+const DoneNote = z.string().trim().max(1000).nullable();
+export const GoalPatch = z.object({ title: z.string().trim().min(1).max(120), thesis: z.string().trim().max(2000), kind: z.enum(GOAL_KINDS), targetDay: Day.nullable(), mode: z.enum(GOAL_MODES), status: z.enum(GOAL_STATUSES), config: z.record(z.string(), z.unknown()), notionPageId: z.string().max(100).nullable(), doneNote: DoneNote }).partial().refine((o) => Object.keys(o).length > 0, "nothing to change");
+// What the phone may change. The notebook id and config stay with the server.
+const GoalEdit = z.object({ title: z.string().trim().min(1).max(120), thesis: z.string().trim().max(2000), kind: z.enum(GOAL_KINDS), targetDay: Day.nullable(), mode: z.enum(GOAL_MODES), status: z.enum(GOAL_STATUSES), doneNote: DoneNote }).partial().strict().refine((o) => Object.keys(o).length > 0, "nothing to change");
 
-export type Goal = { id: string; title: string; thesis: string; kind: (typeof GOAL_KINDS)[number]; targetDay: string | null; mode: (typeof GOAL_MODES)[number]; status: (typeof GOAL_STATUSES)[number]; config: Record<string, unknown>; notionPageId: string | null; createdAt: string };
+export type Goal = { id: string; title: string; thesis: string; kind: (typeof GOAL_KINDS)[number]; targetDay: string | null; mode: (typeof GOAL_MODES)[number]; status: (typeof GOAL_STATUSES)[number]; config: Record<string, unknown>; notionPageId: string | null; doneNote: string | null; createdAt: string };
 // "replaced" is a session that was dropped because the plan changed: it is not something the owner skipped, so it is kept out of the calendar, the
 // counts and the goal's session list. Only the current plan is shown anywhere.
 export type SessionStatus = "planned" | "done" | "skipped" | "replaced";
-export type Session = { id: string; goalId: string; title: string; start: Date; end: Date; durationMin: number; status: SessionStatus; day: string; note: string | null; outlookEventId: string | null; movedFrom: string[]; doneAt: string | null; minutes: number | null; rating: number | null; actual: Actual | null; skippedAt: string | null; bodyV: number | null };
+export type Session = { id: string; goalId: string; title: string; start: Date; end: Date; durationMin: number; status: SessionStatus; day: string; note: string | null; outlookEventId: string | null; movedFrom: string[]; doneAt: string | null; minutes: number | null; rating: number | null; logNote: string | null; actual: Actual | null; skippedAt: string | null; bodyV: number | null };
 
 const newId = (prefix: string) => `${prefix}${randomBytes(4).toString("hex")}`;
 type Row = typeof events.$inferSelect;
@@ -52,7 +55,8 @@ function goalOf(r: Row): Goal {
   const p = rec(r.payload);
   return {
     id: String(p.id), title: String(p.title ?? ""), thesis: String(p.thesis ?? ""), kind: (p.kind as Goal["kind"]) ?? "custom", targetDay: typeof p.targetDay === "string" ? p.targetDay : null,
-    mode: (p.mode as Goal["mode"]) ?? "ask", status: (p.status as Goal["status"]) ?? "draft", config: rec(p.config), notionPageId: typeof p.notionPageId === "string" ? p.notionPageId : null, createdAt: String(p.createdAt ?? r.ts.toISOString()),
+    mode: (p.mode as Goal["mode"]) ?? "ask", status: (p.status as Goal["status"]) ?? "draft", config: rec(p.config), notionPageId: typeof p.notionPageId === "string" ? p.notionPageId : null,
+    doneNote: typeof p.doneNote === "string" && p.doneNote.trim() ? p.doneNote.trim() : null, createdAt: String(p.createdAt ?? r.ts.toISOString()),
   };
 }
 
@@ -70,7 +74,7 @@ function sessionOf(r: Row): Session {
     id: r.sourceId!.slice("session:".length), goalId: String(p.goalId), title: String(p.title ?? ""), start: r.ts, end, durationMin: Math.round((end.getTime() - r.ts.getTime()) / 60000),
     status: (r.valueText as SessionStatus) ?? "planned", day: typeof p.day === "string" ? p.day : eng.localDay(r.ts, TZ), note: typeof p.note === "string" ? p.note : null,
     outlookEventId: typeof p.outlookEventId === "string" ? p.outlookEventId : null, movedFrom: Array.isArray(p.movedFrom) ? p.movedFrom.map(String) : [],
-    doneAt: typeof p.doneAt === "string" ? p.doneAt : null, minutes: typeof p.minutes === "number" ? p.minutes : null, rating: typeof p.rating === "number" ? p.rating : null, actual: actualOf(p.actual), skippedAt: typeof p.skippedAt === "string" ? p.skippedAt : null,
+    doneAt: typeof p.doneAt === "string" ? p.doneAt : null, minutes: typeof p.minutes === "number" ? p.minutes : null, rating: typeof p.rating === "number" ? p.rating : null, logNote: typeof p.logNote === "string" && p.logNote.trim() ? p.logNote.trim() : null, actual: actualOf(p.actual), skippedAt: typeof p.skippedAt === "string" ? p.skippedAt : null,
     bodyV: typeof p.bodyV === "number" ? p.bodyV : null,
   };
 }
@@ -129,11 +133,13 @@ export async function sessionsOf(goalId?: string, now = new Date()): Promise<Ses
 }
 
 // Before there was a "replaced" status, a plan change skipped the old sessions. Those have no skippedAt, so a skipped session of that kind that
-// is still in the future, or has a live session at the same time, is read as replaced. A skip made now (it has a skippedAt) is always a skip.
+// is still in the future, has a live session at the same time, or was moved (another session lists this start in movedFrom) is read as replaced.
+// A skip made now (it has a skippedAt) is always a skip.
 export function markReplaced(list: Session[], now: Date): Session[] {
   const key = (s: Session) => `${s.goalId}|${s.start.getTime()}`;
   const live = new Set(list.filter((s) => s.status !== "skipped" && s.status !== "replaced").map(key));
-  return list.map((s) => (s.status === "skipped" && !s.skippedAt && (s.start > now || live.has(key(s))) ? { ...s, status: "replaced" as const } : s));
+  const movedAway = new Set(list.flatMap((s) => s.movedFrom.map((iso) => `${s.goalId}|${new Date(iso).getTime()}`)));
+  return list.map((s) => (s.status === "skipped" && !s.skippedAt && (s.start > now || live.has(key(s)) || movedAway.has(key(s))) ? { ...s, status: "replaced" as const } : s));
 }
 
 export async function getGoal(id: string) {
@@ -151,7 +157,7 @@ const noteParts = (note: string | null) => {
   return { noteBlocks: n.plan, notesBlocks: n.notes };
 };
 
-export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title: s.title, start: s.start.toISOString(), end: s.end.toISOString(), minutes: s.durationMin, status: s.status, note: s.note, ...noteParts(s.note), onCalendar: !!s.outlookEventId, movedFrom: s.movedFrom, doneAt: s.doneAt, minutesSpent: s.minutes, rating: s.rating, actual: s.actual && { ...s.actual, summary: actualLine(s.actual), url: stravaUrl(s.actual.id) } });
+export const sessionJson = (s: Session) => ({ id: s.id, goalId: s.goalId, title: s.title, start: s.start.toISOString(), end: s.end.toISOString(), minutes: s.durationMin, status: s.status, note: s.note, ...noteParts(s.note), onCalendar: !!s.outlookEventId, movedFrom: s.movedFrom, doneAt: s.doneAt, minutesSpent: s.minutes, rating: s.rating, logNote: s.logNote, actual: s.actual && { ...s.actual, summary: actualLine(s.actual), url: stravaUrl(s.actual.id) } });
 
 // ---- free time
 // Meetings (not all-day events, not holidays) as busy time, leaving out the Outlook copies of Life Stack's own sessions: those are
@@ -452,7 +458,7 @@ export async function reopenSession(id: string) {
   const s = await sessionRow(id);
   if (!s) return { ok: false as const, error: "No such session." };
   if (s.status === "replaced") return { ok: false as const, error: "That session was replaced by a plan change." };
-  if (s.status !== "planned") await patchPayload(`session:${id}`, { doneAt: null, minutes: null, rating: null, skippedAt: null }, { valueText: "planned" });
+  if (s.status !== "planned") await patchPayload(`session:${id}`, { doneAt: null, minutes: null, rating: null, logNote: null, skippedAt: null }, { valueText: "planned" });
   const cal = !s.outlookEventId && s.end > new Date() ? await pushToCalendar(s.goalId) : null;
   return { ok: true as const, calendar: (cal ? cal.calendar : "skipped") as CalendarState, session: sessionJson((await sessionRow(id))!) };
 }
@@ -557,6 +563,21 @@ async function guarded(req: Request, scope: "goals:read" | "goals:write", fn: ()
 export const handleGoals = (req: Request) =>
   guarded(req, "goals:read", async () => json({ goals: await Promise.all((await listGoals()).map(async (g) => (await getGoal(g.id))!)) }));
 export const handleTonight = (req: Request) => guarded(req, "goals:read", async () => json(await tonight()));
+
+// PATCH /api/v1/goals/{id}: rename a goal or change its description, kind, target day, slip mode or status.
+export const handleGoal = (req: Request, rawId: string) =>
+  guarded(req, "goals:write", async () => {
+    if (!/^[A-Za-z0-9-]{6,80}$/.test(rawId)) return json({ error: "not_found" }, 404);
+    const text = await req.text();
+    if (text.length > 8192) return json({ error: "too_large" }, 413);
+    let body: unknown;
+    try { body = JSON.parse(text); } catch { return json({ error: "invalid_json" }, 400); }
+    const p = GoalEdit.safeParse(body);
+    if (!p.success) return json({ error: "invalid" }, 400);
+    const r = await updateGoal(rawId, p.data);
+    if (!r.ok) return json({ error: r.error === "No such goal." ? "not_found" : "invalid" }, r.error === "No such goal." ? 404 : 400);
+    return json({ ok: true });
+  });
 
 const Action = z.discriminatedUnion("action", [
   Done.extend({ action: z.literal("done") }),
