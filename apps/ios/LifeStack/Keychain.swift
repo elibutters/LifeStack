@@ -8,8 +8,13 @@ enum Keychain {
 
     // The group the app and its widgets share (set from the build, so no team id lives in the source).
     private static var group: String? {
+        // The simulator build is not signed with the shared group, so using it there fails every save.
+        #if targetEnvironment(simulator)
+        return nil
+        #else
         let g = Bundle.main.object(forInfoDictionaryKey: "LSKeychainGroup") as? String
         return g?.contains("$(") == false ? g : nil
+        #endif
     }
 
     private static var base: [String: Any] {
