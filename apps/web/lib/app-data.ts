@@ -5,6 +5,7 @@ import { sessionsForItems, skippedItems, type SessionDetail } from "./calendar-s
 import { loadToday } from "./capture";
 import { accountLabel, cashflowSeries, classify, insights, lastMonths, merchantName, monthOf, netWorth, shiftMonthKey, summarizeMonth } from "./finance-calc";
 import { loadFinance, loadHoldings } from "./finance-data";
+import { loadSyncHealth } from "./sync-health";
 import { listItems } from "./finance";
 import { loadNights } from "./sleep";
 import { loadActivities, totals } from "./activities";
@@ -125,8 +126,9 @@ export async function fitnessSummary(now = new Date()) {
 }
 
 export async function connectionsStatus() {
-  const [status, items] = await Promise.all([systemStatus(), listItems().catch(() => [])]);
+  const [status, items, health] = await Promise.all([systemStatus(), listItems().catch(() => []), loadSyncHealth().catch(() => ({ sources: [], problems: 0 }))]);
   return {
+    health,
     calendar: { provider: "Outlook", connected: status.ok && status.calendarConnected, syncedAt: status.ok ? (status.calendarSyncedAt?.toISOString() ?? null) : null },
     sleep: { provider: "Eight Sleep", connected: status.ok && status.sleepConnected },
     banks: items.map((i) => ({ institution: i.institutionName, kind: i.kind, status: i.status, error: i.lastError, syncedAt: i.lastSyncedAt?.toISOString() ?? null })),

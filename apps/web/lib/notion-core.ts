@@ -137,7 +137,7 @@ export type Item =
 
 // `recent` remembers, for the newest pages, the edit time Notion reported when we last copied them, so the recent-pages sweep can tell a page it
 // already holds from one that has changed. (The stored edit time is the content's, which can be older than the page's.) It survives from walk to walk.
-export type WalkCursor = { gen: number; active: boolean; queue: Item[]; count: number; tried?: string; recent?: Record<string, string> };
+export type WalkCursor = { gen: number; active: boolean; queue: Item[]; count: number; tried?: string; recent?: Record<string, string>; ranAt?: string };
 
 const ItemSchema = z.union([
   z.object({ k: z.literal("search"), filter: z.enum(["page", "data_source"]), cursor: z.string().optional() }),
@@ -145,7 +145,11 @@ const ItemSchema = z.union([
   z.object({ k: z.literal("db"), id: z.string(), depth: z.number() }),
   z.object({ k: z.literal("page"), id: z.string(), depth: z.number(), meta: z.object({ title: z.string(), edited: z.string().nullable(), created: z.string().nullable().optional(), parent: z.string().nullable(), url: z.string().optional() }).optional() }),
 ]);
-const CursorSchema = z.object({ gen: z.number().int().min(0), active: z.boolean(), queue: z.array(ItemSchema), count: z.number().int().min(0), tried: z.string().optional(), recent: z.record(z.string(), z.string()).optional() });
+const CursorSchema = z.object({ gen: z.number().int().min(0), active: z.boolean(), queue: z.array(ItemSchema), count: z.number().int().min(0), tried: z.string().optional(), recent: z.record(z.string(), z.string()).optional(), ranAt: z.string().optional() });
+
+// The cursor kept after a run that went well, stamped with when it ran. A sweep leaves `lastOkAt` alone (only a finished walk sets it), so this is
+// what says the sync is still alive.
+export const okCursor = (c: WalkCursor): string => JSON.stringify({ ...c, ranAt: new Date().toISOString() });
 
 export const freshWalk = (gen: number): WalkCursor => ({ gen, active: true, queue: [{ k: "search", filter: "page" }, { k: "search", filter: "data_source" }], count: 0 });
 

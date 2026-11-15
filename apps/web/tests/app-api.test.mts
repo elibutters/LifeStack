@@ -50,7 +50,7 @@ const cal = await (await get(api.handleCalendar, "/api/v1/calendar", app)).json(
 for (const bad of ["?from=nope", "?from=2026-01-01&to=2026-12-31", "?from=2026-05-02&to=2026-05-01"]) assert.equal((await get(api.handleCalendar, "/api/v1/calendar" + bad, app)).status, 400, bad);
 assert.equal((await get(api.handleSleep, "/api/v1/sleep?nights=999", app)).status, 400); assert.equal((await get(api.handleTransactions, "/api/v1/finance/transactions?limit=0", app)).status, 400);
 assert.deepEqual((await (await get(api.handleHoldings, "/api/v1/finance/holdings", app)).json() as any).holdings, []);
-const conns = await (await get(api.handleConnections, "/api/v1/connections", app)).json() as any; assert.deepEqual(Object.keys(conns).sort(), ["banks", "calendar", "sleep"]);
+const conns = await (await get(api.handleConnections, "/api/v1/connections", app)).json() as any; assert.deepEqual(Object.keys(conns).sort(), ["banks", "calendar", "health", "sleep"]); assert.equal(conns.health.problems, 0); assert.deepEqual(conns.health.sources, [], "nothing is connected in the test database");
 
 // ---- a phone's key follows the app's current permissions, so features added later work without signing in again
 {

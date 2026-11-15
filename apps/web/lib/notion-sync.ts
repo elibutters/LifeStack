@@ -7,7 +7,7 @@ import { describeError } from "./errors";
 import { NOTION_API, notionConfigured, NotionError, refreshTokens } from "./notion";
 import {
   blocksToText, childRefs, containerIds, effectiveEdited, freshWalk, isTrashed, MAX_DEPTH, MAX_PAGES, metaOfPage, NOTION_VERSION, noteRow, pageSourceId, parseStored,
-  readCursor, validId, type Block, type Item, type NoteRow, type PageMeta, type StoredTokensT, type WalkCursor,
+  okCursor, readCursor, validId, type Block, type Item, type NoteRow, type PageMeta, type StoredTokensT, type WalkCursor,
 } from "./notion-core";
 
 export const NOTION = "notion";
@@ -313,7 +313,7 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
         if (next && (item.k === "search" || item.k === "ds")) cur.queue[0] = { ...item, cursor: next };
         else cur.queue.shift();
         inQueue = queued();
-        await recordState({ cursor: JSON.stringify(cur), lastError: null });
+        await recordState({ cursor: okCursor(cur), lastError: null });
       }
     } catch (e) {
       if (e instanceof OutOfBudget) {
@@ -326,7 +326,7 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
 
     if (o.sweepOnly) {
       // No walk ran, so nothing is deleted and the last finished walk's time is left alone.
-      await recordState({ cursor: JSON.stringify(cur), lastError: null });
+      await recordState({ cursor: okCursor(cur), lastError: null });
       return { pages, done: true };
     }
 
@@ -338,10 +338,10 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
         if (!live || live.enc !== api.enc) throw new ConnectionChanged();
         await tx.delete(notes).where(lt(notes.generation, cur.gen));
       });
-      await recordState({ lastOkAt: new Date(), lastError: capped ? `More than ${o.maxPages.toLocaleString("en-US")} pages are shared, so only the first ${o.maxPages.toLocaleString("en-US")} were copied.` : null, cursor: JSON.stringify(cur) });
+      await recordState({ lastOkAt: new Date(), lastError: capped ? `More than ${o.maxPages.toLocaleString("en-US")} pages are shared, so only the first ${o.maxPages.toLocaleString("en-US")} were copied.` : null, cursor: okCursor(cur) });
       return { pages, done: true };
     }
-    await recordState({ cursor: JSON.stringify(cur), lastError: null });
+    await recordState({ cursor: okCursor(cur), lastError: null });
     return { pages, done: false };
   } catch (e) {
     if (e instanceof ConnectionChanged) return null; // disconnected or reconnected mid-run: abandon quietly
