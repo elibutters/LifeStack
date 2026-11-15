@@ -27,6 +27,7 @@ struct NextEventLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 8) {
                         ProgressRow(context: context)
+                        PlanLines(context: context, limit: 3)
                         TimerButton(context: context)
                         HStack {
                             Text(detail(context)).lineLimit(1)
@@ -108,9 +109,34 @@ private struct LockCard: View {
                     .frame(maxWidth: 128, alignment: .trailing)
             }
             if !context.attributes.allDay { ProgressRow(context: context) }
+            PlanLines(context: context, limit: 7)
             TimerButton(context: context)
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
+    }
+}
+
+// While the event is under way (or its timer is running) the card carries the plan: a run's steps or a lift's movements.
+private struct PlanLines: View {
+    let context: ActivityViewContext<NextEventAttributes>
+    let limit: Int
+
+    var body: some View {
+        let inEvent = context.state.phase == .timing || countingUp(context)
+        let lines = Array(context.attributes.plan.prefix(limit))
+        if inEvent, !lines.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    if line.hasSuffix(":") {
+                        Text(line.dropLast()).font(.caption2.weight(.semibold)).textCase(.uppercase).tracking(0.5).foregroundStyle(phaseColor(context)).padding(.top, 2)
+                    } else {
+                        Text(line).font(.caption).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                    }
+                }
+                if context.attributes.plan.count > limit { Text("+ \(context.attributes.plan.count - limit) more in the app").font(.caption2).foregroundStyle(WColor.muted) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

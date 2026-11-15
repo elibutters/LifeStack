@@ -23,6 +23,57 @@ enum SessionWindow {
     }
 }
 
+// What the server knows about the running timer. It is the one source of truth: every phone, the Mac and the agents read the same row.
+struct ServerTimer: Decodable, Equatable {
+    let itemKey: String
+    let title: String
+    let style: String
+    let plan: [String]
+    let startedAt: String
+    let stoppedAt: String?
+}
+
+struct TimerSnapshot: Decodable {
+    struct Stopped: Decodable { let itemKey: String; let stoppedAt: String }
+    let running: ServerTimer?
+    let recentlyStopped: [Stopped]
+}
+
+enum TimerServer {
+    static var client: APIClient? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "LSBaseURL") as? String, !raw.contains("$("),
+              let url = APIClient.parse(address: raw), let key = Keychain.read() else { return nil }
+        return APIClient(base: url, key: key)
+    }
+
+    // True while this device's own start or stop is on its way, so a sync in that moment does not undo it.
+    nonisolated(unsafe) static var busy = 0
+
+    static func snapshot() async -> TimerSnapshot? {
+        guard let client else { return nil }
+        return try? await client.get("api/v1/timer")
+    }
+
+    private static func send(_ body: [String: Any]) async -> TimerSnapshot? {
+        guard let client, let data = try? JSONSerialization.data(withJSONObject: body),
+              let out = try? await client.request("api/v1/timer", method: "POST", body: data) else { return nil }
+        return try? JSONDecoder().decode(TimerSnapshot.self, from: out)
+    }
+
+    // The start time the server settled on (the first start wins if two devices tap at once), or nil when it could not be reached.
+    static func start(_ e: NextEventAttributes) async -> Date? {
+        busy += 1; defer { busy -= 1 }
+        let snap = await send(["action": "start", "itemKey": e.itemKey, "title": e.title, "style": e.style.rawValue, "plan": e.plan])
+        guard let run = snap?.running, run.itemKey == e.itemKey else { return nil }
+        return Format.date(run.startedAt)
+    }
+
+    static func stop(_ itemKey: String) async {
+        busy += 1; defer { busy -= 1 }
+        _ = await send(["action": "stop", "itemKey": itemKey])
+    }
+}
+
 // Events the user stopped, so the automatic card does not come straight back. Shared through the
 // keychain because the lock-screen button and the app are not the same process.
 enum SessionMemory {
@@ -139,23 +190,17 @@ struct StartSessionIntent: LiveActivityIntent {
     static var openAppWhenRun = false
 
     func perform() async throws -> some IntentResult {
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            DispatchQueue.main.async {
-                let existing = Activity<NextEventAttributes>.activities
-                for activity in existing { SessionClock.hold(activity.attributes.id) }
-                let now = Date()
-                guard !existing.isEmpty else { cont.resume(); return }
-                Task { @MainActor in
-                    for activity in existing {
-                        SessionMemory.forget(activity.attributes)
-                        let state = NextEventAttributes.ContentState(phase: .timing, rangeStart: now, rangeEnd: activity.attributes.end, startedAt: now)
-                        await activity.update(ActivityContent(state: state, staleDate: nil))
-                    }
-                    NotificationCenter.default.post(name: .sessionTimerChanged, object: nil)
-                    cont.resume()
-                }
+        let existing = await MainActor.run { Activity<NextEventAttributes>.activities.filter { $0.content.state.phase != .timing } }
+        for activity in existing {
+            let began = await TimerServer.start(activity.attributes) ?? Date()
+            await MainActor.run {
+                SessionClock.hold(activity.attributes.id)
+                SessionMemory.forget(activity.attributes)
             }
+            let state = NextEventAttributes.ContentState(phase: .timing, rangeStart: began, rangeEnd: activity.attributes.end, startedAt: began)
+            await activity.update(ActivityContent(state: state, staleDate: nil))
         }
+        await MainActor.run { NotificationCenter.default.post(name: .sessionTimerChanged, object: nil) }
         return .result()
     }
 }
@@ -166,20 +211,14 @@ struct StopSessionIntent: LiveActivityIntent {
     static var openAppWhenRun = false
 
     func perform() async throws -> some IntentResult {
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            DispatchQueue.main.async {
-                let existing = Activity<NextEventAttributes>.activities
-                for activity in existing { SessionClock.hold(activity.attributes.id) }
-                Task { @MainActor in
-                    for activity in existing {
-                        SessionMemory.dismiss(activity.attributes)
-                        await activity.end(nil, dismissalPolicy: .immediate)
-                    }
-                    NotificationCenter.default.post(name: .sessionTimerChanged, object: nil)
-                    cont.resume()
-                }
-            }
+        let existing = await MainActor.run { Activity<NextEventAttributes>.activities.map { $0 } }
+        for activity in existing {
+            await MainActor.run { SessionClock.hold(activity.attributes.id) }
+            await TimerServer.stop(activity.attributes.itemKey)
+            await MainActor.run { SessionMemory.dismiss(activity.attributes) }
+            await activity.end(nil, dismissalPolicy: .immediate)
         }
+        await MainActor.run { NotificationCenter.default.post(name: .sessionTimerChanged, object: nil) }
         return .result()
     }
 }

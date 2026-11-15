@@ -50,10 +50,17 @@ enum NextEventActivity {
         return Clock(id: activity.attributes.id, startedAt: started)
     }
 
+    // Start goes to the server first; the clock on this phone then follows the start time the server settled on.
     static func start(_ item: CalendarItem) {
         guard let event = event(for: item) else { return }
         SessionMemory.forget(event)
-        let now = Date()
+        Task { @MainActor in
+            let began = await TimerServer.start(event) ?? Date()
+            startLocal(event, at: began)
+        }
+    }
+
+    private static func startLocal(_ event: NextEventAttributes, at now: Date) {
         let state = NextEventAttributes.ContentState(phase: .timing, rangeStart: now, rangeEnd: event.end, startedAt: now)
         DispatchQueue.main.async {
             SessionClock.hold(event.id)
@@ -86,6 +93,13 @@ enum NextEventActivity {
     }
 
     static func stop() {
+        Task { @MainActor in
+            for activity in Activity<NextEventAttributes>.activities where activity.content.state.phase == .timing { await TimerServer.stop(activity.attributes.itemKey) }
+            stopLocal()
+        }
+    }
+
+    private static func stopLocal() {
         DispatchQueue.main.async {
             let existing = Activity<NextEventAttributes>.activities
             for activity in existing { SessionClock.hold(activity.attributes.id) }
@@ -103,10 +117,13 @@ enum NextEventActivity {
         // The calendar endpoint, not the overview: only it says whether a goal session is already done or skipped.
         let start = Calendar.current.startOfDay(for: Date())
         guard let client = model.client, let items = try? await client.calendar(from: start, to: Calendar.current.date(byAdding: .day, value: 2, to: start) ?? start) else { return }
-        let chosen = pick(items, now: Date())
+        let server = await TimerServer.snapshot()
+        // Another device is mid-start or mid-stop: leave the clock alone until that settles.
+        if TimerServer.busy > 0 { return }
+        let chosen = pick(items, now: Date(), stopped: Set(server?.recentlyStopped.map(\.itemKey) ?? []))
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             DispatchQueue.main.async {
-                let followup = mutate(chosen)
+                let followup = mutate(chosen, server: server)
                 guard let followup else { cont.resume(); return }
                 Task { @MainActor in
                     await followup()
@@ -118,15 +135,44 @@ enum NextEventActivity {
 
     // Main thread, not a Swift task. Returns the async end/update work, which is safe to await.
     // A timer the user started is never replaced by the automatic card.
-    private static func mutate(_ chosen: NextEventAttributes?) -> (() async -> Void)? {
+    private static func mutate(_ chosen: NextEventAttributes?, server: TimerSnapshot?) -> (() async -> Void)? {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return nil }
         let existing = Activity<NextEventAttributes>.activities
-        if existing.contains(where: { $0.content.state.phase == .timing }) {
+        let stopped = Set(server?.recentlyStopped.map(\.itemKey) ?? [])
+        let localTiming = existing.filter { $0.content.state.phase == .timing }
+        if let server {
+            if let run = server.running, let began = Format.date(run.startedAt) {
+                // The server says this one is running: this phone shows exactly that, started when the server says it started.
+                let base = existing.first { $0.attributes.itemKey == run.itemKey }?.attributes
+                    ?? NextEventAttributes(id: stableId(run.itemKey), title: run.title, start: began, end: began.addingTimeInterval(2 * 60 * 60), allDay: false, place: nil, style: .init(rawValue: run.style) ?? .event, plan: run.plan, itemKey: run.itemKey)
+                SessionClock.hold(base.id)
+                let state = NextEventAttributes.ContentState(phase: .timing, rangeStart: began, rangeEnd: base.end, startedAt: began)
+                let content = ActivityContent(state: state, staleDate: nil)
+                let match = existing.first { $0.attributes.itemKey == run.itemKey }
+                if match == nil { do { _ = try Activity.request(attributes: base, content: content) } catch { return nil } }
+                let others = existing.filter { $0.id != match?.id }
+                return {
+                    if let match, match.content.state != state { await match.update(content) }
+                    for other in others { await other.end(nil, dismissalPolicy: .immediate) }
+                }
+            }
+            // Nothing is running on the server. A timer here that the server has since stopped (on another device) ends; one it never heard
+            // of (started while offline) is handed to the server rather than thrown away.
+            if let local = localTiming.first {
+                if stopped.contains(local.attributes.itemKey) {
+                    return { for activity in existing { await activity.end(nil, dismissalPolicy: .immediate) } }
+                }
+                let attrs = local.attributes
+                Task { _ = await TimerServer.start(attrs) }
+                return { for activity in existing where activity.id != local.id { await activity.end(nil, dismissalPolicy: .immediate) } }
+            }
+        } else if !localTiming.isEmpty {
+            // The server could not be reached: leave a running timer alone.
             SessionClock.cancel()
             let prompts = existing.filter { $0.content.state.phase != .timing }
             return { for activity in prompts { await activity.end(nil, dismissalPolicy: .immediate) } }
         }
-        guard let chosen, !SessionMemory.isDismissed(chosen) else {
+        guard let chosen, !SessionMemory.isDismissed(chosen), !stopped.contains(chosen.itemKey) else {
             SessionClock.cancel()
             return { for activity in existing { await activity.end(nil, dismissalPolicy: .immediate) } }
         }
@@ -146,11 +192,11 @@ enum NextEventActivity {
     }
 
     // An event already in its first half hour wins, otherwise the soonest one starting within the next half hour.
-    private static func pick(_ items: [CalendarItem], now: Date) -> NextEventAttributes? {
+    private static func pick(_ items: [CalendarItem], now: Date, stopped: Set<String>) -> NextEventAttributes? {
         let visible: [NextEventAttributes] = items.compactMap { item in
             guard !item.allDay, let event = event(for: item) else { return nil }
             guard SessionWindow.contains(start: event.start, end: event.end, now: now) else { return nil }
-            guard !SessionMemory.isDismissed(event) else { return nil }
+            guard !SessionMemory.isDismissed(event), !stopped.contains(event.itemKey) else { return nil }
             return event
         }
         let underway = visible.filter { $0.start <= now }.max { $0.start < $1.start }
@@ -161,14 +207,19 @@ enum NextEventActivity {
     private static func event(for item: CalendarItem) -> NextEventAttributes? {
         guard canTime(item) else { return nil }
         let style = NextEventAttributes.Style.choose(title: item.title, kind: item.kind)
+        let key = item.session?.id.map { "s:\($0)" } ?? "ev:\(item.id)"
+        let plan = NextEventAttributes.planLines((item.session?.noteBlocks ?? []).map { ($0.kind, $0.text) })
         if item.allDay {
             let day = Format.dayDate(String(item.start.prefix(10))) ?? Date()
-            return NextEventAttributes(id: item.id, title: item.title, start: day, end: day.addingTimeInterval(24 * 60 * 60), allDay: true, place: place(item.location), style: style)
+            return NextEventAttributes(id: item.id, title: item.title, start: day, end: day.addingTimeInterval(24 * 60 * 60), allDay: true, place: place(item.location), style: style, plan: plan, itemKey: key)
         }
         guard let start = Format.date(item.start) else { return nil }
         let end = Format.date(item.end).flatMap { $0 > start ? $0 : nil } ?? start.addingTimeInterval(60 * 60)
-        return NextEventAttributes(id: item.id, title: item.title, start: start, end: end, allDay: false, place: place(item.location), style: style)
+        return NextEventAttributes(id: item.id, title: item.title, start: start, end: end, allDay: false, place: place(item.location), style: style, plan: plan, itemKey: key)
     }
+
+    // A number for a timer this phone has no calendar item for, the same every time.
+    private static func stableId(_ key: String) -> Int { key.unicodeScalars.reduce(7) { ($0 &* 31 &+ Int($1.value)) & 0x3FFFFFFF } }
 
     private static func place(_ raw: String?) -> String? { raw.flatMap { $0.isEmpty ? nil : $0 } }
 
@@ -185,7 +236,7 @@ enum NextEventActivity {
         if mode == "run" || mode == "lift" {
             let style: NextEventAttributes.Style = mode == "run" ? .run : .lift
             let start = now.addingTimeInterval(-5 * 60)
-            let attrs = NextEventAttributes(id: 9_999, title: style == .run ? "Easy run" : "Lift", start: start, end: start.addingTimeInterval(60 * 60), allDay: false, place: nil, style: style)
+            let attrs = NextEventAttributes(id: 9_999, title: style == .run ? "Easy run" : "Lift", start: start, end: start.addingTimeInterval(60 * 60), allDay: false, place: nil, style: style, plan: style == .run ? ["Warm-up:", "10 minutes easy jog", "Main set:", "3 x 1 mile at 7:10 to 7:20, 2 minutes easy between", "Cool-down:", "10 minutes easy jog"] : ["Main lifts:", "Bench press: 4 x 5 at effort 7, rest 2 to 3 min", "Pull-ups: 3 x 8", "Overhead press: 3 x 8", "Accessories:", "Face pulls: 3 x 15", "Hammer curls: 3 x 12"])
             let state = NextEventAttributes.ContentState(phase: .timing, rangeStart: now, rangeEnd: attrs.end, startedAt: now.addingTimeInterval(-90))
             DispatchQueue.main.async {
                 for a in Activity<NextEventAttributes>.activities { Task { await a.end(nil, dismissalPolicy: .immediate) } }
