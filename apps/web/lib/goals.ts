@@ -133,13 +133,15 @@ export async function sessionsOf(goalId?: string, now = new Date()): Promise<Ses
 }
 
 // Before there was a "replaced" status, a plan change skipped the old sessions. Those have no skippedAt, so a skipped session of that kind that
-// is still in the future, has a live session at the same time, or was moved (another session lists this start in movedFrom) is read as replaced.
+// is still in the future, shares its time with another session, or was moved (another session lists this start in movedFrom) is read as replaced.
 // A skip made now (it has a skippedAt) is always a skip.
 export function markReplaced(list: Session[], now: Date): Session[] {
   const key = (s: Session) => `${s.goalId}|${s.start.getTime()}`;
-  const live = new Set(list.filter((s) => s.status !== "skipped" && s.status !== "replaced").map(key));
+  // Another session in the same slot, whatever its status now: skipping the replacement later must not bring the old one back.
+  const count = new Map<string, number>();
+  for (const s of list) count.set(key(s), (count.get(key(s)) ?? 0) + 1);
   const movedAway = new Set(list.flatMap((s) => s.movedFrom.map((iso) => `${s.goalId}|${new Date(iso).getTime()}`)));
-  return list.map((s) => (s.status === "skipped" && !s.skippedAt && (s.start > now || live.has(key(s)) || movedAway.has(key(s))) ? { ...s, status: "replaced" as const } : s));
+  return list.map((s) => (s.status === "skipped" && !s.skippedAt && (s.start > now || (count.get(key(s)) ?? 0) > 1 || movedAway.has(key(s))) ? { ...s, status: "replaced" as const } : s));
 }
 
 export async function getGoal(id: string) {

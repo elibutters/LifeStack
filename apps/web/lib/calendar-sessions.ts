@@ -36,7 +36,7 @@ export async function skippedItems(from: Date, to: Date): Promise<{ items: Calen
   const names = new Map(goals.map((g) => [g.id, g.title]));
   const inRange = all.filter((s) => s.start < to && s.end > from);
   const key = (s: (typeof all)[number]) => `${s.goalId}|${s.start.getTime()}`;
-  const replaced = new Set(inRange.filter((s) => s.status !== "skipped").map(key));
+  const replaced = new Set(inRange.filter((s) => s.status !== "skipped" && s.status !== "replaced").map(key));
   const shown = new Set<string>();
   const items: CalendarItem[] = [];
   const sessions = new Map<number, SessionDetail>();
