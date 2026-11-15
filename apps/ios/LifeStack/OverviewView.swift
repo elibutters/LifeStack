@@ -6,6 +6,7 @@ struct OverviewView: View {
     @State private var loader = Loader<Overview>()
     @State private var syncIssues: [String] = []
     @State private var brief: Brief?
+    @State private var showBrief = false
 
     private var greeting: String {
         let h = Calendar.current.component(.hour, from: Date())
@@ -16,7 +17,7 @@ struct OverviewView: View {
         Screen(title: greeting, refresh: { await load() }) {
             ErrorBanner(text: loader.error)
             LiveCard()
-            if let brief { BriefCard(brief: brief) }
+            if let brief { BriefBanner(brief: brief) { openBrief(brief) } }
             if !syncIssues.isEmpty {
                 Card(title: "Needs a look") {
                     ForEach(syncIssues, id: \.self) { Text($0).font(.subheadline).foregroundStyle(Theme.warm) }
@@ -41,6 +42,7 @@ struct OverviewView: View {
             } else if loader.loading { ProgressView().padding(.top, 60) }
         }
         .task { await load() }
+        .sheet(isPresented: $showBrief) { if let brief { BriefSheet(brief: brief) } }
     }
 
     private func load() async {
@@ -49,6 +51,14 @@ struct OverviewView: View {
         await loader.load(model) { try await $0.overview() }
         await issues
         await briefLoad
+    }
+
+    // Opening the brief marks it read, here at once and on the server, so every device stops lighting it.
+    private func openBrief(_ b: Brief) {
+        showBrief = true
+        guard b.readAt == nil else { return }
+        brief?.readAt = ISO8601DateFormatter().string(from: Date())
+        Task { try? await model.client?.markBriefRead(b.id) }
     }
 
     private func loadBrief() async {
