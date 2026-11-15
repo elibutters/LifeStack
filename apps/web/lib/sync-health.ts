@@ -1,6 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
-import { connections, syncState } from "@lifestack/db";
+import { connections, notes, syncState } from "@lifestack/db";
+import { max } from "drizzle-orm";
 import { db } from "./db";
 import { listItems } from "./finance";
 import { readCursor } from "./notion-core";
@@ -18,8 +19,10 @@ export async function loadSyncHealth(now = new Date()) {
   for (const [key, label] of Object.entries(LABELS)) {
     if (!connected.has(key)) continue;
     const s = state.get(key);
+    // Notion stamps its cursor on every good run; until the first run after that began, the newest copied page says it is alive.
     const ran = key === "notion" ? readCursor(s?.cursor ?? null).ranAt : undefined;
-    sources.push({ key, label, lastOkAt: ran ? new Date(ran) : (s?.lastOkAt ?? null), lastError: s?.lastError ?? null });
+    const copied = key === "notion" && !ran && !s?.lastOkAt ? ((await db().select({ at: max(notes.createdAt) }).from(notes))[0]?.at ?? null) : null;
+    sources.push({ key, label, lastOkAt: ran ? new Date(ran) : (s?.lastOkAt ?? copied), lastError: s?.lastError ?? null });
   }
   const mail = state.get("outlook-mail");
   if (connected.has("outlook") && mail) sources.push({ key: "outlook-mail", label: "Outlook mail", lastOkAt: mail.lastOkAt ?? null, lastError: mail.lastError ?? null });
