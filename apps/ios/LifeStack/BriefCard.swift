@@ -49,7 +49,7 @@ struct BriefCard: View {
 // A gentle nudge at the times the briefs are written. It cannot carry the brief itself (that needs a push, which a free developer account
 // cannot send), so it says to open the app.
 enum BriefReminders {
-    private static let slots: [(id: String, hour: Int, minute: Int, title: String)] = [("brief.morning", 7, 0, "Morning brief"), ("brief.evening", 20, 30, "Evening brief")]
+    private static let slots: [(id: String, hour: Int, minute: Int, title: String)] = [("brief.morning", 6, 15, "Morning brief"), ("brief.evening", 20, 45, "Evening brief")]
 
     static func schedule() async {
         let center = UNUserNotificationCenter.current()
