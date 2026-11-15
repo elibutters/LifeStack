@@ -4,6 +4,7 @@ struct OverviewView: View {
     @Environment(AppModel.self) private var model
     @Environment(Navigator.self) private var nav
     @State private var loader = Loader<Overview>()
+    @State private var syncIssues: [String] = []
 
     private var greeting: String {
         let h = Calendar.current.component(.hour, from: Date())
@@ -14,6 +15,12 @@ struct OverviewView: View {
         Screen(title: greeting, refresh: { await load() }) {
             ErrorBanner(text: loader.error)
             LiveCard()
+            if !syncIssues.isEmpty {
+                Card(title: "Needs a look") {
+                    ForEach(syncIssues, id: \.self) { Text($0).font(.subheadline).foregroundStyle(Theme.warm) }
+                }
+                .accessibilityIdentifier("sync-health")
+            }
             if let o = loader.value {
                 if let cal = o.calendar {
                     Button { nav.tab = .calendar } label: { calendarCard(cal) }
@@ -34,7 +41,17 @@ struct OverviewView: View {
         .task { await load() }
     }
 
-    private func load() async { await loader.load(model) { try await $0.overview() } }
+    private func load() async {
+        async let issues: Void = loadSyncIssues()
+        await loader.load(model) { try await $0.overview() }
+        await issues
+    }
+
+    // A source that has gone quiet (or is failing) is worth saying so on the home screen; a fresh one with a passing warning is not.
+    private func loadSyncIssues() async {
+        guard let client = model.client, let c = try? await client.connections(), let h = c.health else { return }
+        syncIssues = h.sources.filter { $0.health != "ok" && $0.health != "warning" }.compactMap(\.message)
+    }
 
     private func calendarCard(_ cal: Overview.Calendar) -> some View {
         Card(title: "Today", trailing: Format.longDay(Date())) {

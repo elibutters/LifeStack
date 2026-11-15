@@ -119,6 +119,13 @@ struct ConnectionsStatus: Decodable, Equatable {
     let calendar: Source
     let sleep: Source
     let banks: [Bank]
+    // Whether each connected source is still syncing; absent on an older server.
+    struct Health: Decodable, Equatable {
+        struct Item: Decodable, Equatable, Identifiable { var id: String { key }; let key: String; let label: String; let health: String; let message: String? }
+        let sources: [Item]
+        let problems: Int
+    }
+    let health: Health?
 }
 
 // The profile is a flat object of text and numbers; the app shows whatever is filled in.
