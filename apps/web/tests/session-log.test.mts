@@ -57,6 +57,8 @@ assert.ok(!("note" in found.sessions[0]) && !("noteBlocks" in found.sessions[0])
 assert.deepEqual(((await log.findSessions({ state: "missed" }, NOW)) as any).sessions.map((s: any) => s.id), ["legs"]);
 assert.deepEqual(((await log.findSessions({ state: "replaced" }, NOW)) as any).sessions.map((s: any) => s.id), ["gone"], "replaced ones can be asked for");
 assert.deepEqual(((await log.findSessions({ from: "2026-11-11", to: "2026-11-11" }, NOW)) as any).sessions.map((s: any) => s.id), ["run1"], "one local day");
+assert.deepEqual(((await log.findSessions({ from: "2026-11-11T00:00:00-05:00", to: "2026-11-11T23:59:00-05:00" }, NOW)) as any).sessions.map((s: any) => s.id), ["run1"], "a full time is trimmed to its day, not refused");
+assert.equal(((await log.findSessions({ from: "tomorrow" }, NOW)) as any).ok, false, "a real mistake is still refused");
 assert.equal(((await log.findSessions({ from: "2026-11-12", to: "2026-11-11" }, NOW)) as any).ok, false); assert.equal(((await log.findSessions({ from: "2026-01-01", to: "2026-06-01" }, NOW)) as any).ok, false); assert.equal(((await log.findSessions({ from: "soon" }, NOW)) as any).ok, false);
 assert.deepEqual(((await log.findSessions({ goalId: "gnope" }, NOW)) as any).sessions, []);
 

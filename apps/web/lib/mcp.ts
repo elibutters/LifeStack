@@ -337,8 +337,23 @@ export function buildServer(token: VerifiedToken): McpServer {
       },
     );
     server.registerTool(
+      "get_notes",
+      { description: "The text of several Notion pages in one call (ids from search_notes, at most 10), each capped at 6,000 characters. Use this instead of calling get_note once per page.", inputSchema: { ids: z.array(z.number().int()).min(1).max(10) } },
+      async ({ ids }) => {
+        try {
+          const found = await Promise.all([...new Set(ids)].map((id) => getNote(id)));
+          const notes = found.filter((n): n is NonNullable<typeof n> => !!n);
+          const missing = [...new Set(ids)].filter((id) => !notes.some((n) => n.id === id));
+          return ok({ notes, ...(missing.length ? { missing } : {}) });
+        } catch (e) {
+          console.error("mcp: get_notes failed", describeError(e));
+          return fail("The tool could not read the data.");
+        }
+      },
+    );
+    server.registerTool(
       "get_note",
-      { description: "The text of one Notion page by id (from search_notes), capped at 6,000 characters.", inputSchema: { id: z.number().int() } },
+      { description: "The text of one Notion page by id (from search_notes), capped at 6,000 characters. For several pages use get_notes.", inputSchema: { id: z.number().int() } },
       async ({ id }) => {
         try {
           const n = await getNote(id);
@@ -445,11 +460,20 @@ export function buildServer(token: VerifiedToken): McpServer {
     );
     server.registerTool(
       "get_goal",
-      { description: "One goal with every session (planned, done, skipped, or replaced when the plan changed and the session was dropped).", inputSchema: { id: z.string() } },
-      async ({ id }) => {
+      {
+        description: "One goal with its sessions. By default the sessions are from the last 7 days to the next 14 (with their plans); pass all true for every session, or from and to (YYYY-MM-DD) for another window. hiddenSessions says how many the window left out. Replaced sessions are never listed. For one day or name use get_sessions.",
+        inputSchema: { id: z.string(), all: z.boolean().optional(), from: z.string().optional(), to: z.string().optional() },
+      },
+      async ({ id, all, from, to }) => {
         try {
           const g = await getGoal(id);
-          return g ? ok(g) : fail("No such goal.");
+          if (!g) return fail("No such goal.");
+          if (all) return ok(g);
+          const day = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}/.test(v.trim()) ? v.trim().slice(0, 10) : undefined);
+          const lo = day(from) ? new Date(`${day(from)}T00:00:00Z`).getTime() - 14 * 3600e3 : Date.now() - 7 * 86_400_000;
+          const hi = day(to) ? new Date(`${day(to)}T23:59:59Z`).getTime() + 14 * 3600e3 : Date.now() + 14 * 86_400_000;
+          const keep = g.sessions.filter((s) => { const t = Date.parse(s.start); return t >= lo && t <= hi; });
+          return ok({ ...g, sessions: keep, hiddenSessions: g.sessions.length - keep.length });
         } catch (e) {
           console.error("mcp: get_goal failed", describeError(e));
           return fail("The tool could not read the data.");
@@ -459,7 +483,7 @@ export function buildServer(token: VerifiedToken): McpServer {
     server.registerTool(
       "get_sessions",
       {
-        description: "Goal sessions in a window of the owner's local days (default the last 7 days to the next 14), one short row each with the id you need for log_session, complete_session, move_session or skip_session. state is planned, done, skipped or missed (planned and over more than an hour ago with nothing logged); replaced sessions are left out unless asked for. Filter by state or goalId. Use this to find a session by day and name instead of reading every goal.",
+        description: "Goal sessions in a window of the owner's local days (default the last 7 days to the next 14), one short row each with the id you need for log_session, complete_session, move_session or skip_session. state is planned, done, skipped or missed (planned and over more than an hour ago with nothing logged); replaced sessions are left out unless asked for. Filter by state or goalId. from and to are days (YYYY-MM-DD; a full time is trimmed to its day). Use this to find a session by day and name instead of reading every goal.",
         inputSchema: { from: z.string().optional(), to: z.string().optional(), state: z.enum(["planned", "done", "skipped", "missed", "replaced"]).optional(), goalId: z.string().optional() },
       },
       async (args) => {
@@ -656,7 +680,7 @@ export function buildServer(token: VerifiedToken): McpServer {
     server.registerTool(
       "delete_goal",
       {
-        description: "Deletes a goal for good, with all its sessions and their calendar events. This cannot be undone, so only do it when the owner has asked for that goal to be deleted. The goal must already be archived (update_goal status archived) or still a draft, and confirmTitle must be its exact title. A goal with finished sessions is refused (that is history) unless deleteHistory is true. If anything cannot be removed from the calendar nothing is deleted. The Notion notebook is never touched; the answer gives its address so the owner can delete the page.",
+        description: "Deletes a goal for good, with all its sessions and their calendar events. This cannot be undone, so only do it when the owner has asked for that goal to be deleted. It takes two calls, on purpose: first update_goal with status archived, then delete_goal (a draft can be deleted directly). confirmTitle must be the goal's exact title. A goal with finished sessions is refused (that is history) unless deleteHistory is true. If anything cannot be removed from the calendar nothing is deleted. The Notion notebook is never touched; the answer gives its address so the owner can delete the page.",
         inputSchema: { id: z.string(), confirmTitle: z.string(), deleteHistory: z.boolean().optional() },
       },
       async ({ id, ...rest }) => {

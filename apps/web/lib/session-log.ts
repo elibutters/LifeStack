@@ -56,8 +56,11 @@ const Find = z.object({
   state: z.enum(["planned", "done", "skipped", "missed", "replaced"]).optional(),
   goalId: z.string().optional(),
 });
+// A full time ("2026-11-14T09:00:00-05:00") is trimmed to its day, so an agent that sends one is not refused.
+const dayOf = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}[T ]/.test(v.trim()) ? v.trim().slice(0, 10) : v);
 export async function findSessions(input: unknown, now = new Date()) {
-  const p = Find.safeParse(input ?? {});
+  const raw = (input ?? {}) as Record<string, unknown>;
+  const p = Find.safeParse({ ...raw, ...("from" in raw ? { from: dayOf(raw.from) } : {}), ...("to" in raw ? { to: dayOf(raw.to) } : {}) });
   if (!p.success) return { ok: false as const, error: p.error.issues.map((i) => `${i.path.join(".") || "value"}: ${i.message}`).join("; ") };
   const c = await loadConstraints();
   const today = eng.localDay(now, c.tz);
