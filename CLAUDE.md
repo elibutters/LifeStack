@@ -61,6 +61,10 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   stateless, rejects browser (Origin) requests, and the body is capped. Every tool call is recorded as an `events` row (source `mcp`,
   `lib/mcp-usage.ts`: tool, key, timing, outcome, answer size and argument NAMES only, never values or answers) and read on
   `/mcp` (maths in `lib/mcp-usage-core.ts`); use it to tune tool descriptions, merge tools and trim answers.
+- Daily briefs (`lib/brief*.ts`): a scheduled agent reads the whole day through MCP and writes a morning and an evening brief with `save_brief`
+  (scope `brief:write`, agent keys only); `get_brief` and `GET /api/v1/brief` (scope `brief:read`, also the phone key) return the one to show now.
+  A brief is an `events` row (domain `brief`, source `agent`, one per day and kind, replaced on a second run), so nothing new is stored and it is
+  backed up. The app shows it at the top of Overview and schedules two local reminders; a free developer account cannot push its text.
 - Backups: `/api/cron/backup` writes an encrypted full dump to private Vercel Blob daily. New tables are
   included automatically; a new table that must not be backed up goes in `SKIP` in `lib/backup-db.ts`.
 - Strava (`lib/strava*.ts`): OAuth with a rotating refresh token stored encrypted in `connections`; activities are `events`

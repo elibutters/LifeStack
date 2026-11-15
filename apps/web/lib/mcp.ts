@@ -18,6 +18,7 @@ import { loadActivities, totals } from "./activities";
 import { getEmail, loadAgenda, searchEmails } from "./email";
 import { addPlace, loadHistory } from "./location";
 import { getNote, kickSync, searchNotes } from "./notes";
+import { latestBrief, saveBrief } from "./brief";
 import { changeSetting, listSettings, resetSetting } from "./settings";
 import { afterResponse, appendToNotebook, ensureNotebook, notebookHook } from "./goals-notion";
 import { logBlocks } from "./goals-notion-core";
@@ -315,6 +316,32 @@ export function buildServer(token: VerifiedToken): McpServer {
           console.error("mcp: name_place failed", describeError(e));
           return fail("The tool could not save that.");
         }
+      },
+    );
+  }
+
+  if (has("brief:read")) {
+    server.registerTool(
+      "get_brief",
+      { description: "The daily brief to show now: today's newest one (morning or evening), or yesterday's evening one until the morning brief exists. Null when there is none.", inputSchema: {} },
+      async () => {
+        try { return ok({ brief: await latestBrief() }); }
+        catch (e) { console.error("mcp: get_brief failed", describeError(e)); return fail("The tool could not read the data."); }
+      },
+    );
+  }
+  if (has("brief:write")) {
+    server.registerTool(
+      "save_brief",
+      {
+        description: "Saves the owner's daily brief, shown at the top of the app. Call it once after reading their day (get_today, get_tonight, get_goals, get_agenda, get_todos, get_email or search_email, get_sleep, get_connections). kind is morning or evening; a second call for the same day and kind replaces the first. Write it like a caring parent who is on the owner's side, not a report: the headline is one plain sentence on what matters most right now. Sections are short (Today, Behind, Deadlines, Mail, Looking after yourself; skip any with nothing to say), at most 6, each with at most 8 short items in plain words, most important first. Name what is slipping or overdue directly and kindly, with the number of days left for deadlines. Say who a mail is from and what they want. Never list things that are fine, and never invent anything: only what you read. End with one question the owner can answer in a word (question), such as what the first thing tomorrow is. Evening: what got done, what did not, and tomorrow's first thing. Morning: today's schedule, what is behind, and how they slept.",
+        inputSchema: { kind: z.enum(["morning", "evening"]), day: z.string().optional(), headline: z.string(), sections: z.array(z.object({ title: z.string(), items: z.array(z.string()) })).optional(), question: z.string().optional() },
+      },
+      async (args) => {
+        try {
+          const r = await saveBrief(args);
+          return r.ok ? ok({ ok: true, saved: `${r.kind} brief for ${r.day}` }) : fail(r.error);
+        } catch (e) { console.error("mcp: save_brief failed", describeError(e)); return fail("The tool could not save that."); }
       },
     );
   }

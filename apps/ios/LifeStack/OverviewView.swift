@@ -5,6 +5,7 @@ struct OverviewView: View {
     @Environment(Navigator.self) private var nav
     @State private var loader = Loader<Overview>()
     @State private var syncIssues: [String] = []
+    @State private var brief: Brief?
 
     private var greeting: String {
         let h = Calendar.current.component(.hour, from: Date())
@@ -15,6 +16,7 @@ struct OverviewView: View {
         Screen(title: greeting, refresh: { await load() }) {
             ErrorBanner(text: loader.error)
             LiveCard()
+            if let brief { BriefCard(brief: brief) }
             if !syncIssues.isEmpty {
                 Card(title: "Needs a look") {
                     ForEach(syncIssues, id: \.self) { Text($0).font(.subheadline).foregroundStyle(Theme.warm) }
@@ -43,8 +45,16 @@ struct OverviewView: View {
 
     private func load() async {
         async let issues: Void = loadSyncIssues()
+        async let briefLoad: Void = loadBrief()
         await loader.load(model) { try await $0.overview() }
         await issues
+        await briefLoad
+    }
+
+    private func loadBrief() async {
+        guard let client = model.client else { return }
+        // A failed request keeps what is on screen; a good answer with no brief clears it.
+        do { brief = try await client.brief() } catch {}
     }
 
     // A source that has gone quiet (or is failing) is worth saying so on the home screen; a fresh one with a passing warning is not.

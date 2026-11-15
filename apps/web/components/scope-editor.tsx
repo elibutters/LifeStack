@@ -17,12 +17,14 @@ const PLACED: Record<Scope, { group: string; label: string }> = {
   "notes:write": { group: "Notion", label: "Add pages" },
   "goals:read": { group: "Goals", label: "Read" },
   "goals:write": { group: "Goals", label: "Change" },
+  "brief:read": { group: "Briefs", label: "Read" },
+  "brief:write": { group: "Briefs", label: "Write" },
   "settings:read": { group: "Preferences", label: "Read" },
   "settings:write": { group: "Preferences", label: "Change" },
   "account:read": { group: "Account", label: "Connections" },
 };
 
-const GROUP_ORDER = ["Log", "Read", "Places", "Notion", "Goals", "Preferences", "Account", "Amazon"];
+const GROUP_ORDER = ["Log", "Read", "Places", "Notion", "Goals", "Briefs", "Preferences", "Account", "Amazon"];
 
 const GROUPS = GROUP_ORDER.map((title) => ({
   title,

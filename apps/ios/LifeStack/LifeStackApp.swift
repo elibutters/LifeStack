@@ -35,6 +35,7 @@ struct LifeStackApp: App {
                         WidgetCenter.shared.reloadAllTimelines()
                         LocationTracker.shared.refreshNow(ifOlderThan: 10)
                         Task { await AppConfig.refresh(model); await NextEventActivity.sync(model) }
+                        if model.signedIn { Task { await BriefReminders.schedule() } }
                     }
                 }
                 .preferredColorScheme(.dark)
