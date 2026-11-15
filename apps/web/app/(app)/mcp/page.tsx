@@ -5,7 +5,8 @@ import { requireSession } from "@/lib/auth";
 import { fmtDateTime } from "@/lib/dates";
 import { offeredTools } from "@/lib/mcp";
 import { loadCalls } from "@/lib/mcp-usage";
-import { commonErrors, repeats, sequences, toolStats, unused } from "@/lib/mcp-usage-core";
+import { listTokens } from "@/lib/tokens";
+import { commonErrors, repeats, runsOf, sequences, toolStats, unused } from "@/lib/mcp-usage-core";
 
 export const metadata: Metadata = { title: "Claude usage" };
 export const dynamic = "force-dynamic";
@@ -22,6 +23,8 @@ export default async function McpUsage() {
   const pairs = sequences(calls);
   const never = unused(offeredTools(), calls);
   const failed = calls.filter((c) => c.outcome !== "ok").length;
+  const names = new Map((await listTokens().catch(() => [])).map((t) => [t.id, t.name] as const));
+  const runs = runsOf(calls).slice(0, 12);
 
   return (
     <>
@@ -33,6 +36,21 @@ export default async function McpUsage() {
           <p className="text-sm text-muted">
             {calls.length} tool calls, {failed} failed. Only the tool, the key, the timing, the size of the answer and the names of the arguments are recorded: never the values or the answers.
           </p>
+        </Card>
+        <Card title="Recent runs">
+          <p className="mb-2 text-sm text-muted">One run is one agent's burst of work: calls from the same key and the same program with no gap over ten minutes.</p>
+          {runs.length === 0 ? <p className="text-sm text-muted">No calls yet.</p> : (
+            <ul className="divide-y divide-line text-sm">
+              {runs.map((r) => (
+                <li key={r.start.toISOString() + r.client + r.tokenId} className="py-2">
+                  <p>
+                    {fmtDateTime(r.start)} <span className="text-muted">&middot; {r.client} &middot; key {r.tokenId == null ? "?" : names.get(r.tokenId) ?? r.tokenId} &middot; {r.calls} call{r.calls === 1 ? "" : "s"}{r.errors ? ` (${r.errors} failed)` : ""} &middot; {Math.round(r.ms)} ms</span>
+                  </p>
+                  <p className="text-muted">{r.tools.slice(0, 12).join(" \u2192 ")}{r.tools.length > 12 ? ` \u2026 +${r.tools.length - 12}` : ""}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
         <Card title="Tools">
           {stats.length === 0 ? <p className="text-sm text-muted">No calls yet.</p> : (
