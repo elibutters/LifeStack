@@ -10,7 +10,7 @@ const t = await import("../lib/timer.ts");
 const tok = await import("../lib/tokens.ts");
 const { db } = await import("../lib/db.ts");
 const { events, apiTokens } = await import("@lifestack/db");
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 assert.equal(core.TimerInput.safeParse({ action: "start", itemKey: "s1", title: "Run" }).data?.style, "event");
 assert.equal(core.TimerInput.safeParse({ action: "start", itemKey: "", title: "Run" }).success, false);
@@ -41,6 +41,7 @@ assert.equal(again2.startedAt, new Date(t0.getTime() + 400_000).toISOString(), "
 // ---- stopping a goal session's timer marks it done, for as long as it ran
 assert.equal(core.minutesBetween("2026-11-14T20:00:00Z", "2026-11-14T20:44:40Z"), 45);
 assert.equal(core.sessionIdOf("s:g1-abc"), "g1-abc"); assert.equal(core.sessionIdOf("ev:12"), null);
+await db().delete(events).where(inArray(events.sourceId, ["session:tsess-1", "session:tsess-2"]));
 const tsNow = new Date(Date.now() - 3_600_000);
 await db().insert(events).values({ ts: tsNow, domain: "goal", key: "goal.session", valueText: "planned", payload: { goalId: "gt", title: "Easy run", end: new Date(tsNow.getTime() + 1_800_000).toISOString() }, source: "goals", sourceId: "session:tsess-1" });
 const began = new Date(Date.now() - 40 * 60_000);
@@ -52,8 +53,9 @@ assert.equal(row.valueText, "done"); assert.equal((row.payload as any).minutes, 
 await db().insert(events).values({ ts: tsNow, domain: "goal", key: "goal.session", valueText: "planned", payload: { goalId: "gt", title: "Tap", end: new Date(tsNow.getTime() + 1_800_000).toISOString() }, source: "goals", sourceId: "session:tsess-2" });
 const t1 = new Date(); await t.startTimer({ itemKey: "s:tsess-2", title: "Tap", style: "run", plan: [] }, new Date(t1.getTime() - 20_000));
 const tap = await t.stopTimer("s:tsess-2", t1);
-assert.equal(tap.logged, undefined, "under a minute is a mistaken tap");
-assert.equal((await db().select().from(events).where(eq(events.sourceId, "session:tsess-2")))[0]!.valueText, "planned");
+assert.ok(tap.logged, "a quick start and stop still marks it done");
+const quick = (await db().select().from(events).where(eq(events.sourceId, "session:tsess-2")))[0]!;
+assert.equal(quick.valueText, "done"); assert.equal((quick.payload as any).minutes, 1, "at least a minute is logged");
 
 // ---- API
 await db().delete(apiTokens);

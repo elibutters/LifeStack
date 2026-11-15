@@ -135,7 +135,7 @@ private struct LockCard: View {
                 TimerButton(context: context, round: true)
             }
             ProgressRow(context: context)
-            PlanLines(context: context, limit: 5)
+            PlanLines(context: context, limit: 5, columns: true)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
     }
@@ -166,22 +166,48 @@ private struct PlanLines: View {
         return out
     }
 
+    // The lock-screen card has room for two columns, so a longer list is split in two instead of cut short.
+    var columns = false
+
+    private func rowView(_ r: Row) -> some View {
+        Group {
+            if let label = r.label {
+                (Text(label.uppercased() + "  ").font(.system(size: 9, weight: .bold)).foregroundColor(phaseColor(context)) + Text(r.text).font(.caption2).foregroundColor(.white.opacity(0.88)))
+            } else {
+                Text(r.text).font(.caption2).foregroundStyle(.white.opacity(0.88))
+            }
+        }
+        .lineLimit(1).minimumScaleFactor(0.85)
+    }
+
+    private func column(_ items: [Row]) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, r in rowView(r) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     var body: some View {
         if showsPlan(context) {
             let all = rows
-            let shown = all.count > limit ? Array(all.prefix(limit - 1)) : all
-            VStack(alignment: .leading, spacing: 1) {
-                ForEach(Array(shown.enumerated()), id: \.offset) { _, r in
-                    if let label = r.label {
-                        (Text(label.uppercased() + "  ").font(.system(size: 9, weight: .bold)).foregroundColor(phaseColor(context)) + Text(r.text).font(.caption2).foregroundColor(.white.opacity(0.88)))
-                            .lineLimit(1)
-                    } else {
-                        Text(r.text).font(.caption2).foregroundStyle(.white.opacity(0.88)).lineLimit(1)
+            if columns && all.count > 4 {
+                let shown = Array(all.prefix(8))
+                let half = (shown.count + 1) / 2
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(alignment: .top, spacing: 14) {
+                        column(Array(shown.prefix(half)))
+                        column(Array(shown.dropFirst(half)))
                     }
+                    if all.count > shown.count { Text("+ \(all.count - shown.count) more in the app").font(.caption2).foregroundStyle(WColor.muted) }
                 }
-                if all.count > limit { Text("+ \(all.count - (limit - 1)) more in the app").font(.caption2).foregroundStyle(WColor.muted) }
+            } else {
+                let shown = all.count > limit ? Array(all.prefix(limit - 1)) : all
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(shown.enumerated()), id: \.offset) { _, r in rowView(r) }
+                    if all.count > limit { Text("+ \(all.count - (limit - 1)) more in the app").font(.caption2).foregroundStyle(WColor.muted) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -194,14 +220,14 @@ private struct TimerButton: View {
     var body: some View {
         if context.state.phase == .timing {
             Button(intent: StopSessionIntent()) {
-                Image(systemName: "stop.fill").font(round ? .body : .title3).frame(maxWidth: round ? 34 : .infinity, minHeight: round ? 34 : nil).accessibilityLabel("Stop")
+                Image(systemName: "stop.fill").font(round ? .caption : .title3).frame(maxWidth: round ? 22 : .infinity, minHeight: round ? 22 : nil).accessibilityLabel("Stop")
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(round ? .circle : .automatic)
             .tint(Color(red: 0.941, green: 0.443, blue: 0.471))
         } else if context.state.phase != .allDay {
             Button(intent: StartSessionIntent()) {
-                Image(systemName: "play.fill").font(round ? .body : .title3).frame(maxWidth: round ? 34 : .infinity, minHeight: round ? 34 : nil).accessibilityLabel("Play")
+                Image(systemName: "play.fill").font(round ? .caption : .title3).frame(maxWidth: round ? 22 : .infinity, minHeight: round ? 22 : nil).accessibilityLabel("Play")
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(round ? .circle : .automatic)
