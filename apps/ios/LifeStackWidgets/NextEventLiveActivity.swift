@@ -92,6 +92,11 @@ private struct LockCard: View {
     let context: ActivityViewContext<NextEventAttributes>
 
     var body: some View {
+        // A lock-screen card has a fixed height, so a card with a plan uses a tighter layout and the plan is kept to a few short lines.
+        if showsPlan(context) { planCard } else { plainCard }
+    }
+
+    private var plainCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -109,31 +114,72 @@ private struct LockCard: View {
                     .frame(maxWidth: 128, alignment: .trailing)
             }
             if !context.attributes.allDay { ProgressRow(context: context) }
-            PlanLines(context: context, limit: 7)
             TimerButton(context: context)
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
     }
+
+    private var planCard: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    StatusLabel(context: context)
+                    Text(context.attributes.title).font(.headline).lineLimit(1).minimumScaleFactor(0.85)
+                }
+                Spacer(minLength: 6)
+                Countdown(context: context)
+                    .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(phaseColor(context))
+                    .minimumScaleFactor(0.6).lineLimit(1)
+                    .frame(maxWidth: 110, alignment: .trailing)
+                TimerButton(context: context, round: true)
+            }
+            ProgressRow(context: context)
+            PlanLines(context: context, limit: 5)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+    }
 }
 
-// While the event is under way (or its timer is running) the card carries the plan: a run's steps or a lift's movements.
+// True while the event is under way (or its timer is running) and there is a plan to show.
+private func showsPlan(_ context: ActivityViewContext<NextEventAttributes>) -> Bool {
+    !context.attributes.plan.isEmpty && (context.state.phase == .timing || countingUp(context))
+}
+
+// A run's steps or a lift's movements, a few short lines. A plan with headings shows each heading with its first step; one without shows its steps.
 private struct PlanLines: View {
     let context: ActivityViewContext<NextEventAttributes>
     let limit: Int
 
+    private struct Row { let label: String?; let text: String }
+
+    private var rows: [Row] {
+        let plan = context.attributes.plan
+        var out: [Row] = []
+        var heading: String?
+        var took = false
+        for line in plan {
+            if line.hasSuffix(":") { heading = String(line.dropLast()); took = false; continue }
+            if context.attributes.style == .lift || heading == nil { out.append(Row(label: nil, text: line)) }
+            else if !took { out.append(Row(label: heading, text: line)); took = true }
+        }
+        return out
+    }
+
     var body: some View {
-        let inEvent = context.state.phase == .timing || countingUp(context)
-        let lines = Array(context.attributes.plan.prefix(limit))
-        if inEvent, !lines.isEmpty {
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                    if line.hasSuffix(":") {
-                        Text(line.dropLast()).font(.caption2.weight(.semibold)).textCase(.uppercase).tracking(0.5).foregroundStyle(phaseColor(context)).padding(.top, 2)
+        if showsPlan(context) {
+            let all = rows
+            let shown = all.count > limit ? Array(all.prefix(limit - 1)) : all
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(Array(shown.enumerated()), id: \.offset) { _, r in
+                    if let label = r.label {
+                        (Text(label.uppercased() + "  ").font(.system(size: 9, weight: .bold)).foregroundColor(phaseColor(context)) + Text(r.text).font(.caption2).foregroundColor(.white.opacity(0.88)))
+                            .lineLimit(1)
                     } else {
-                        Text(line).font(.caption).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                        Text(r.text).font(.caption2).foregroundStyle(.white.opacity(0.88)).lineLimit(1)
                     }
                 }
-                if context.attributes.plan.count > limit { Text("+ \(context.attributes.plan.count - limit) more in the app").font(.caption2).foregroundStyle(WColor.muted) }
+                if all.count > limit { Text("+ \(all.count - (limit - 1)) more in the app").font(.caption2).foregroundStyle(WColor.muted) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -143,19 +189,22 @@ private struct PlanLines: View {
 // Start turns the automatic card into a timer. Stop ends that timer.
 private struct TimerButton: View {
     let context: ActivityViewContext<NextEventAttributes>
+    var round = false
 
     var body: some View {
         if context.state.phase == .timing {
             Button(intent: StopSessionIntent()) {
-                Image(systemName: "stop.fill").font(.title3).frame(maxWidth: .infinity).accessibilityLabel("Stop")
+                Image(systemName: "stop.fill").font(round ? .body : .title3).frame(maxWidth: round ? 34 : .infinity, minHeight: round ? 34 : nil).accessibilityLabel("Stop")
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(round ? .circle : .automatic)
             .tint(Color(red: 0.941, green: 0.443, blue: 0.471))
         } else if context.state.phase != .allDay {
             Button(intent: StartSessionIntent()) {
-                Image(systemName: "play.fill").font(.title3).frame(maxWidth: .infinity).accessibilityLabel("Play")
+                Image(systemName: "play.fill").font(round ? .body : .title3).frame(maxWidth: round ? 34 : .infinity, minHeight: round ? 34 : nil).accessibilityLabel("Play")
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(round ? .circle : .automatic)
             .tint(phaseColor(context))
         }
     }
