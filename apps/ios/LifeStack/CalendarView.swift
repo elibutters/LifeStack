@@ -387,14 +387,14 @@ struct CalendarView: View {
     }
 
     private func timerButton(_ item: CalendarItem) -> some View {
-        let on = running?.id == item.id
+        let on = running?.itemKey == NextEventActivity.key(for: item)
         return Button {
             if on {
                 NextEventActivity.stop()
                 running = nil
             } else {
                 NextEventActivity.start(item)
-                running = NextEventActivity.Clock(id: item.id, startedAt: Date())
+                running = NextEventActivity.Clock(id: item.id, itemKey: NextEventActivity.key(for: item), startedAt: Date())
             }
         } label: {
             Image(systemName: on ? "stop.fill" : "play.fill")
@@ -641,7 +641,7 @@ struct CalendarItemSheet: View {
     }
 
     private func refreshClock() {
-        if let clock = NextEventActivity.current(), clock.id == item.id {
+        if let clock = NextEventActivity.current(), clock.itemKey == NextEventActivity.key(for: item) {
             timing = true
             startedAt = clock.startedAt
         } else {
