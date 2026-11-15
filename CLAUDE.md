@@ -71,6 +71,7 @@ This repo is public. Read PRIVACY.md before changing anything. In short:
   `connections.refresh_token_enc` and rotated with a compare-and-swap on the ciphertext. The sync is a resumable walk
   (search plus child pages and databases, depth 5, 2,000 pages, 40 requests per run) whose queue and generation live in
   `sync_state.cursor`; rows are stamped with the generation and older generations are deleted only when a walk finishes.
+  Every run first sweeps the most recently edited pages (one search, newest first, a few pages per run, remembered in `sync_state.cursor.recent`), because the walk fixes its list when it starts and a large workspace takes weeks to finish; without the sweep a new page would wait for the whole walk. A full walk re-reads every page, so it runs only while one is in progress or when the last finished more than a week ago (`syncNotionAuto`, used by the cron and by reads); in between a run is just the sweep.
   Notes are plain text capped at 6,000 characters in the `notes` table, never backed up, and read through `notes:read`
   (agent keys only, never the phone key). Writes go through one function in `lib/notion*.ts`, are limited to pages the owner shared, and never delete.
 - Settings: preferences that change behaviour without a deploy live in the `settings` table, but only keys registered in

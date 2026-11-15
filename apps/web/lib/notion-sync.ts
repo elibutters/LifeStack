@@ -11,15 +11,17 @@ import {
 } from "./notion-core";
 
 export const NOTION = "notion";
-const FRESH_MS = 15 * 60 * 1000; // sync on read if the last finished walk is older than this
+const FRESH_MS = 15 * 60 * 1000; // between walks, sweep recent pages on read if the last run is older than this
 const RETRY_MS = 2 * 60 * 1000; // but never more often than this, even after a failure
 const MAX_REQUESTS = 40;
+const WALK_EVERY_MS = 7 * 24 * 60 * 60 * 1000; // a full walk re-reads every page, so it runs about weekly; the sweep keeps recent pages fresh in between
+const SWEEP_PAGES = 6; // changed pages a run reads before it carries on with the long walk
 const BUDGET_MS = 45_000;
 export const EXPIRED = "Notion sign-in expired. Reconnect Notion.";
 const RATE_LIMITED = "Notion rate limit reached. It will retry.";
 
 export type NotionRun = { pages: number; done: boolean } | { skipped: true } | { expired: true } | null;
-export type RunOptions = { maxRequests?: number; budgetMs?: number; maxPages?: number; sleep?: (ms: number) => Promise<void> };
+export type RunOptions = { maxRequests?: number; budgetMs?: number; maxPages?: number; sweepPages?: number; sweepOnly?: boolean; sleep?: (ms: number) => Promise<void> };
 
 // ---- connection and state
 export async function getConnection() {
@@ -142,7 +144,7 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object"
 
 // ---- one run
 export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
-  const o: Required<RunOptions> = { maxRequests: opts.maxRequests ?? MAX_REQUESTS, budgetMs: opts.budgetMs ?? BUDGET_MS, maxPages: opts.maxPages ?? MAX_PAGES, sleep: opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))) };
+  const o: Required<RunOptions> = { maxRequests: opts.maxRequests ?? MAX_REQUESTS, budgetMs: opts.budgetMs ?? BUDGET_MS, maxPages: opts.maxPages ?? MAX_PAGES, sweepPages: opts.sweepPages ?? SWEEP_PAGES, sweepOnly: opts.sweepOnly ?? false, sleep: opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))) };
   const conn = await getConnection();
   if (!conn) return null;
   // A machine without the app's Notion credentials (a local dev server sharing the database) cannot refresh tokens, and must never
@@ -157,17 +159,26 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
       return { expired: true };
     }
     cur = readCursor((await getSyncState())?.cursor);
-    if (!cur.active) cur = freshWalk(cur.gen + 1); // each full walk gets a new generation
+    if (!cur.active && !o.sweepOnly) { const recent = cur.recent; cur = freshWalk(cur.gen + 1); if (recent) cur.recent = recent; } // each full walk gets a new generation; what we know of recent pages carries over
     cur.tried = new Date().toISOString();
     await recordState({ cursor: JSON.stringify(cur) });
 
     const api = new Session(stored, conn.refreshTokenEnc, o);
+    const RECENT_KEEP = 300;
+    const remember = (id: string, edited: string | null) => {
+      if (!edited) return;
+      const map = (cur.recent ??= {});
+      map[id] = edited;
+      const keys = Object.keys(map);
+      if (keys.length > RECENT_KEEP * 1.5) cur.recent = Object.fromEntries(Object.entries(map).sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, RECENT_KEEP));
+    };
     let pages = 0;
     let capped = false;
 
     const queued = () => new Set(cur.queue.map((i) => (i.k === "page" || i.k === "ds" || i.k === "db" ? `${i.k}:${i.id}` : "")));
     let inQueue = queued();
     const enqueue = (item: Item) => {
+      if (o.sweepOnly) return; // between walks nothing is queued: the sweep only refreshes the pages it reads
       const key = item.k === "page" || item.k === "ds" || item.k === "db" ? `${item.k}:${item.id}` : "";
       if (key && inQueue.has(key)) return;
       if (item.k !== "search" && item.depth > MAX_DEPTH) return;
@@ -204,11 +215,13 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
       return out;
     };
 
-    const doPage = async (item: Extract<Item, { k: "page" }>) => {
+    // `force` re-reads a page this walk already read, because it has been edited since (the sweep below).
+    const doPage = async (item: Extract<Item, { k: "page" }>, force = false) => {
       const id = validId(item.id);
       if (!id) return;
       const [seen] = await db().select({ g: notes.generation }).from(notes).where(eq(notes.sourceId, pageSourceId(id)));
-      if (seen?.g === cur.gen) return; // already read in this walk
+      if (seen?.g === cur.gen && !force) return; // already read in this walk
+      const countsNew = seen?.g !== cur.gen; // a re-read of a page already counted this walk is not another page
       let meta: PageMeta | undefined = item.meta;
       if (!meta) {
         const page = await api.call("GET", `/v1/pages/${id}`);
@@ -220,7 +233,8 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
       for (const bid of containerIds(top).slice(0, 2)) nested.push(...(await children(bid, 1)));
       const all = [...top, ...nested];
       await writeNote(noteRow(id, { ...meta, edited: effectiveEdited(meta.edited, meta.created, all) }, blocksToText(all), cur.gen));
-      cur.count++;
+      if (countsNew) cur.count++;
+      remember(id, meta.edited);
       pages++;
       const refs = childRefs(all);
       for (const p of refs.pages) enqueue({ k: "page", id: p.id, depth: item.depth + 1, meta: { title: p.title, edited: p.edited, created: p.created, parent: `page:${id}` } });
@@ -259,6 +273,33 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
       return r.has_more === true && typeof r.next_cursor === "string" ? r.next_cursor : null;
     };
 
+    // Recently edited pages first. The long walk below fixes its list of pages when it starts, so a page created or edited after that would
+    // not be copied until the whole walk finished, which for a large workspace is weeks. Instead every run first asks Notion for the pages
+    // edited most recently (one request, newest first) and reads those that are missing or newer than the copy, a few per run.
+    if (o.sweepPages > 0) {
+      try {
+        const found = obj(await api.call("POST", "/v1/search", { filter: { property: "object", value: "page" }, sort: { direction: "descending", timestamp: "last_edited_time" }, page_size: 100 }));
+        let fresh = 0;
+        for (const x of arr(found.results)) {
+          if (fresh >= o.sweepPages || api.outOfTime()) break;
+          const id = validId(obj(x).id);
+          if (!id || isTrashed(x)) continue; // a page in the trash is dealt with by the walk
+          const meta = metaOfPage(x);
+          const [have] = await db().select({ id: notes.id }).from(notes).where(eq(notes.sourceId, pageSourceId(id)));
+          const known = cur.recent?.[id];
+          if (have && meta.edited && known && Date.parse(known) >= Date.parse(meta.edited)) continue; // the copy is current
+          await doPage({ k: "page", id, depth: 0, meta }, true);
+          fresh++;
+        }
+      } catch (e) {
+        if (e instanceof RateLimited) {
+          await recordState({ cursor: JSON.stringify(cur), lastError: RATE_LIMITED });
+          return { pages, done: false };
+        }
+        if (!(e instanceof OutOfBudget)) throw e; // out of requests: the walk below has nothing left to do this run either
+      }
+    }
+
     try {
       while (cur.queue.length > 0 && !api.outOfTime()) {
         if (cur.count >= o.maxPages) { capped = true; cur.queue = []; break; }
@@ -281,6 +322,12 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
         await recordState({ cursor: JSON.stringify(cur), lastError: RATE_LIMITED });
         return { pages, done: false };
       } else throw e;
+    }
+
+    if (o.sweepOnly) {
+      // No walk ran, so nothing is deleted and the last finished walk's time is left alone.
+      await recordState({ cursor: JSON.stringify(cur), lastError: null });
+      return { pages, done: true };
     }
 
     // Only a walk that read everything may delete: anything not stamped with this generation is gone from Notion.
@@ -310,6 +357,15 @@ export async function syncNotion(opts: RunOptions = {}): Promise<NotionRun> {
   }
 }
 
+// The scheduled and on-demand entry point. A full walk re-reads every page (to notice deletions and anything the sweep missed), so it only runs
+// when one is in progress or the last one finished more than a week ago; otherwise a run is the cheap sweep of recently edited pages.
+export async function syncNotionAuto(): Promise<NotionRun> {
+  const state = await getSyncState();
+  const walking = readCursor(state?.cursor).active;
+  const walkDue = walking || Date.now() - (state?.lastOkAt?.getTime() ?? 0) >= WALK_EVERY_MS;
+  return syncNotion(walkDue ? {} : { sweepOnly: true });
+}
+
 // Called before reads and after pages render, so using the app keeps notes fresh without delaying it.
 export async function syncNotionIfStale() {
   try {
@@ -318,9 +374,10 @@ export async function syncNotionIfStale() {
     if (state?.lastError === EXPIRED) return; // needs the owner to reconnect; retrying cannot help
     const cur = readCursor(state?.cursor);
     const now = Date.now();
-    if (now - (Date.parse(cur.tried ?? "") || 0) < RETRY_MS) return;
-    if (!cur.active && now - (state?.lastOkAt?.getTime() ?? 0) < FRESH_MS) return; // a walk in progress keeps going
-    await syncNotion();
+    const tried = Date.parse(cur.tried ?? "") || 0;
+    if (now - tried < RETRY_MS) return;
+    if (!cur.active && now - (state?.lastOkAt?.getTime() ?? 0) < WALK_EVERY_MS && now - tried < FRESH_MS) return; // between walks: a sweep at most every 15 minutes
+    await syncNotionAuto();
   } catch {
     // Recorded in sync_state; the Connections page shows it.
   }
@@ -333,7 +390,7 @@ export type NotionWrite<T> = { ok: true; value: T } | { ok: false; reason: "not_
 // content abilities (or the page was never shared with it), which is reported plainly so the owner knows what to switch on.
 export async function withNotion<T>(fn: (call: Session["call"]) => Promise<T>, opts: RunOptions = {}): Promise<NotionWrite<T>> {
   if (!notionConfigured()) return { ok: false, reason: "not_connected" };
-  const o: Required<RunOptions> = { maxRequests: opts.maxRequests ?? 12, budgetMs: opts.budgetMs ?? 20_000, maxPages: 0, sleep: opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))) };
+  const o: Required<RunOptions> = { maxRequests: opts.maxRequests ?? 12, budgetMs: opts.budgetMs ?? 20_000, maxPages: 0, sweepPages: 0, sweepOnly: false, sleep: opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))) };
   for (let attempt = 0; attempt < 2; attempt++) {
     const conn = await getConnection();
     if (!conn) return { ok: false, reason: "not_connected" };

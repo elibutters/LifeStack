@@ -135,7 +135,9 @@ export type Item =
   | { k: "db"; id: string; depth: number }
   | { k: "page"; id: string; depth: number; meta?: PageMeta };
 
-export type WalkCursor = { gen: number; active: boolean; queue: Item[]; count: number; tried?: string };
+// `recent` remembers, for the newest pages, the edit time Notion reported when we last copied them, so the recent-pages sweep can tell a page it
+// already holds from one that has changed. (The stored edit time is the content's, which can be older than the page's.) It survives from walk to walk.
+export type WalkCursor = { gen: number; active: boolean; queue: Item[]; count: number; tried?: string; recent?: Record<string, string> };
 
 const ItemSchema = z.union([
   z.object({ k: z.literal("search"), filter: z.enum(["page", "data_source"]), cursor: z.string().optional() }),
@@ -143,7 +145,7 @@ const ItemSchema = z.union([
   z.object({ k: z.literal("db"), id: z.string(), depth: z.number() }),
   z.object({ k: z.literal("page"), id: z.string(), depth: z.number(), meta: z.object({ title: z.string(), edited: z.string().nullable(), created: z.string().nullable().optional(), parent: z.string().nullable(), url: z.string().optional() }).optional() }),
 ]);
-const CursorSchema = z.object({ gen: z.number().int().min(0), active: z.boolean(), queue: z.array(ItemSchema), count: z.number().int().min(0), tried: z.string().optional() });
+const CursorSchema = z.object({ gen: z.number().int().min(0), active: z.boolean(), queue: z.array(ItemSchema), count: z.number().int().min(0), tried: z.string().optional(), recent: z.record(z.string(), z.string()).optional() });
 
 export const freshWalk = (gen: number): WalkCursor => ({ gen, active: true, queue: [{ k: "search", filter: "page" }, { k: "search", filter: "data_source" }], count: 0 });
 
