@@ -19,7 +19,7 @@ export const BriefInput = z.object({
 });
 export type BriefInput = z.infer<typeof BriefInput>;
 
-export type Brief = { id: string; kind: BriefKind; day: string; headline: string; sections: { title: string; items: string[] }[]; question: string | null; createdAt: string };
+export type Brief = { id: string; kind: BriefKind; day: string; headline: string; sections: { title: string; items: string[] }[]; question: string | null; createdAt: string; readAt: string | null };
 
 export const briefId = (day: string, kind: BriefKind): string => `${day}:${kind}`;
 
