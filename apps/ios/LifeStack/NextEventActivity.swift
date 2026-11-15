@@ -124,9 +124,11 @@ enum NextEventActivity {
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             DispatchQueue.main.async {
                 let followup = mutate(chosen, server: server)
-                guard let followup else { cont.resume(); return }
+                guard let followup else { NotificationCenter.default.post(name: .sessionTimerChanged, object: nil); cont.resume(); return }
                 Task { @MainActor in
                     await followup()
+                    // The open screens show this timer too; tell them it may have changed (another device may have started or stopped it).
+                    NotificationCenter.default.post(name: .sessionTimerChanged, object: nil)
                     cont.resume()
                 }
             }
