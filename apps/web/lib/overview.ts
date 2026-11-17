@@ -3,7 +3,7 @@ import { groupLogDays, type Scope } from "./capture-core";
 import { loadCaptureSince, loadDay, listSupplements } from "./capture";
 import { calendarItems, itemsOnDay } from "./calendar";
 import { classify, monthOf, netWorth, summarizeMonth } from "./finance-calc";
-import { loadFinance } from "./finance-data";
+import { loadFinance, todayDay } from "./finance-data";
 import { addDays, startOfDay, todayInTz, ymd } from "./dates";
 import { describeError } from "./errors";
 import { calDigest, logDigest, sleepDigest, summarizeWeek } from "./overview-core";
@@ -51,7 +51,8 @@ export async function loadOverview(scopes: readonly string[], now = new Date()) 
   }
   if (has(scopes, "finance:read")) {
     jobs.push(
-      loadFinance().then((f) => {
+      // Spending this month needs only month-to-date rows, and net worth only the accounts.
+      loadFinance({ days: Number(todayDay().slice(8)), liabilities: false, snapshots: false }).then((f) => {
         if (!f.ok) {
           out.finance = null;
           return;
@@ -76,7 +77,7 @@ export async function loadWeekSummary(scopes: readonly string[], now = new Date(
   const eventCount = has(scopes, "calendar:read") ? (await calendarItems(startOfDay(from), startOfDay(addDays(to, 1)))).length : 0;
   let spending: number | null = null;
   if (has(scopes, "finance:read")) {
-    const f = await loadFinance();
+    const f = await loadFinance({ days: 8, liabilities: false, snapshots: false });
     if (f.ok) {
       spending = Math.round(f.txns.filter((t) => t.date >= from && t.date <= to && classify(t) === "spending").reduce((s, t) => s + t.amount, 0) * 100) / 100;
     }

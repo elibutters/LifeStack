@@ -39,7 +39,7 @@ export async function sleepNights(limit: number) {
 }
 
 export async function financeSummary() {
-  const f = await loadFinance();
+  const f = await loadFinance({ snapshots: false });
   if (!f.ok) return null;
   const month = monthOf(f.today);
   const nw = netWorth(f.accounts);
@@ -62,7 +62,7 @@ export async function financeSummary() {
 export type TxnFilter = { text?: string; from?: string; to?: string; category?: string; limit?: number };
 
 export async function searchTransactions(q: TxnFilter) {
-  const f = await loadFinance();
+  const f = await loadFinance({ liabilities: false, snapshots: false });
   if (!f.ok) return null;
   const text = q.text?.trim().toLowerCase();
   return f.txns

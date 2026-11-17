@@ -46,6 +46,8 @@ const none = await tok.createToken("none", "agent", ["log:read"]);
 const get = (token?: string) => b.handleBrief(new Request("http://x/api/v1/brief", { headers: token ? { authorization: `Bearer ${token}` } : {} }));
 assert.equal((await get()).status, 401);
 assert.equal((await get(none.token)).status, 403);
+// The handler reads the real clock, so the API checks need a brief that is current whenever the suite runs (the fixed-date ones above go stale).
+await b.saveBrief({ kind: "evening", headline: "Live" });
 const res = await get(reader.token);
 assert.equal(res.status, 200);
 const shown = (await res.json() as any).brief;

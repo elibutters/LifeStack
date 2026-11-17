@@ -42,7 +42,7 @@ export function recordAfter(body: unknown, res: Response, tokenId: number, start
 
 export async function loadCalls(days: number, now = new Date()): Promise<Call[]> {
   const since = new Date(now.getTime() - days * 86_400_000);
-  const rows = await db().select().from(events).where(and(eq(events.source, "mcp"), eq(events.key, "mcp.call"), gte(events.ts, since))).orderBy(desc(events.ts)).limit(20000);
+  const rows = await db().select({ ts: events.ts, valueText: events.valueText, valueNum: events.valueNum, payload: events.payload }).from(events).where(and(eq(events.source, "mcp"), eq(events.key, "mcp.call"), gte(events.ts, since))).orderBy(desc(events.ts)).limit(20000);
   return rows.map((r) => {
     const p = r.payload as { tokenId?: number; argKeys?: string[]; outcome?: Call["outcome"]; bytes?: number; error?: string; client?: string; ua?: string };
     return { at: r.ts, tool: r.valueText ?? "?", tokenId: p.tokenId ?? null, ms: r.valueNum ?? 0, outcome: p.outcome ?? "ok", bytes: p.bytes ?? 0, argKeys: p.argKeys ?? [], error: p.error, client: p.client, ua: p.ua };
