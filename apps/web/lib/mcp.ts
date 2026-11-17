@@ -791,7 +791,7 @@ export function buildServer(token: VerifiedToken): McpServer {
 
   if (has("finance:read")) {
     server.registerTool("get_finance_summary", { description: "Net worth, balances by group, this and last month's income, spending and top categories, and plain-language insights. Amounts are in dollars; spending is positive." }, guard(async () => {
-      const f = await loadFinance();
+      const f = await loadFinance({ snapshots: false });
       if (!f.ok) return fail("Finance data is unavailable.");
       const month = monthOf(f.today);
       const nw = netWorth(f.accounts);
@@ -813,7 +813,7 @@ export function buildServer(token: VerifiedToken): McpServer {
         inputSchema: { text: z.string().max(80).optional(), from: Day.optional(), to: Day.optional(), category: z.string().max(60).optional(), limit: z.number().int().min(1).max(100).optional() },
       },
       async ({ text, from, to, category, limit }) => {
-        const f = await loadFinance();
+        const f = await loadFinance({ liabilities: false, snapshots: false });
         if (!f.ok) return fail("Finance data is unavailable.");
         const q = text?.trim().toLowerCase();
         const rows = f.txns

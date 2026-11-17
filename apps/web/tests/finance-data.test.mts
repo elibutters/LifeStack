@@ -51,6 +51,13 @@ assert.equal(txns.find((t: any) => t.name === "Pending thing")!.pending, true); 
 assert.ok(logs.some((l) => /2 transaction row\(s\) could not be read/.test(l)) && !logs.join(" ").match(/Coffee|Payroll|12\.34/), "the log reports a count, never contents");
 assert.deepEqual(txns.map((t: any) => t.date), [...txns.map((t: any) => t.date)].sort(), "oldest first");
 
+// A narrow window and skipped reads keep hot paths (overview, week summary) from pulling a year of rows each call.
+const recent = await data.loadTransactions(1); assert.deepEqual(recent.map((t: any) => t.name).sort(), ["Coffee", "Pending thing"], "only rows inside the window");
+const light = await data.loadFinance({ days: 1, liabilities: false, snapshots: false });
+assert.ok(light.ok && light.txns.length === 2 && light.liabilities.length === 0 && light.snapshots.length === 0 && light.accounts.length === 3, "narrow load keeps accounts and the window, skips the rest");
+const full = await data.loadFinance();
+assert.ok(full.ok && full.txns.length === 3 && full.liabilities.length === 1 && full.snapshots.length === 3, "default load is unchanged");
+
 const liab = await data.loadLiabilities(); assert.equal(liab.length, 1); assert.equal(liab[0]!.minimumPayment, 35); assert.equal(liab[0]!.lastStatementBalance, 120); assert.equal(liab[0]!.nextPaymentDue, day(-9)); assert.equal(liab[0]!.isOverdue, false);
 
 const holds = await data.loadHoldings(); const syms = holds.map((h: any) => h.symbol).sort();

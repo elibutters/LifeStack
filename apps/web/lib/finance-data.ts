@@ -56,8 +56,15 @@ export async function loadAccounts(): Promise<AccountInfo[]> {
 export async function loadTransactions(days = 430): Promise<Txn[]> {
   const since = startOfDay(addDays(todayDay(), -days));
   const [rows, overrides] = await Promise.all([
+    // Only the columns and payload fields the maths reads: the full row carries fields that are never used and this runs on hot paths.
     db()
-      .select()
+      .select({
+        id: events.id,
+        ts: events.ts,
+        sourceId: events.sourceId,
+        valueNum: events.valueNum,
+        payload: sql<unknown>`jsonb_build_object('accountId', ${events.payload}->'accountId', 'name', ${events.payload}->'name', 'merchant', ${events.payload}->'merchant', 'pending', ${events.payload}->'pending', 'category', ${events.payload}->'category', 'categoryDetailed', ${events.payload}->'categoryDetailed')`,
+      })
       .from(events)
       .where(and(eq(events.source, "plaid"), eq(events.key, "finance.transaction"), gte(events.ts, since)))
       .orderBy(events.ts),
@@ -163,13 +170,15 @@ export async function loadBalanceSnapshots(days = 400) {
   });
 }
 
-export async function loadFinance() {
+// `days` narrows the transaction window; `liabilities: false` and `snapshots: false` skip those reads. Callers load only what they use:
+// the overview and week summary run on every widget refresh and agent call, and must not pull over a year of rows each time.
+export async function loadFinance(opts: { days?: number; liabilities?: boolean; snapshots?: boolean } = {}) {
   try {
     const [accts, txns, liabilities, snapshots] = await Promise.all([
       loadAccounts(),
-      loadTransactions(),
-      loadLiabilities(),
-      loadBalanceSnapshots(),
+      loadTransactions(opts.days),
+      opts.liabilities === false ? Promise.resolve([] as Liability[]) : loadLiabilities(),
+      opts.snapshots === false ? Promise.resolve([] as Awaited<ReturnType<typeof loadBalanceSnapshots>>) : loadBalanceSnapshots(),
     ]);
     return { ok: true as const, accounts: accts, txns, liabilities, snapshots, today: todayDay() };
   } catch (e) {
