@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Db } from "@lifestack/db";
+import { fkOrder } from "./backup-core";
 
 // Tables left out: migration bookkeeping and the login attempt counter (noise, not data).
 // emails and notes can be re-synced from Outlook and Notion and are large, so they are not part of the backup.
@@ -27,8 +28,11 @@ export async function dumpTables(db: Db): Promise<Record<string, unknown[]>> {
 // the saved rows; the generated id sequences are moved past the restored ids.
 export async function restoreTables(db: Db, tables: Record<string, unknown[]>): Promise<void> {
   await db.transaction(async (tx) => {
-    const names = (await tableNames(tx as unknown as Db)).filter((t) => t in tables);
-    if (!names.length) throw new Error("backup has no tables that exist here");
+    const present = (await tableNames(tx as unknown as Db)).filter((t) => t in tables);
+    if (!present.length) throw new Error("backup has no tables that exist here");
+    // Fill parents first: foreign keys are checked as each table is inserted, so alphabetical order fails on real data.
+    const fks = await tx.execute<{ child: string; parent: string }>(sql`select cc.relname as child, pc.relname as parent from pg_constraint k join pg_class cc on cc.oid = k.conrelid join pg_class pc on pc.oid = k.confrelid where k.contype = 'f' and cc.relnamespace = 'public'::regnamespace`);
+    const names = fkOrder(present, [...fks]);
     await tx.execute(sql`truncate ${sql.join(names.map((t) => sql.identifier(t)), sql`, `)} restart identity cascade`);
     for (const t of names) {
       const rows = tables[t];

@@ -38,3 +38,21 @@ export const backupName = (d: Date) => `backups/lifestack-${d.toISOString().slic
 export function expired(names: string[], keep: number): string[] {
   return names.filter((n) => /^backups\/lifestack-\d{4}-\d{2}-\d{2}\.bin$/.test(n)).sort().reverse().slice(keep);
 }
+
+// Tables in an order that fills parents before the tables that point at them through a foreign key, so a restore never inserts a row whose
+// parent is not there yet. `edges` are child -> parent pairs; self-references and tables outside `names` are ignored, ties keep the given
+// order, and a cycle (which the schema does not have) leaves the remainder in the given order so the database reports it plainly.
+export function fkOrder(names: string[], edges: { child: string; parent: string }[]): string[] {
+  const set = new Set(names);
+  const parents = new Map<string, Set<string>>(names.map((n) => [n, new Set<string>()]));
+  for (const e of edges) if (e.child !== e.parent && set.has(e.child) && set.has(e.parent)) parents.get(e.child)!.add(e.parent);
+  const out: string[] = [];
+  const placed = new Set<string>();
+  while (out.length < names.length) {
+    const next = names.find((n) => !placed.has(n) && [...parents.get(n)!].every((p) => placed.has(p)));
+    if (!next) { for (const n of names) if (!placed.has(n)) { out.push(n); placed.add(n); } break; }
+    out.push(next);
+    placed.add(next);
+  }
+  return out;
+}
